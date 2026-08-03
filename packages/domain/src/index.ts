@@ -1,6 +1,7 @@
 export const DOMAIN_SCHEMA_VERSION = 2 as const;
 
 export * from "./errors";
+export * from "./backup";
 export * from "./capture";
 export * from "./candidate";
 export * from "./classification";

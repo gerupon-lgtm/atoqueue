@@ -8,7 +8,7 @@ import { ReviewResultPage } from "../features/review/ReviewResultPage";
 import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
 import { TaskListPage } from "../features/tasks/TaskListPage";
 import { AppShell } from "./AppShell";
-import { NotificationSettings } from "../features/settings/NotificationSettings";
+import { SettingsPage } from "../features/settings/SettingsPage";
 
 type PageDefinition = {
   index?: true;
@@ -42,7 +42,7 @@ export const router = createBrowserRouter([
         ) : page.path === "tasks" ? (
           <TaskListPage repository={applicationRepository} />
         ) : page.path === "settings" ? (
-          <NotificationSettings repository={applicationRepository} />
+          <SettingsPage repository={applicationRepository} />
         ) : (
           <Page title={page.label} />
         ),
