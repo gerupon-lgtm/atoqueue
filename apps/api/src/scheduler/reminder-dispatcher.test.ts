@@ -31,7 +31,7 @@ describe("ReminderDispatcher", () => {
 
   it("marks a successful generic send as sent and never includes task data", async () => {
     const repository = new InMemoryReminderRepository();
-    const id = seed(repository);
+    const id = seed(repository, { scheduledAt: "2026-08-06T08:39:00.000Z" });
     const sends: Array<{ payload: Record<string, unknown> }> = [];
     await new ReminderDispatcher(repository, client(201, sends), () => now).dispatchDue();
     expect(repository.get(id)).toMatchObject({ status: "sent" });
@@ -71,5 +71,17 @@ describe("ReminderDispatcher", () => {
     expect(repository.get(stale)?.status).toBe("pending");
     await Promise.all([dispatcher.dispatchDue(), dispatcher.dispatchDue()]);
     expect(sends.filter((item) => (item as { payload: { reminderId: string } }).payload.reminderId === due)).toHaveLength(1);
+  });
+
+  it("does not let a stale worker settle a newer claim after stale recovery", async () => {
+    const repository = new InMemoryReminderRepository();
+    const id = seed(repository, { scheduledAt: "2026-08-06T08:39:00.000Z" });
+    const [firstClaim] = await repository.claimDue("2026-08-06T08:40:00.000Z", 1);
+    await repository.recoverStaleClaims("2026-08-06T08:45:00.000Z", "2026-08-06T09:00:00.000Z");
+    const [secondClaim] = await repository.claimDue("2026-08-06T09:00:00.000Z", 1);
+    await repository.markSent(id, firstClaim!.claimedAt!, "2026-08-06T09:00:01.000Z");
+    expect(repository.get(id)).toMatchObject({ status: "claimed", claimedAt: secondClaim!.claimedAt });
+    await repository.markSent(id, secondClaim!.claimedAt!, "2026-08-06T09:00:02.000Z");
+    expect(repository.get(id)).toMatchObject({ status: "sent" });
   });
 });

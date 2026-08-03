@@ -54,6 +54,20 @@ describe("reminder routes", () => {
     await app.close();
   });
 
+  it("returns 404 without changing a reminder when a different device reuses its id", async () => {
+    const reminders = new InMemoryReminderRepository();
+    const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: reminders });
+    const owner = await register(app, "https://push.example/owner");
+    const other = await register(app, "https://push.example/other-owner");
+    const reminderId = randomUUID();
+    await app.inject(upsertRequest(owner, reminderId, "owner-create", "2026-08-06T09:00:00.000Z"));
+    const response = await app.inject(upsertRequest(other, reminderId, "foreign-overwrite", "2026-08-07T09:00:00.000Z"));
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe("REMINDER_NOT_FOUND");
+    expect(reminders.get(reminderId)).toMatchObject({ deviceId: owner.deviceId, scheduledAt: "2026-08-06T09:00:00.000Z" });
+    await app.close();
+  });
+
   it("replays an idempotent upsert and rejects a changed request with the same key", async () => {
     const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: new InMemoryReminderRepository() });
     const device = await register(app);

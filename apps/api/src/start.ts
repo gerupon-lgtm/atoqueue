@@ -8,10 +8,36 @@ export interface RunningApi {
   close(): Promise<void>;
 }
 
-export function installReminderPoll(dispatcher: Pick<ReminderDispatcher, "dispatchDue">): () => void {
-  const timer = setInterval(() => { void dispatcher.dispatchDue(); }, 5 * 60_000);
+export function installReminderPoll(dispatcher: Pick<ReminderDispatcher, "dispatchDue">, reportFailure: (error: unknown) => void = () => undefined): () => void {
+  const timer = setInterval(() => { void dispatcher.dispatchDue().catch(reportFailure); }, 5 * 60_000);
   timer.unref();
   return () => clearInterval(timer);
+}
+
+export async function startServer(input: {
+  app: { listen(options: { host: string; port: number }): Promise<unknown>; close(): Promise<unknown> };
+  pool: { end(): Promise<unknown> };
+  dispatcher: Pick<ReminderDispatcher, "recoverStaleClaims" | "dispatchDue">;
+  port: number;
+  reportFailure?: (error: unknown) => void;
+}): Promise<RunningApi> {
+  const reportFailure = input.reportFailure ?? (() => undefined);
+  let stopPolling: (() => void) | undefined;
+  try {
+    await input.dispatcher.recoverStaleClaims();
+    await input.dispatcher.dispatchDue();
+    stopPolling = installReminderPoll(input.dispatcher, reportFailure);
+    await input.app.listen({ host: "127.0.0.1", port: input.port });
+    return { close: async () => {
+      stopPolling?.();
+      try { await input.app.close(); } finally { await input.pool.end(); }
+    } };
+  } catch (error) {
+    stopPolling?.();
+    await input.app.close().catch(reportFailure);
+    await input.pool.end().catch(reportFailure);
+    throw error;
+  }
 }
 
 export async function start(input: { version: string; environment?: NodeJS.ProcessEnv } = { version: "0.1.0" }): Promise<RunningApi> {
@@ -22,11 +48,7 @@ export async function start(input: { version: string; environment?: NodeJS.Proce
     new PgReminderRepository(pool),
     new WebPushClient({ publicKey: config.vapidPublicKey, privateKey: config.vapidPrivateKey, subject: config.vapidSubject }),
   );
-  await dispatcher.recoverStaleClaims();
-  await dispatcher.dispatchDue();
-  const stopPolling = installReminderPoll(dispatcher);
-  await app.listen({ host: "127.0.0.1", port: config.port });
-  return { close: async () => { stopPolling(); await app.close(); await pool.end(); } };
+  return startServer({ app, pool, dispatcher, port: config.port, reportFailure: () => { process.stderr.write("Reminder dispatch failed.\n"); } });
 }
 
 if (import.meta.url === new URL(process.argv[1] ?? "", "file:").href) {

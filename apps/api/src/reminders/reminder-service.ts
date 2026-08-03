@@ -19,8 +19,12 @@ export class ReminderService {
     const now = this.now();
     if (Date.parse(input.scheduledAt) < Date.parse(now) - 5 * 60_000) throw new ApiError(400, "INVALID_SCHEDULE", "Scheduled time is too far in the past.");
     const result = await this.reminders.upsert({ id: input.reminderId, deviceId: input.deviceId, scheduledAt: input.scheduledAt, notificationType: input.notificationType, idempotencyKey: input.idempotencyKey, now });
-    if (result.kind === "conflict") throw new ApiError(409, "IDEMPOTENCY_CONFLICT", "Idempotency key conflicts with a different request.");
-    return { created: result.kind === "created" || (result.kind === "replay" && result.record.createdAt === result.record.updatedAt), response: { reminderId: result.record.id, status: "pending" as const, scheduledAt: result.record.scheduledAt, updatedAt: result.record.updatedAt } };
+    if (!("record" in result)) {
+      if (result.kind === "conflict") throw new ApiError(409, "IDEMPOTENCY_CONFLICT", "Idempotency key conflicts with a different request.");
+      throw new ApiError(404, "REMINDER_NOT_FOUND", "Reminder not found.");
+    }
+    const record = result.record;
+    return { created: result.kind === "created" || (result.kind === "replay" && record.createdAt === record.updatedAt), response: { reminderId: record.id, status: "pending" as const, scheduledAt: record.scheduledAt, updatedAt: record.updatedAt } };
   }
 
   async cancel(input: { deviceId: string; bearer: string | undefined; reminderId: string }): Promise<void> {

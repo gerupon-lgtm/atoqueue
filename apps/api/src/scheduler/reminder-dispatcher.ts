@@ -18,20 +18,22 @@ export class ReminderDispatcher {
   }
 
   private async send(job: Awaited<ReturnType<ReminderRepository["claimDue"]>>[number], now: Date): Promise<void> {
+    const claimedAt = job.claimedAt;
+    if (!claimedAt) return;
     try {
       const result = await this.push.send({ subscription: job.subscription, payload: { type: "review_due", reminderId: job.id, url: `/today?reminder=${job.id}` } });
-      if (result.statusCode >= 200 && result.statusCode < 300) { await this.repository.markSent(job.id, now.toISOString()); return; }
-      if (result.statusCode === 404 || result.statusCode === 410) { await this.repository.disableDeviceAndFailPending(job.deviceId, now.toISOString(), `push_${result.statusCode}`); return; }
-      await this.handleTemporary(job.id, job.attemptCount, now, `push_${result.statusCode}`);
+      if (result.statusCode >= 200 && result.statusCode < 300) { await this.repository.markSent(job.id, claimedAt, now.toISOString()); return; }
+      if (result.statusCode === 404 || result.statusCode === 410) { await this.repository.disableDeviceAndFailPending(job.deviceId, job.id, claimedAt, now.toISOString(), `push_${result.statusCode}`); return; }
+      await this.handleTemporary(job.id, claimedAt, job.attemptCount, now, `push_${result.statusCode}`);
     } catch {
-      await this.handleTemporary(job.id, job.attemptCount, now, "push_error");
+      await this.handleTemporary(job.id, claimedAt, job.attemptCount, now, "push_error");
     }
   }
 
-  private async handleTemporary(id: string, currentAttempts: number, now: Date, code: string): Promise<void> {
+  private async handleTemporary(id: string, claimedAt: string, currentAttempts: number, now: Date, code: string): Promise<void> {
     const attemptCount = currentAttempts + 1;
-    if (attemptCount > 3) { await this.repository.fail(id, attemptCount, now.toISOString(), code); return; }
+    if (attemptCount > 3) { await this.repository.fail(id, claimedAt, attemptCount, now.toISOString(), code); return; }
     const minutes = RETRY_MINUTES[currentAttempts]!;
-    await this.repository.retry(id, new Date(now.getTime() + minutes * 60_000).toISOString(), attemptCount, now.toISOString(), code);
+    await this.repository.retry(id, claimedAt, new Date(now.getTime() + minutes * 60_000).toISOString(), attemptCount, now.toISOString(), code);
   }
 }

@@ -25,16 +25,16 @@ export interface DueReminder extends ReminderRecord {
 export type UpsertResult =
   | { kind: "created" | "updated"; record: ReminderRecord }
   | { kind: "replay"; record: ReminderRecord }
-  | { kind: "conflict" };
+  | { kind: "conflict" | "missing" };
 
 export interface ReminderRepository {
   upsert(input: Omit<ReminderRecord, "status" | "attemptCount" | "claimedAt" | "sentAt" | "lastErrorCode" | "createdAt" | "updatedAt"> & { now: string }): Promise<UpsertResult>;
   cancel(deviceId: string, reminderId: string, now: string): Promise<"cancelled" | "missing">;
   claimDue(now: string, limit: number): Promise<DueReminder[]>;
-  markSent(reminderId: string, now: string): Promise<void>;
-  retry(reminderId: string, scheduledAt: string, attemptCount: number, now: string, errorCode: string): Promise<void>;
-  fail(reminderId: string, attemptCount: number, now: string, errorCode: string): Promise<void>;
-  disableDeviceAndFailPending(deviceId: string, now: string, errorCode: string): Promise<void>;
+  markSent(reminderId: string, claimedAt: string, now: string): Promise<void>;
+  retry(reminderId: string, claimedAt: string, scheduledAt: string, attemptCount: number, now: string, errorCode: string): Promise<void>;
+  fail(reminderId: string, claimedAt: string, attemptCount: number, now: string, errorCode: string): Promise<void>;
+  disableDeviceAndFailPending(deviceId: string, reminderId: string, claimedAt: string, now: string, errorCode: string): Promise<void>;
   recoverStaleClaims(before: string, now: string): Promise<void>;
 }
 
@@ -56,7 +56,7 @@ export class InMemoryReminderRepository implements ReminderRepository {
       return { kind: "conflict" };
     }
     const previous = this.jobs.get(input.id);
-    if (previous && previous.deviceId !== input.deviceId) return { kind: "conflict" };
+    if (previous && previous.deviceId !== input.deviceId) return { kind: "missing" };
     const record: ReminderRecord = {
       id: input.id, deviceId: input.deviceId, scheduledAt: input.scheduledAt, notificationType: input.notificationType,
       idempotencyKey: input.idempotencyKey, status: "pending", attemptCount: 0, claimedAt: null, sentAt: null,
@@ -85,15 +85,18 @@ export class InMemoryReminderRepository implements ReminderRepository {
     return claimed;
   }
 
-  async markSent(reminderId: string, now: string): Promise<void> { this.update(reminderId, { status: "sent", sentAt: now, claimedAt: null, updatedAt: now, lastErrorCode: null }); }
-  async retry(reminderId: string, scheduledAt: string, attemptCount: number, now: string, errorCode: string): Promise<void> { this.update(reminderId, { status: "pending", scheduledAt, attemptCount, claimedAt: null, updatedAt: now, lastErrorCode: errorCode }); }
-  async fail(reminderId: string, attemptCount: number, now: string, errorCode: string): Promise<void> { this.update(reminderId, { status: "failed", attemptCount, claimedAt: null, updatedAt: now, lastErrorCode: errorCode }); }
-  async disableDeviceAndFailPending(deviceId: string, now: string, errorCode: string): Promise<void> {
+  async markSent(reminderId: string, claimedAt: string, now: string): Promise<void> { this.updateClaim(reminderId, claimedAt, { status: "sent", sentAt: now, claimedAt: null, updatedAt: now, lastErrorCode: null }); }
+  async retry(reminderId: string, claimedAt: string, scheduledAt: string, attemptCount: number, now: string, errorCode: string): Promise<void> { this.updateClaim(reminderId, claimedAt, { status: "pending", scheduledAt, attemptCount, claimedAt: null, updatedAt: now, lastErrorCode: errorCode }); }
+  async fail(reminderId: string, claimedAt: string, attemptCount: number, now: string, errorCode: string): Promise<void> { this.updateClaim(reminderId, claimedAt, { status: "failed", attemptCount, claimedAt: null, updatedAt: now, lastErrorCode: errorCode }); }
+  async disableDeviceAndFailPending(deviceId: string, reminderId: string, claimedAt: string, now: string, errorCode: string): Promise<void> {
+    const claimed = this.jobs.get(reminderId);
+    if (!claimed || claimed.deviceId !== deviceId || claimed.status !== "claimed" || claimed.claimedAt !== claimedAt) return;
     const device = this.devices.get(deviceId); if (device) this.devices.set(deviceId, { ...device, status: "disabled" });
     for (const job of this.jobs.values()) if (job.deviceId === deviceId && (job.status === "pending" || job.status === "claimed")) this.update(job.id, { status: "failed", claimedAt: null, updatedAt: now, lastErrorCode: errorCode });
   }
   async recoverStaleClaims(before: string, now: string): Promise<void> { for (const job of this.jobs.values()) if (job.status === "claimed" && job.claimedAt && job.claimedAt < before) this.update(job.id, { status: "pending", claimedAt: null, updatedAt: now }); }
   private update(id: string, patch: Partial<ReminderRecord>): void { const job = this.jobs.get(id); if (job) this.jobs.set(id, { ...job, ...patch }); }
+  private updateClaim(id: string, claimedAt: string, patch: Partial<ReminderRecord>): void { const job = this.jobs.get(id); if (job?.status === "claimed" && job.claimedAt === claimedAt) this.jobs.set(id, { ...job, ...patch }); }
 }
 
 export class PgReminderRepository implements ReminderRepository {
@@ -110,19 +113,29 @@ export class PgReminderRepository implements ReminderRepository {
         const record = rowToRecord(sameKey);
         return record.id === input.id && record.scheduledAt === input.scheduledAt && record.notificationType === input.notificationType ? { kind: "replay", record } : { kind: "conflict" };
       }
-      const existing = await client.query<Row>("SELECT * FROM reminder_jobs WHERE id = $1 FOR UPDATE", [input.id]);
-      const previous = existing.rows[0];
-      if (previous && previous.device_id !== input.deviceId) { await client.query("COMMIT"); return { kind: "conflict" }; }
-      const status = previous ? "updated" : "created";
-      const result = await client.query<Row>(
+      const inserted = await client.query<Row>(
         `INSERT INTO reminder_jobs (id, device_id, scheduled_at, notification_type, status, idempotency_key, attempt_count, claimed_at, sent_at, last_error_code, created_at, updated_at)
          VALUES ($1,$2,$3,$4,'pending',$5,0,NULL,NULL,NULL,$6,$6)
-         ON CONFLICT (id) DO UPDATE SET scheduled_at=EXCLUDED.scheduled_at, notification_type=EXCLUDED.notification_type, status='pending', idempotency_key=EXCLUDED.idempotency_key, attempt_count=0, claimed_at=NULL, sent_at=NULL, last_error_code=NULL, updated_at=EXCLUDED.updated_at
-         RETURNING *`, [input.id, input.deviceId, input.scheduledAt, input.notificationType, input.idempotencyKey, input.now],
+         ON CONFLICT DO NOTHING RETURNING *`, [input.id, input.deviceId, input.scheduledAt, input.notificationType, input.idempotencyKey, input.now],
+      );
+      if (inserted.rows[0]) { await client.query("COMMIT"); return { kind: "created", record: rowToRecord(inserted.rows[0]) }; }
+      const keyAfterConflict = await client.query<Row>("SELECT * FROM reminder_jobs WHERE device_id = $1 AND idempotency_key = $2 FOR UPDATE", [input.deviceId, input.idempotencyKey]);
+      const replay = keyAfterConflict.rows[0];
+      if (replay) { await client.query("COMMIT"); return matchesRequest(replay, input) ? { kind: "replay", record: rowToRecord(replay) } : { kind: "conflict" }; }
+      const existing = await client.query<Row>("SELECT * FROM reminder_jobs WHERE id = $1 FOR UPDATE", [input.id]);
+      const previous = existing.rows[0];
+      if (!previous || previous.device_id !== input.deviceId) { await client.query("COMMIT"); return { kind: "missing" }; }
+      const result = await client.query<Row>(
+        `UPDATE reminder_jobs SET scheduled_at=$1, notification_type=$2, status='pending', idempotency_key=$3, attempt_count=0, claimed_at=NULL, sent_at=NULL, last_error_code=NULL, updated_at=$4
+         WHERE id=$5 AND device_id=$6 RETURNING *`, [input.scheduledAt, input.notificationType, input.idempotencyKey, input.now, input.id, input.deviceId],
       );
       await client.query("COMMIT");
-      return { kind: status, record: rowToRecord(result.rows[0]!) };
-    } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+      return { kind: "updated", record: rowToRecord(result.rows[0]!) };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (isUniqueViolation(error)) return this.resolveUniqueConflict(input);
+      throw error;
+    } finally { client.release(); }
   }
   async cancel(deviceId: string, reminderId: string, now: string): Promise<"cancelled" | "missing"> {
     const result = await this.pool.query("UPDATE reminder_jobs SET status='cancelled', updated_at=$1 WHERE id=$2 AND device_id=$3 AND status IN ('pending','claimed')", [now, reminderId, deviceId]);
@@ -135,23 +148,35 @@ export class PgReminderRepository implements ReminderRepository {
     try {
       await client.query("BEGIN");
       const result = await client.query<Row & DeviceRow>(
-        `WITH due AS (SELECT id FROM reminder_jobs WHERE status='pending' AND scheduled_at <= $1 ORDER BY scheduled_at FOR UPDATE SKIP LOCKED LIMIT $2)
+        `WITH due AS (SELECT job.id FROM reminder_jobs job JOIN device_subscriptions device ON device.device_id=job.device_id WHERE job.status='pending' AND job.scheduled_at <= $1 AND device.status='active' ORDER BY job.scheduled_at FOR UPDATE OF job SKIP LOCKED LIMIT $2)
          UPDATE reminder_jobs job SET status='claimed', claimed_at=$1, updated_at=$1 FROM due, device_subscriptions device
-         WHERE job.id=due.id AND device.device_id=job.device_id AND device.status='active'
+         WHERE job.id=due.id AND device.device_id=job.device_id
          RETURNING job.*, device.endpoint, device.p256dh, device.auth`, [now, limit],
       );
       await client.query("COMMIT");
       return result.rows.map((row) => ({ ...rowToRecord(row), subscription: { endpoint: row.endpoint, p256dh: row.p256dh, auth: row.auth } }));
     } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   }
-  async markSent(id: string, now: string): Promise<void> { await this.pool.query("UPDATE reminder_jobs SET status='sent', sent_at=$1, claimed_at=NULL, last_error_code=NULL, updated_at=$1 WHERE id=$2 AND status='claimed'", [now, id]); }
-  async retry(id: string, scheduledAt: string, attemptCount: number, now: string, errorCode: string): Promise<void> { await this.pool.query("UPDATE reminder_jobs SET status='pending', scheduled_at=$1, attempt_count=$2, claimed_at=NULL, last_error_code=$3, updated_at=$4 WHERE id=$5 AND status='claimed'", [scheduledAt, attemptCount, errorCode, now, id]); }
-  async fail(id: string, attemptCount: number, now: string, errorCode: string): Promise<void> { await this.pool.query("UPDATE reminder_jobs SET status='failed', attempt_count=$1, claimed_at=NULL, last_error_code=$2, updated_at=$3 WHERE id=$4 AND status='claimed'", [attemptCount, errorCode, now, id]); }
-  async disableDeviceAndFailPending(deviceId: string, now: string, errorCode: string): Promise<void> { const client = await this.pool.connect(); try { await client.query("BEGIN"); await client.query("UPDATE device_subscriptions SET status='disabled', last_error_code=$1, updated_at=$2 WHERE device_id=$3", [errorCode, now, deviceId]); await client.query("UPDATE reminder_jobs SET status='failed', claimed_at=NULL, last_error_code=$1, updated_at=$2 WHERE device_id=$3 AND status IN ('pending','claimed')", [errorCode, now, deviceId]); await client.query("COMMIT"); } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); } }
+  async markSent(id: string, claimedAt: string, now: string): Promise<void> { await this.pool.query("UPDATE reminder_jobs SET status='sent', sent_at=$1, claimed_at=NULL, last_error_code=NULL, updated_at=$1 WHERE id=$2 AND status='claimed' AND claimed_at=$3", [now, id, claimedAt]); }
+  async retry(id: string, claimedAt: string, scheduledAt: string, attemptCount: number, now: string, errorCode: string): Promise<void> { await this.pool.query("UPDATE reminder_jobs SET status='pending', scheduled_at=$1, attempt_count=$2, claimed_at=NULL, last_error_code=$3, updated_at=$4 WHERE id=$5 AND status='claimed' AND claimed_at=$6", [scheduledAt, attemptCount, errorCode, now, id, claimedAt]); }
+  async fail(id: string, claimedAt: string, attemptCount: number, now: string, errorCode: string): Promise<void> { await this.pool.query("UPDATE reminder_jobs SET status='failed', attempt_count=$1, claimed_at=NULL, last_error_code=$2, updated_at=$3 WHERE id=$4 AND status='claimed' AND claimed_at=$5", [attemptCount, errorCode, now, id, claimedAt]); }
+  async disableDeviceAndFailPending(deviceId: string, reminderId: string, claimedAt: string, now: string, errorCode: string): Promise<void> { const client = await this.pool.connect(); try { await client.query("BEGIN"); const claimed = await client.query("UPDATE reminder_jobs SET status='failed', claimed_at=NULL, last_error_code=$1, updated_at=$2 WHERE id=$3 AND device_id=$4 AND status='claimed' AND claimed_at=$5", [errorCode, now, reminderId, deviceId, claimedAt]); if (claimed.rowCount) { await client.query("UPDATE device_subscriptions SET status='disabled', last_error_code=$1, updated_at=$2 WHERE device_id=$3", [errorCode, now, deviceId]); await client.query("UPDATE reminder_jobs SET status='failed', claimed_at=NULL, last_error_code=$1, updated_at=$2 WHERE device_id=$3 AND status='pending'", [errorCode, now, deviceId]); } await client.query("COMMIT"); } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); } }
   async recoverStaleClaims(before: string, now: string): Promise<void> { await this.pool.query("UPDATE reminder_jobs SET status='pending', claimed_at=NULL, updated_at=$1 WHERE status='claimed' AND claimed_at < $2", [now, before]); }
+
+  private async resolveUniqueConflict(input: Parameters<ReminderRepository["upsert"]>[0]): Promise<UpsertResult> {
+    const sameKey = await this.pool.query<Row>("SELECT * FROM reminder_jobs WHERE device_id=$1 AND idempotency_key=$2", [input.deviceId, input.idempotencyKey]);
+    const keyRecord = sameKey.rows[0];
+    if (keyRecord) return matchesRequest(keyRecord, input) ? { kind: "replay", record: rowToRecord(keyRecord) } : { kind: "conflict" };
+    const sameId = await this.pool.query<Row>("SELECT * FROM reminder_jobs WHERE id=$1", [input.id]);
+    const idRecord = sameId.rows[0];
+    if (!idRecord || idRecord.device_id !== input.deviceId) return { kind: "missing" };
+    return matchesRequest(idRecord, input) ? { kind: "replay", record: rowToRecord(idRecord) } : { kind: "conflict" };
+  }
 }
 
 type Row = { id: string; device_id: string; scheduled_at: string; notification_type: ReminderRecord["notificationType"]; status: ReminderStatus; idempotency_key: string; attempt_count: number; claimed_at: string | null; sent_at: string | null; last_error_code: string | null; created_at: string; updated_at: string };
 type DeviceRow = { endpoint: string; p256dh: string; auth: string };
 function rowToRecord(row: Row): ReminderRecord { return { id: row.id, deviceId: row.device_id, scheduledAt: row.scheduled_at, notificationType: row.notification_type, status: row.status, idempotencyKey: row.idempotency_key, attemptCount: row.attempt_count, claimedAt: row.claimed_at, sentAt: row.sent_at, lastErrorCode: row.last_error_code, createdAt: row.created_at, updatedAt: row.updated_at }; }
 function nowIso(): string { return new Date().toISOString(); }
+function matchesRequest(row: Row, input: Parameters<ReminderRepository["upsert"]>[0]): boolean { return row.id === input.id && row.scheduled_at === input.scheduledAt && row.notification_type === input.notificationType; }
+function isUniqueViolation(error: unknown): boolean { return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "23505"; }
