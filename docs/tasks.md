@@ -45,6 +45,8 @@
 | DoD    | インストール可能判定、オフライン再起動、主要ルート直リンクが成功する                         |
 | 検証   | Lighthouse PWA確認、Chromium/WebKit E2E、実機インストール手順                                |
 
+> 検証状況（2026-08-03）: `pnpm --filter @atoqueue/web test -- AppShell.test.tsx`（16件）、`pnpm --filter @atoqueue/web build`、および `pnpm --filter @atoqueue/web test:e2e -- pwa-shell.spec.ts`（4件）は成功。
+
 ### T-004 クイックキャプチャ
 
 | 項目   | 内容                                                           |
