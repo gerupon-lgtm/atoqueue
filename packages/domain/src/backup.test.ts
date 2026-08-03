@@ -125,4 +125,28 @@ describe("local backup", () => {
     await expect(inspectBackup(backup)).rejects.toThrow("Task next review time");
     await expect(restoreBackup({ current: snapshot(), serialized: backup, now })).rejects.toThrow("Task next review time");
   });
+
+  it("F-017 rejects checksum-valid backups that violate capture and task invariants before mutation", async () => {
+    const taskCaptureWithoutLink = snapshot();
+    delete taskCaptureWithoutLink.captures[0]!.linkedTaskId;
+
+    const duplicateTaskCapture = snapshot();
+    duplicateTaskCapture.tasks.push({ ...duplicateTaskCapture.tasks[0]!, id: "task-2", title: "同じ入力からの重複タスク" });
+
+    const blankCaptureBody = snapshot();
+    blankCaptureBody.captures[0] = { ...blankCaptureBody.captures[0]!, body: "  \t " };
+
+    for (const [invalid, message] of [
+      [taskCaptureWithoutLink, "Task-classified capture must link to a task"],
+      [duplicateTaskCapture, "Task source capture ID must be unique"],
+      [blankCaptureBody, "Capture body must contain 1 to 280 characters"],
+    ] as const) {
+      const backup = await createBackup(invalid);
+      const current = snapshot();
+
+      await expect(inspectBackup(backup)).rejects.toThrow(message);
+      await expect(restoreBackup({ current, serialized: backup, now })).rejects.toThrow(message);
+      expect(current).toEqual(snapshot());
+    }
+  });
 });

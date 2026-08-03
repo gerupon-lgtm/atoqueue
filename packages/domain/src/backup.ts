@@ -174,6 +174,7 @@ function validateReferences(snapshot: AppSnapshot): void {
   const captureIds = new Set(snapshot.captures.map((capture) => capture.id));
   const taskIds = new Set(snapshot.tasks.map((task) => task.id));
   const actionIds = new Set(snapshot.actionHistory.map((event) => event.id));
+  const taskSourceCaptureIds = new Set<string>();
   for (const task of snapshot.tasks) {
     validateUtcTimestamp(task.createdAt, "Task creation time");
     validateUtcTimestamp(task.updatedAt, "Task update time");
@@ -183,12 +184,29 @@ function validateReferences(snapshot: AppSnapshot): void {
     if (task.completedAt) validateUtcTimestamp(task.completedAt, "Task completion time");
     if (task.archivedAt) validateUtcTimestamp(task.archivedAt, "Task archive time");
     if (!captureIds.has(task.sourceCaptureId)) throw new CorruptDataError("Task references an unknown capture.");
+    if (taskSourceCaptureIds.has(task.sourceCaptureId)) {
+      throw new CorruptDataError("Task source capture ID must be unique.");
+    }
+    taskSourceCaptureIds.add(task.sourceCaptureId);
   }
   for (const capture of snapshot.captures) {
     validateUtcTimestamp(capture.createdAt, "Capture creation time");
     validateUtcTimestamp(capture.updatedAt, "Capture update time");
     if (capture.classifiedAt) validateUtcTimestamp(capture.classifiedAt, "Capture classification time");
+    const bodyLength = capture.body.trim().length;
+    if (bodyLength < 1 || bodyLength > 280) {
+      throw new CorruptDataError("Capture body must contain 1 to 280 characters.");
+    }
+    if (capture.classification === "task" && !capture.linkedTaskId) {
+      throw new CorruptDataError("Task-classified capture must link to a task.");
+    }
     if (capture.linkedTaskId && !taskIds.has(capture.linkedTaskId)) throw new CorruptDataError("Capture references an unknown task.");
+    if (capture.linkedTaskId) {
+      const task = snapshot.tasks.find((candidate) => candidate.id === capture.linkedTaskId);
+      if (task?.sourceCaptureId !== capture.id) {
+        throw new CorruptDataError("Capture linked task must originate from that capture.");
+      }
+    }
   }
   for (const session of snapshot.reviewSessions) {
     validateLocalDate(session.localDate, "Review date");
