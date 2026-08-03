@@ -44,15 +44,21 @@ describe("local backup", () => {
     });
     expect(parsed).toHaveProperty("payload");
     expect(parsed).not.toHaveProperty("data");
+    expect(parsed).toHaveProperty("payload.device", { localDeviceId: "local-device" });
     expect(backup).not.toContain("secret");
     expect(backup).not.toContain("server-device");
     expect(parsed).not.toHaveProperty("device");
+    expect(backup).not.toContain("pushDeviceId");
+    expect(backup).not.toContain("pushDeviceSecret");
+    expect(backup).not.toContain("pushSubscriptionStatus");
     expect(backup).not.toContain("old-outbox");
     expect(backup).not.toContain("old-reminder");
 
+    const current = snapshot();
+    current.device.localDeviceId = "destination-device";
     let id = 0;
     const restored = await restoreBackup({
-      current: original,
+      current,
       serialized: backup,
       now,
       idFactory: (kind) => `new-${kind}-${++id}`,
@@ -62,7 +68,7 @@ describe("local backup", () => {
     expect(restored.reviewSessions).toEqual(original.reviewSessions);
     expect(restored.actionHistory).toEqual([...original.actionHistory, expect.objectContaining({ action: "backup_restored" })]);
     expect(restored.settings).toEqual(original.settings);
-    expect(restored.device.localDeviceId).toBe("local-device");
+    expect(restored.device.localDeviceId).toBe("destination-device");
     expect(restored.notificationOutbox).toEqual([
       expect.objectContaining({ id: "new-outbox-1", operation: "cancel", reminderId: "old-reminder", taskRevision: 3 }),
       expect.objectContaining({ id: "new-outbox-3", operation: "upsert", reminderId: "new-reminder-2", taskRevision: 3 }),

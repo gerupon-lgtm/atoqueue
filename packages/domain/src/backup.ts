@@ -9,6 +9,7 @@ export const BACKUP_VERSION = 1;
 export interface BackupData {
   schemaVersion: AppSnapshot["schemaVersion"];
   appVersion: string;
+  device: Pick<AppSnapshot["device"], "localDeviceId">;
   settings: AppSnapshot["settings"];
   captures: AppSnapshot["captures"];
   tasks: AppSnapshot["tasks"];
@@ -50,6 +51,7 @@ export async function createBackup(snapshot: AppSnapshot, exportedAt = new Date(
   const payload: BackupData = {
     schemaVersion: snapshot.schemaVersion,
     appVersion: snapshot.appVersion,
+    device: { localDeviceId: snapshot.device.localDeviceId },
     settings: snapshot.settings,
     captures: snapshot.captures,
     tasks: snapshot.tasks,
