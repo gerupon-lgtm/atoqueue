@@ -68,7 +68,9 @@ export function summarizeReview(session: ReviewSession, events: ActionEvent[]): 
   const actionCounts: ReviewSummary["actionCounts"] = {};
 
   for (const event of events) {
-    if (event.entityType === "task" && processed.has(event.entityId)) {
+    const inSessionWindow = event.occurredAt >= session.startedAt
+      && (!session.completedAt || event.occurredAt <= session.completedAt);
+    if (inSessionWindow && event.entityType === "task" && processed.has(event.entityId)) {
       actionCounts[event.action] = (actionCounts[event.action] ?? 0) + 1;
     }
   }
@@ -102,9 +104,11 @@ function compareReviewTasks(left: Task, right: Task, now: string, calendar: Revi
 }
 
 function reviewGroup(task: Task, now: string, calendar: ReviewCalendar): number | null {
+  const dueToday = task.dueMode === "scheduled" && task.dueAt && calendar.today(task.dueAt) === calendar.today(now);
+  if (!dueToday && calendar.compareInstants(task.nextReviewAt, now) > 0) return null;
   if (task.dueMode === "scheduled" && task.dueAt && calendar.compareInstants(task.dueAt, now) < 0) return 0;
   if (neglectLevel(task, now, calendar) >= 2) return 1;
-  if (task.dueMode === "scheduled" && task.dueAt && calendar.today(task.dueAt) === calendar.today(now)) return 2;
+  if (dueToday) return 2;
   if (task.dueMode === "unset" && calendar.compareInstants(task.nextReviewAt, now) <= 0) return 3;
   if (task.dueMode === "none" && calendar.compareInstants(task.nextReviewAt, now) <= 0) return 4;
   return null;

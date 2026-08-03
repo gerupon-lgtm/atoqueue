@@ -101,6 +101,44 @@ describe("review session", () => {
     })).toMatchObject({ id: "active" });
   });
 
+  it("F-012 suppresses a dismissed overdue task until its next review time", () => {
+    const dismissedOverdue = task("dismissed-overdue", {
+      dueMode: "scheduled",
+      dueAt: "2026-08-02T23:59:00.000Z",
+      nextReviewAt: "2026-08-04T18:00:00.000Z",
+      dismissCount: 1,
+    });
+
+    expect(startReviewSession({ sessionId: "before", now, calendar, tasks: [dismissedOverdue] }).orderedTaskIds).toEqual([]);
+    expect(startReviewSession({
+      sessionId: "at",
+      now: "2026-08-04T18:00:00.000Z",
+      calendar,
+      tasks: [dismissedOverdue],
+    }).orderedTaskIds).toEqual(["dismissed-overdue"]);
+  });
+
+  it("F-008 suppresses a third unset-due prompt until its weekly review and keeps due-today tasks eligible", () => {
+    const weeklyUnset = task("weekly-unset", {
+      dueMode: "unset",
+      undecidedCount: 2,
+      nextReviewAt: "2026-08-09T18:00:00.000Z",
+    });
+    const dueToday = task("due-today", {
+      dueMode: "scheduled",
+      dueAt: "2026-08-03T23:59:00.000Z",
+      nextReviewAt: "2026-08-03T23:59:00.000Z",
+    });
+
+    expect(startReviewSession({ sessionId: "before", now, calendar, tasks: [weeklyUnset, dueToday] }).orderedTaskIds).toEqual(["due-today"]);
+    expect(startReviewSession({
+      sessionId: "at",
+      now: "2026-08-09T18:00:00.000Z",
+      calendar,
+      tasks: [weeklyUnset],
+    }).orderedTaskIds).toEqual(["weekly-unset"]);
+  });
+
   it("F-016 retains every processed task in the completed result", () => {
     const session = {
       ...startReviewSession({ sessionId: "session-1", now, calendar, tasks: [task("first"), task("second")] }),
@@ -113,5 +151,20 @@ describe("review session", () => {
     ]);
 
     expect(summary).toMatchObject({ processedTaskIds: ["first", "second"], actionCounts: { task_completed: 1, task_rescheduled: 1 } });
+  });
+
+  it("F-016 summarizes only this session's actions, including every in-session re-answer", () => {
+    const session = {
+      ...startReviewSession({ sessionId: "session-1", now, calendar, tasks: [task("first")] }),
+      answeredTaskIds: ["first"],
+    };
+    const summary = summarizeReview(session, [
+      { id: "historical", entityType: "task", entityId: "first", action: "task_archived", occurredAt: "2026-08-03T08:59:59.000Z" },
+      { id: "answer", entityType: "task", entityId: "first", action: "task_completed", occurredAt: now },
+      { id: "re-answer", entityType: "task", entityId: "first", action: "task_rescheduled", occurredAt: "2026-08-03T09:01:00.000Z" },
+      { id: "unprocessed", entityType: "task", entityId: "other", action: "task_completed", occurredAt: "2026-08-03T09:02:00.000Z" },
+    ]);
+
+    expect(summary.actionCounts).toEqual({ task_completed: 1, task_rescheduled: 1 });
   });
 });
