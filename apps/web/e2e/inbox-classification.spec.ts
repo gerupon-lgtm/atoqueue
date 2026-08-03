@@ -14,10 +14,20 @@ test("keeps a suggested capture unclassified until the user confirms タスク�
     .poll(() =>
       page.evaluate(() => {
         const raw = window.localStorage.getItem("atoqueue:data:v1");
-        return raw ? (JSON.parse(raw) as { tasks: unknown[] }).tasks.length : -1;
+        if (!raw) return null;
+        const snapshot = JSON.parse(raw) as {
+          captures: Array<{ id: string; body: string; classification: string; linkedTaskId?: string }>;
+          tasks: unknown[];
+        };
+        const capture = snapshot.captures.find((item) => item.body === "牛乳を買う");
+        return {
+          classification: capture?.classification,
+          linkedTaskId: capture?.linkedTaskId ?? null,
+          taskCount: snapshot.tasks.length,
+        };
       }),
     )
-    .toBe(0);
+    .toEqual({ classification: "unclassified", linkedTaskId: null, taskCount: 0 });
 
   await page.getByRole("button", { name: "タスクにする" }).click();
 
@@ -25,8 +35,20 @@ test("keeps a suggested capture unclassified until the user confirms タスク�
     .poll(() =>
       page.evaluate(() => {
         const raw = window.localStorage.getItem("atoqueue:data:v1");
-        return raw ? (JSON.parse(raw) as { tasks: unknown[] }).tasks.length : -1;
+        if (!raw) return null;
+        const snapshot = JSON.parse(raw) as {
+          captures: Array<{ id: string; body: string; classification: string; linkedTaskId?: string }>;
+          tasks: Array<{ id: string; sourceCaptureId: string }>;
+        };
+        const capture = snapshot.captures.find((item) => item.body === "牛乳を買う");
+        return {
+          classification: capture?.classification,
+          hasLinkedTask: typeof capture?.linkedTaskId === "string",
+          linkedTaskMatchesCapture: snapshot.tasks.some(
+            (task) => task.id === capture?.linkedTaskId && task.sourceCaptureId === capture.id,
+          ),
+        };
       }),
     )
-    .toBe(1);
+    .toEqual({ classification: "task", hasLinkedTask: true, linkedTaskMatchesCapture: true });
 });

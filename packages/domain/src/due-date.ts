@@ -13,6 +13,7 @@ export interface LocalCalendar {
   nextWeekday(date: string, weekday: number): string;
   endOfDay(date: string): string;
   atTime(date: string, hour: number, minute: number): string;
+  isAtOrAfter(instant: string, date: string, hour: number, minute: number): boolean;
 }
 
 export interface ResolveDueChoiceInput {
@@ -41,14 +42,28 @@ export function resolveDueChoice(input: ResolveDueChoiceInput): DueResolution {
     case "custom":
       return scheduled(input.calendar.endOfDay(input.choice.date));
     case "none":
+      {
+        const weeklyReviewDate = input.calendar.nextWeekday(
+          today,
+          input.weeklyReviewDay ?? 0,
+        );
+        const nextReviewDate = input.calendar.isAtOrAfter(
+          input.now,
+          weeklyReviewDate,
+          18,
+          0,
+        )
+          ? input.calendar.addDays(weeklyReviewDate, 7)
+          : weeklyReviewDate;
       return {
         dueMode: "none",
         nextReviewAt: input.calendar.atTime(
-          input.calendar.nextWeekday(today, input.weeklyReviewDay ?? 0),
+          nextReviewDate,
           18,
           0,
         ),
       };
+      }
     case "unset":
       return {
         dueMode: "unset",
@@ -80,6 +95,9 @@ export function createLocalCalendar(timeZone: string): LocalCalendar {
     },
     atTime(date, hour, minute) {
       return localTimeToIso(date, hour, minute, timeZone);
+    },
+    isAtOrAfter(instant, date, hour, minute) {
+      return Date.parse(instant) >= Date.parse(this.atTime(date, hour, minute));
     },
   };
 }

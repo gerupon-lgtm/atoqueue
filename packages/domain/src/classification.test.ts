@@ -17,6 +17,7 @@ const calendar: LocalCalendar = {
   addDays: (date, days) => (date === "2026-08-03" && days === 3 ? "2026-08-06" : date),
   atTime: (date) => `${date}T09:00:00.000Z`,
   endOfDay: (date) => `${date}T14:59:00.000Z`,
+  isAtOrAfter: () => false,
   nextWeekday: () => "2026-08-09",
   nextSunday: () => "2026-08-09",
   today: () => "2026-08-03",

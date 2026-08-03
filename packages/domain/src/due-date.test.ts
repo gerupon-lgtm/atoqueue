@@ -30,6 +30,7 @@ const calendar: LocalCalendar = {
     expect(minute).toBe(0);
     return "2026-04-05T09:00:00.000Z";
   },
+  isAtOrAfter: () => false,
   today: (instant) => {
     expect(instant).toBe(now);
     return "2026-03-28";
@@ -55,6 +56,38 @@ describe("resolveDueChoice", () => {
       dueMode: "none",
       nextReviewAt: "2026-04-05T09:00:00.000Z",
     });
+  });
+
+  it.each([
+    ["Sunday 17:59", "2026-08-09T08:59:00.000Z", "2026-08-09T09:00:00.000Z"],
+    ["Sunday 18:00", "2026-08-09T09:00:00.000Z", "2026-08-16T09:00:00.000Z"],
+    ["Sunday 18:01", "2026-08-09T09:01:00.000Z", "2026-08-16T09:00:00.000Z"],
+  ])("F-007 schedules the next weekly review after %s", (_, boundaryNow, expected) => {
+    const sundayCalendar: LocalCalendar = {
+      addDays: (date, days) => {
+        expect(date).toMatch(/2026-08-(09|16)/);
+        expect(days).toBe(7);
+        return "2026-08-16";
+      },
+      atTime: (date, hour, minute) => {
+        expect(hour).toBe(18);
+        expect(minute).toBe(0);
+        return date === "2026-08-09" ? "2026-08-09T09:00:00.000Z" : "2026-08-16T09:00:00.000Z";
+      },
+      endOfDay: () => "",
+      isAtOrAfter: (instant, date, hour, minute) => {
+        expect(date).toBe("2026-08-09");
+        expect(hour).toBe(18);
+        expect(minute).toBe(0);
+        return instant >= "2026-08-09T09:00:00.000Z";
+      },
+      nextSunday: () => "2026-08-09",
+      nextWeekday: () => "2026-08-09",
+      today: () => "2026-08-09",
+    };
+
+    expect(resolveDueChoice({ choice: { type: "none" }, now: boundaryNow, calendar: sundayCalendar }))
+      .toMatchObject({ dueMode: "none", nextReviewAt: expected });
   });
 
   it("F-007 schedules an undecided due date for three local days later", () => {
