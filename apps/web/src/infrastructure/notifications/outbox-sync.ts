@@ -1,4 +1,4 @@
-import type { AppRepository, AppSnapshot, NotificationOutboxItem } from "../../../../../packages/domain/src";
+import { calculateNextReview, createLocalCalendar, notificationTypeForTask, type AppRepository, type AppSnapshot, type NotificationOutboxItem } from "../../../../../packages/domain/src";
 import { NotificationApiError, type DeviceCredentials } from "./notification-api";
 
 export interface OutboxApi {
@@ -113,14 +113,24 @@ function reschedule(snapshot: AppSnapshot, item: NotificationOutboxItem, now: st
   const mapping = snapshot.reminderMap.find((entry) => entry.reminderId === item.reminderId);
   const task = mapping && snapshot.tasks.find((candidate) => candidate.id === mapping.taskId);
   if (!task || task.status !== "active") return discard(snapshot, item);
+  const scheduledAt = calculateNextReview({
+    now,
+    dueMode: task.dueMode,
+    undecidedCount: task.undecidedCount,
+    dismissCount: task.dismissCount,
+    calendar: createLocalCalendar(snapshot.settings.timeZone),
+  });
   return {
     ...snapshot,
     notificationOutbox: snapshot.notificationOutbox.map((candidate) => candidate.id === item.id ? {
       ...candidate,
-      scheduledAt: task.nextReviewAt,
-      notificationType: task.dueMode === "scheduled" ? "deadline_review" : task.dueMode === "unset" ? "unset_due_review" : "task_review",
+      id: crypto.randomUUID(),
+      scheduledAt,
+      notificationType: notificationTypeForTask(task),
       taskRevision: task.revision,
+      attemptCount: 0,
       nextAttemptAt: now,
+      createdAt: now,
     } : candidate),
   };
 }
@@ -134,7 +144,7 @@ function renewIdempotencyKey(snapshot: AppSnapshot, _item: NotificationOutboxIte
       operation: "upsert" as const,
       reminderId: mapping.reminderId,
       scheduledAt: task.nextReviewAt,
-      notificationType: task.dueMode === "scheduled" ? "deadline_review" as const : task.dueMode === "unset" ? "unset_due_review" as const : "task_review" as const,
+      notificationType: notificationTypeForTask(task),
       taskRevision: task.revision,
       attemptCount: 0,
       nextAttemptAt: now,

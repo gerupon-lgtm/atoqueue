@@ -25,7 +25,7 @@ export interface NextReviewInput {
   dueMode: Task["dueMode"];
   undecidedCount: number;
   dismissCount: number;
-  calendar: ReminderCalendar;
+  calendar: Pick<ReminderCalendar, "today" | "addDays" | "nextSunday" | "atTime" | "isAtOrAfter">;
 }
 
 export interface NeglectInput {

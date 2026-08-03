@@ -64,6 +64,23 @@ describe("flushOutbox", () => {
     expect(queued.every((item) => item.id !== "outbox" && item.operation === "upsert" && item.attemptCount === 0)).toBe(true);
   });
 
+  it("recalculates a rejected past schedule from the local reminder policy", async () => {
+    const repository = memory(snapshotWithOutbox());
+    const snapshot = await repository.load();
+    snapshot.notificationOutbox[0] = { ...snapshot.notificationOutbox[0]!, scheduledAt: "2026-08-03T08:00:00.000Z" };
+    snapshot.tasks[0] = { ...snapshot.tasks[0]!, nextReviewAt: "2026-08-03T08:00:00.000Z", dueMode: "none", dismissCount: 0 };
+    await repository.save(snapshot);
+
+    await flushOutbox({ repository, now: () => now, api: { upsert: async () => { throw new NotificationApiError(400, undefined, "INVALID_SCHEDULE"); }, cancel: async () => undefined } });
+
+    expect((await repository.load()).notificationOutbox).toEqual([expect.objectContaining({
+      scheduledAt: "2026-08-05T09:00:00.000Z",
+      nextAttemptAt: now,
+      taskRevision: 3,
+    })]);
+    expect((await repository.load()).notificationOutbox[0]?.id).not.toBe("outbox");
+  });
+
   it("preserves a local edit saved while a launch flush is awaiting the API", async () => {
     const repository = memory(snapshotWithOutbox());
     let release: (() => void) | undefined;

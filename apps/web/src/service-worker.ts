@@ -39,7 +39,10 @@ function validReminderUrl(url: unknown, reminderId: unknown): url is string {
   if (typeof url !== "string" || typeof reminderId !== "string" || !isUuid(reminderId)) return false;
   try {
     const parsed = new URL(url, "https://atoqueue.invalid");
-    return parsed.origin === "https://atoqueue.invalid" && parsed.pathname === "/today" && parsed.searchParams.get("reminder") === reminderId;
+    return parsed.origin === "https://atoqueue.invalid"
+      && parsed.pathname === "/today"
+      && parsed.searchParams.size === 1
+      && parsed.searchParams.get("reminder") === reminderId;
   } catch { return false; }
 }
 function isUuid(value: string): boolean { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }

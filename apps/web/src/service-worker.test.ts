@@ -32,4 +32,12 @@ describe("service worker notification behavior", () => {
     );
     expect(openWindow).toHaveBeenCalledWith("/today");
   });
+
+  it("rejects extra URL parameters so push data cannot carry task content", async () => {
+    const showNotification = vi.fn();
+    const reminderId = "22222222-2222-4222-8222-222222222222";
+    await handlePush(JSON.stringify({ type: "review_due", reminderId, url: `/today?reminder=${reminderId}&title=private-task` }), showNotification);
+
+    expect(showNotification).toHaveBeenCalledWith(genericNotification.title, expect.objectContaining({ data: { url: "/today" } }));
+  });
 });

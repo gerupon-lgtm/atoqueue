@@ -17,3 +17,17 @@ test("notification settings explains privacy without requesting browser permissi
   await expect(page.getByRole("button", { name: "通知を設定する" })).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as Window & { __notificationRequestCount: () => number }).__notificationRequestCount())).toBe(0);
 });
+
+test("a user-triggered denied permission shows browser-settings guidance", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Notification, "requestPermission", { configurable: true, value: async () => "denied" });
+    Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: {} });
+    Object.defineProperty(window, "PushManager", { configurable: true, value: class {} });
+  });
+
+  await page.goto("/settings");
+  await page.locator("button[type=button]").click();
+
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.locator("button[type=button]")).toBeDisabled();
+});

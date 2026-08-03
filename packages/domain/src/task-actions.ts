@@ -210,7 +210,7 @@ function queueNotification(snapshot: AppSnapshot, task: Task, input: IdInput): {
     id: createId(input, "outbox"),
     operation: cancel ? "cancel" : "upsert",
     reminderId,
-    ...(!cancel ? { scheduledAt: task.nextReviewAt, notificationType: notificationType(task) } : {}),
+    ...(!cancel ? { scheduledAt: task.nextReviewAt, notificationType: notificationTypeForTask(task) } : {}),
     taskRevision: task.revision,
     attemptCount: 0,
     nextAttemptAt: input.now,
@@ -225,7 +225,8 @@ function queueNotification(snapshot: AppSnapshot, task: Task, input: IdInput): {
   };
 }
 
-function notificationType(task: Task): NotificationOutboxItem["notificationType"] {
+/** Maps local task state to the anonymous notification category. */
+export function notificationTypeForTask(task: Pick<Task, "dueMode">): NotificationOutboxItem["notificationType"] {
   if (task.dueMode === "unset") return "unset_due_review";
   if (task.dueMode === "scheduled") return "deadline_review";
   return "task_review";
