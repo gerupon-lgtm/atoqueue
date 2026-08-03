@@ -287,6 +287,10 @@ function reviewSession(value: unknown, index: number, requireActionEventIds: boo
   stringArray(entity.answeredTaskIds, `reviewSessions[${index}].answeredTaskIds`);
   if (requireActionEventIds) {
     stringArray(entity.actionEventIds, `reviewSessions[${index}].actionEventIds`);
+    const orderedTaskIds = new Set(entity.orderedTaskIds as string[]);
+    if ((entity.answeredTaskIds as string[]).some((taskId) => !orderedTaskIds.has(taskId))) {
+      throw corrupt(`reviewSessions[${index}].answeredTaskIds must be a subset of orderedTaskIds`);
+    }
   }
   number(entity.currentIndex, `reviewSessions[${index}].currentIndex`);
   optionalString(entity.completedAt, `reviewSessions[${index}].completedAt`);
@@ -323,6 +327,7 @@ function validateReviewActionOwnership(reviewSessions: unknown[], actionHistory:
   const claimedEventIds = new Set<string>();
   reviewSessions.forEach((value, index) => {
     const session = object(value, `reviewSessions[${index}]`);
+    const orderedTaskIds = new Set(session.orderedTaskIds as string[]);
     const answeredTaskIds = new Set(session.answeredTaskIds as string[]);
     for (const eventId of session.actionEventIds as string[]) {
       if (claimedEventIds.has(eventId)) {
@@ -334,6 +339,9 @@ function validateReviewActionOwnership(reviewSessions: unknown[], actionHistory:
       if (!event) throw corrupt(`reviewSessions[${index}].actionEventIds references an unknown action event`);
       if (event.entityType !== "task") {
         throw corrupt(`reviewSessions[${index}].actionEventIds must reference task action events`);
+      }
+      if (!orderedTaskIds.has(event.entityId as string)) {
+        throw corrupt(`reviewSessions[${index}].actionEventIds action event task must be within orderedTaskIds`);
       }
       if (!answeredTaskIds.has(event.entityId as string)) {
         throw corrupt(`reviewSessions[${index}].actionEventIds must reference answered tasks`);

@@ -216,4 +216,20 @@ describe("domain repository model", () => {
 
     expect(() => migrateSnapshot(snapshot)).toThrow(CorruptDataError);
   });
+
+  it("rejects a version 2 review session whose answered task was not ordered", () => {
+    const snapshot = snapshotWithReviewActionOwnership();
+    (snapshot.reviewSessions as Array<Record<string, unknown>>)[0]!.answeredTaskIds = ["task-2"];
+
+    expect(() => migrateSnapshot(snapshot)).toThrow(CorruptDataError);
+    expect(() => migrateSnapshot(snapshot)).toThrow("answeredTaskIds must be a subset of orderedTaskIds");
+  });
+
+  it("rejects a version 2 review session that owns an action for an unordered task", () => {
+    const snapshot = snapshotWithReviewActionOwnership();
+    (snapshot.actionHistory as Array<Record<string, unknown>>)[0]!.entityId = "task-2";
+
+    expect(() => migrateSnapshot(snapshot)).toThrow(CorruptDataError);
+    expect(() => migrateSnapshot(snapshot)).toThrow("action event task must be within orderedTaskIds");
+  });
 });
