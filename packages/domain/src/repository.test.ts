@@ -139,9 +139,13 @@ describe("domain repository model", () => {
   it.each([
     ["orderedTaskIds", {}],
     ["orderedTaskIds", "task-1"],
+    ["orderedTaskIds", null],
+    ["orderedTaskIds", 1],
     ["orderedTaskIds", ["task-1", 1]],
     ["answeredTaskIds", {}],
     ["answeredTaskIds", "task-1"],
+    ["answeredTaskIds", null],
+    ["answeredTaskIds", 1],
     ["answeredTaskIds", ["task-1", 1]],
   ] as const)("rejects a version 1 review session with invalid %s", (field, value) => {
     const v1: unknown = {
