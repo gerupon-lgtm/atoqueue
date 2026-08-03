@@ -25,9 +25,27 @@ describe("NotificationSettings", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "通知を設定する" }));
     expect(await screen.findByText(message)).not.toBeNull();
   });
+
+  it("does not make another browser permission request after it was denied", async () => {
+    const setup = vi.fn().mockResolvedValue({ state: "denied" });
+    render(<NotificationSettings repository={memory()} setup={setup} />);
+    const button = screen.getByRole("button", { name: "通知を設定する" });
+    await userEvent.setup().click(button);
+    await screen.findByRole("alert");
+    expect(button).toHaveProperty("disabled", true);
+    await userEvent.setup().click(button);
+    expect(setup).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a persistent re-registration action when the saved device credentials are stale", async () => {
+    const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now: "2026-08-04T08:00:00.000Z" });
+    snapshot.device.pushSubscriptionStatus = "granted";
+    snapshot.settings.notificationEnabled = false;
+    render(<NotificationSettings repository={memory(snapshot)} setup={async () => ({ state: "granted" })} />);
+    expect(await screen.findByText("通知を再設定してください。")) .not.toBeNull();
+  });
 });
 
-function memory(): AppRepository {
-  const value = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now: "2026-08-04T08:00:00.000Z" });
+function memory(value = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now: "2026-08-04T08:00:00.000Z" })): AppRepository {
   return { load: async () => value, save: async () => undefined, loadDraft: async () => "", saveDraft: async () => undefined, clearDraft: async () => undefined };
 }

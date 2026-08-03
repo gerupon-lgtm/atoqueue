@@ -30,6 +30,14 @@ describe("NotificationApi", () => {
     await expect(api.cancel({ id: "outbox", operation: "cancel", reminderId: "22222222-2222-4222-8222-222222222222", taskRevision: 3, attemptCount: 0, nextAttemptAt: "2026-08-04T08:00:00.000Z", createdAt: "2026-08-04T08:00:00.000Z" }, credentials)).rejects.toMatchObject({ status: 429, retryAfterSeconds: 90 } satisfies Partial<NotificationApiError>);
   });
 
+  it("retains the API error code needed for Outbox recovery decisions", async () => {
+    const api = new NotificationApi("https://api.example.test", vi.fn().mockResolvedValue(jsonResponse(404, {
+      error: { code: "DEVICE_NOT_FOUND", message: "Device not found.", requestId: "request-1" },
+    })));
+
+    await expect(api.cancel({ id: "outbox", operation: "cancel", reminderId: "22222222-2222-4222-8222-222222222222", taskRevision: 3, attemptCount: 0, nextAttemptAt: "2026-08-04T08:00:00.000Z", createdAt: "2026-08-04T08:00:00.000Z" }, credentials)).rejects.toMatchObject({ status: 404, code: "DEVICE_NOT_FOUND" } satisfies Partial<NotificationApiError>);
+  });
+
   it("registers once then updates an existing device subscription", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(jsonResponse(201, { deviceId: credentials.deviceId, deviceSecret: credentials.deviceSecret, createdAt: "2026-08-04T08:00:00.000Z" }))

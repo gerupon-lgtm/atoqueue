@@ -32,10 +32,54 @@ describe("flushOutbox", () => {
     const result = await flushOutbox({ repository: stale, now: () => now, api: { upsert: async () => { throw new NotificationApiError(401); }, cancel: async () => undefined } });
     expect(result.registrationStale).toBe(true);
     expect((await stale.load()).device.pushDeviceSecret).toBeUndefined();
+    expect((await stale.load()).settings.notificationEnabled).toBe(false);
 
     const cancelling = memory(snapshotWithOutbox("cancel"));
     await flushOutbox({ repository: cancelling, now: () => now, api: { upsert: async () => undefined, cancel: async () => undefined } });
     expect((await cancelling.load()).reminderMap).toEqual([]);
+  });
+
+  it("recovers documented error codes without retrying a successful missing cancel", async () => {
+    const lostDevice = memory(snapshotWithOutbox());
+    const stale = await flushOutbox({ repository: lostDevice, now: () => now, api: { upsert: async () => { throw new NotificationApiError(404, undefined, "DEVICE_NOT_FOUND"); }, cancel: async () => undefined } });
+    expect(stale.registrationStale).toBe(true);
+    expect((await lostDevice.load()).device.pushDeviceSecret).toBeUndefined();
+
+    const missingCancel = memory(snapshotWithOutbox("cancel"));
+    await flushOutbox({ repository: missingCancel, now: () => now, api: { upsert: async () => undefined, cancel: async () => { throw new NotificationApiError(404, undefined, "REMINDER_NOT_FOUND"); } } });
+    expect((await missingCancel.load()).notificationOutbox).toEqual([]);
+    expect((await missingCancel.load()).reminderMap).toEqual([]);
+  });
+
+  it("rebuilds every active reminder with fresh operation IDs after an idempotency conflict", async () => {
+    const initial = snapshotWithOutbox();
+    initial.tasks.push({ ...initial.tasks[0]!, id: "task-2", revision: 2 });
+    initial.reminderMap.push({ reminderId: "33333333-3333-4333-8333-333333333333", taskId: "task-2", taskRevision: 2, createdAt: now });
+    const repository = memory(initial);
+    await flushOutbox({ repository, now: () => now, api: { upsert: async () => { throw new NotificationApiError(409, undefined, "IDEMPOTENCY_CONFLICT"); }, cancel: async () => undefined } });
+
+    const queued = (await repository.load()).notificationOutbox;
+    expect(queued).toHaveLength(2);
+    expect(queued.map((item) => item.reminderId).sort()).toEqual(["22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333"]);
+    expect(queued.every((item) => item.id !== "outbox" && item.operation === "upsert" && item.attemptCount === 0)).toBe(true);
+  });
+
+  it("preserves a local edit saved while a launch flush is awaiting the API", async () => {
+    const repository = memory(snapshotWithOutbox());
+    let release: (() => void) | undefined;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const flushing = flushOutbox({ repository, now: () => now, api: { upsert: async () => waiting, cancel: async () => undefined } });
+    await Promise.resolve();
+    const localEdit = await repository.load();
+    localEdit.tasks[0] = { ...localEdit.tasks[0]!, title: "edited only on this device", revision: 4 };
+    localEdit.notificationOutbox.push({ ...localEdit.notificationOutbox[0]!, id: "newer-outbox", taskRevision: 4 });
+    await repository.save(localEdit);
+    release?.();
+    await flushing;
+
+    const saved = await repository.load();
+    expect(saved.tasks[0]?.title).toBe("edited only on this device");
+    expect(saved.notificationOutbox.map((item) => item.id)).toEqual(["newer-outbox"]);
   });
 
   it("discards an outbox item made for an older task revision", async () => {

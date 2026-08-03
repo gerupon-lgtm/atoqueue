@@ -3,6 +3,8 @@ import {
   CreateDeviceResponseSchema,
   CreateReminderRequestSchema,
   DeviceSubscriptionResponseSchema,
+  ErrorEnvelopeSchema,
+  type ErrorCode,
   PublicPushKeyResponseSchema,
   ReminderResponseSchema,
   type PushSubscription,
@@ -17,7 +19,7 @@ export interface DeviceCredentials {
 export type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export class NotificationApiError extends Error {
-  constructor(public readonly status: number, public readonly retryAfterSeconds?: number) {
+  constructor(public readonly status: number, public readonly retryAfterSeconds?: number, public readonly code?: ErrorCode) {
     super(`Notification API request failed with ${status}.`);
   }
 }
@@ -65,9 +67,17 @@ export class NotificationApi {
       },
       ...(options.body ? { body: options.body } : {}),
     });
-    if (!response.ok) throw new NotificationApiError(response.status, retryAfterSeconds(response));
+    if (!response.ok) throw new NotificationApiError(response.status, retryAfterSeconds(response), await errorCode(response));
     if (response.status === 204) return undefined;
     return response.json();
+  }
+}
+
+async function errorCode(response: Response): Promise<ErrorCode | undefined> {
+  try {
+    return ErrorEnvelopeSchema.safeParse(await response.clone().json()).data?.error.code;
+  } catch {
+    return undefined;
   }
 }
 

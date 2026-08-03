@@ -17,9 +17,9 @@ export type NotificationSetupResult = { state: "granted" | "denied" | "unavailab
 export async function enableNotifications(input: { repository: AppRepository; api: PushRegistrationApi; browser: PushBrowser; now?: () => string; idempotencyKey?: () => string }): Promise<NotificationSetupResult> {
   const { repository, api, browser, now = () => new Date().toISOString(), idempotencyKey = () => crypto.randomUUID() } = input;
   if (!browser.isAvailable()) return saveState(repository, "unavailable");
-  const permission = await browser.requestPermission();
-  if (permission !== "granted") return saveState(repository, "denied");
   try {
+    const permission = await browser.requestPermission();
+    if (permission !== "granted") return saveState(repository, "denied");
     const subscription = await browser.subscribe(await api.publicKey());
     const snapshot = await repository.load();
     const credentials = snapshot.device.pushDeviceId && snapshot.device.pushDeviceSecret
@@ -35,8 +35,14 @@ export async function enableNotifications(input: { repository: AppRepository; ap
     });
     return { state: "granted" };
   } catch {
+    await saveSetupError(repository);
     return { state: "error" };
   }
+}
+
+async function saveSetupError(repository: AppRepository): Promise<void> {
+  const snapshot = await repository.load();
+  await repository.save({ ...snapshot, settings: { ...snapshot.settings, notificationEnabled: false } });
 }
 
 async function saveState(repository: AppRepository, state: "denied" | "unavailable"): Promise<NotificationSetupResult> {

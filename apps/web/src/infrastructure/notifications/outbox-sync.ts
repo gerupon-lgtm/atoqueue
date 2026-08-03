@@ -12,44 +12,64 @@ export interface FlushOutboxResult { settingsError: boolean; registrationStale: 
 /** Delivers only anonymous queue records after local task changes are safely persisted. */
 export async function flushOutbox({ repository, api, now = () => new Date().toISOString() }: FlushOutboxInput): Promise<FlushOutboxResult> {
   const snapshot = await repository.load();
-  const credentials = snapshot.device.pushDeviceId && snapshot.device.pushDeviceSecret
-    ? { deviceId: snapshot.device.pushDeviceId, deviceSecret: snapshot.device.pushDeviceSecret }
-    : undefined;
-  if (!credentials) return { settingsError: false, registrationStale: false };
-
-  let next = snapshot;
   let settingsError = false;
   let registrationStale = false;
   for (const item of snapshot.notificationOutbox) {
-    if (item.nextAttemptAt > now()) continue;
-    if (isStale(item, next)) { next = discard(next, item); continue; }
+    const current = await repository.load();
+    const queued = current.notificationOutbox.find((candidate) => candidate.id === item.id);
+    const credentials = current.device.pushDeviceId && current.device.pushDeviceSecret
+      ? { deviceId: current.device.pushDeviceId, deviceSecret: current.device.pushDeviceSecret }
+      : undefined;
+    if (!queued || !credentials || queued.nextAttemptAt > now()) continue;
+    if (isStale(queued, current)) { await persist(repository, discard(current, queued), now()); continue; }
     try {
-      if (item.operation === "upsert") await api.upsert(item, credentials);
-      else await api.cancel(item, credentials);
-      next = delivered(next, item);
+      if (queued.operation === "upsert") await api.upsert(queued, credentials);
+      else await api.cancel(queued, credentials);
+      await updateQueued(repository, queued.id, (latest, latestItem) => delivered(latest, latestItem), now());
     } catch (error) {
       if (!(error instanceof NotificationApiError)) {
-        next = retry(next, item, now(), 60);
+        await updateQueued(repository, queued.id, (latest, latestItem) => retry(latest, latestItem, now(), 60), now());
         continue;
       }
-      if (error.status === 400) { settingsError = true; next = discard(next, item); continue; }
-      if (error.status === 401) {
+      if (error.code === "REMINDER_NOT_FOUND" && queued.operation === "cancel") {
+        await updateQueued(repository, queued.id, (latest, latestItem) => delivered(latest, latestItem), now());
+        continue;
+      }
+      if (error.code === "INVALID_SCHEDULE") {
+        await updateQueued(repository, queued.id, (latest, latestItem) => reschedule(latest, latestItem, now()), now());
+        continue;
+      }
+      if (error.code === "IDEMPOTENCY_CONFLICT") {
+        await updateQueued(repository, queued.id, (latest, latestItem) => renewIdempotencyKey(latest, latestItem, now()), now());
+        continue;
+      }
+      if (error.status === 400 || error.code === "PAYLOAD_TOO_LARGE") {
+        settingsError = true;
+        await updateQueued(repository, queued.id, (latest, latestItem) => settingsFailed(discard(latest, latestItem)), now());
+        continue;
+      }
+      if (error.status === 401 || error.code === "DEVICE_NOT_FOUND") {
         registrationStale = true;
-        const device = { ...next.device };
-        delete device.pushDeviceId;
-        delete device.pushDeviceSecret;
-        delete device.registeredAt;
-        next = { ...next, device };
+        await updateQueued(repository, queued.id, (latest) => registrationFailed(latest), now());
         break;
       }
       const delay = error.status === 429 && error.retryAfterSeconds !== undefined
         ? error.retryAfterSeconds
-        : 60 * 2 ** item.attemptCount;
-      next = retry(next, item, now(), delay);
+        : 60 * 2 ** queued.attemptCount;
+      await updateQueued(repository, queued.id, (latest, latestItem) => retry(latest, latestItem, now(), delay), now());
     }
   }
-  if (next !== snapshot) await repository.save({ ...next, savedAt: now() });
   return { settingsError, registrationStale };
+}
+
+async function updateQueued(repository: AppRepository, id: string, update: (snapshot: AppSnapshot, item: NotificationOutboxItem) => AppSnapshot, savedAt: string): Promise<void> {
+  const latest = await repository.load();
+  const item = latest.notificationOutbox.find((candidate) => candidate.id === id);
+  if (item) await persist(repository, update(latest, item), savedAt);
+}
+
+async function persist(repository: AppRepository, snapshot: AppSnapshot, savedAt: string): Promise<void> {
+  await repository.save({ ...snapshot, savedAt });
 }
 
 function isStale(item: NotificationOutboxItem, snapshot: AppSnapshot): boolean {
@@ -64,7 +84,7 @@ function delivered(snapshot: AppSnapshot, item: NotificationOutboxItem): AppSnap
   return {
     ...snapshot,
     notificationOutbox: withoutItem,
-    ...(item.operation === "cancel" ? { reminderMap: snapshot.reminderMap.filter((entry) => entry.reminderId !== item.reminderId) } : {}),
+    ...(item.operation === "cancel" ? { reminderMap: snapshot.reminderMap.filter((entry) => entry.reminderId !== item.reminderId || entry.taskRevision !== item.taskRevision) } : {}),
   };
 }
 
@@ -75,4 +95,55 @@ function discard(snapshot: AppSnapshot, item: NotificationOutboxItem): AppSnapsh
 function retry(snapshot: AppSnapshot, item: NotificationOutboxItem, now: string, delaySeconds: number): AppSnapshot {
   const nextAttemptAt = new Date(Date.parse(now) + delaySeconds * 1_000).toISOString();
   return { ...snapshot, notificationOutbox: snapshot.notificationOutbox.map((candidate) => candidate.id === item.id ? { ...candidate, attemptCount: candidate.attemptCount + 1, nextAttemptAt } : candidate) };
+}
+
+function settingsFailed(snapshot: AppSnapshot): AppSnapshot {
+  return { ...snapshot, settings: { ...snapshot.settings, notificationEnabled: false } };
+}
+
+function registrationFailed(snapshot: AppSnapshot): AppSnapshot {
+  const device = { ...snapshot.device };
+  delete device.pushDeviceId;
+  delete device.pushDeviceSecret;
+  delete device.registeredAt;
+  return settingsFailed({ ...snapshot, device });
+}
+
+function reschedule(snapshot: AppSnapshot, item: NotificationOutboxItem, now: string): AppSnapshot {
+  const mapping = snapshot.reminderMap.find((entry) => entry.reminderId === item.reminderId);
+  const task = mapping && snapshot.tasks.find((candidate) => candidate.id === mapping.taskId);
+  if (!task || task.status !== "active") return discard(snapshot, item);
+  return {
+    ...snapshot,
+    notificationOutbox: snapshot.notificationOutbox.map((candidate) => candidate.id === item.id ? {
+      ...candidate,
+      scheduledAt: task.nextReviewAt,
+      notificationType: task.dueMode === "scheduled" ? "deadline_review" : task.dueMode === "unset" ? "unset_due_review" : "task_review",
+      taskRevision: task.revision,
+      nextAttemptAt: now,
+    } : candidate),
+  };
+}
+
+function renewIdempotencyKey(snapshot: AppSnapshot, _item: NotificationOutboxItem, now: string): AppSnapshot {
+  const active = snapshot.reminderMap.flatMap((mapping) => {
+    const task = snapshot.tasks.find((candidate) => candidate.id === mapping.taskId);
+    if (!task || task.status !== "active" || task.revision !== mapping.taskRevision) return [];
+    return [{
+      id: crypto.randomUUID(),
+      operation: "upsert" as const,
+      reminderId: mapping.reminderId,
+      scheduledAt: task.nextReviewAt,
+      notificationType: task.dueMode === "scheduled" ? "deadline_review" as const : task.dueMode === "unset" ? "unset_due_review" as const : "task_review" as const,
+      taskRevision: task.revision,
+      attemptCount: 0,
+      nextAttemptAt: now,
+      createdAt: now,
+    }];
+  });
+  const activeReminderIds = new Set(active.map((entry) => entry.reminderId));
+  return {
+    ...snapshot,
+    notificationOutbox: [...snapshot.notificationOutbox.filter((candidate) => candidate.operation === "cancel" || !activeReminderIds.has(candidate.reminderId)), ...active],
+  };
 }
