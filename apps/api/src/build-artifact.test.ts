@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { access } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -32,5 +32,13 @@ describe("production API build", () => {
     buildApi();
     const entry = new URL("../dist/start.js", import.meta.url).href;
     execFileSync(process.execPath, ["--input-type=module", "--eval", `import(${JSON.stringify(entry)})`], { cwd: repositoryRoot, stdio: "pipe" });
+  }, 20_000);
+
+  it("executes the compiled entrypoint when Node receives its relative start-script path", () => {
+    buildApi();
+    const apiRoot = fileURLToPath(new URL("../", import.meta.url));
+    const result = spawnSync(process.execPath, ["./dist/start.js"], { cwd: apiRoot, encoding: "utf8", env: {} });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Notification API failed to start.");
   }, 20_000);
 });

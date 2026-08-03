@@ -1,3 +1,6 @@
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
 import { loadConfig } from "./config.js";
 import { PgReminderRepository } from "./reminders/reminder-repository.js";
 import { WebPushClient } from "./push/web-push-client.js";
@@ -51,6 +54,6 @@ export async function start(input: { version: string; environment?: NodeJS.Proce
   return startServer({ app, pool, dispatcher, port: config.port, reportFailure: () => { process.stderr.write("Reminder dispatch failed.\n"); } });
 }
 
-if (import.meta.url === new URL(process.argv[1] ?? "", "file:").href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   void start().catch(() => { process.stderr.write("Notification API failed to start.\n"); process.exitCode = 1; });
 }
