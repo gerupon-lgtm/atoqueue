@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import Fastify from "fastify";
 import type { Pool } from "pg";
 import pino from "pino";
@@ -36,7 +37,12 @@ export function buildApp({ version, publicPushKey = "test-public-key", repositor
 
   app.addHook("onResponse", async (request, reply) => {
     const durationMs = Number(process.hrtime.bigint() - request.requestStartedAt) / 1_000_000;
-    logger?.write(JSON.stringify({ requestId: request.requestId, method: request.method, statusCode: reply.statusCode, durationMs }));
+    logger?.write(JSON.stringify({
+      requestId: request.requestId,
+      endpointHashPrefix: endpointHashPrefix(request.body),
+      resultCode: reply.statusCode,
+      durationMs,
+    }));
   });
 
   app.setErrorHandler((error, request, reply) => {
@@ -65,6 +71,15 @@ export function buildApp({ version, publicPushKey = "test-public-key", repositor
   registerDeviceRoutes(app, { publicPushKey, deviceService: new DeviceService(repository, undefined, deviceRateLimiter) });
 
   return app;
+}
+
+function endpointHashPrefix(body: unknown): string | undefined {
+  if (!body || typeof body !== "object") return undefined;
+  const subscription = (body as { subscription?: unknown }).subscription;
+  if (!subscription || typeof subscription !== "object") return undefined;
+  const endpoint = (subscription as { endpoint?: unknown }).endpoint;
+  if (typeof endpoint !== "string") return undefined;
+  return createHash("sha256").update(endpoint).digest("hex").slice(0, 12);
 }
 
 /** Parses production-only settings, applies the PostgreSQL schema, then wires the real repository. */

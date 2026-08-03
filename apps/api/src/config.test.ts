@@ -27,4 +27,9 @@ describe("production API configuration", () => {
     expect(() => loadConfig({ ...productionEnvironment, ALLOWED_ORIGIN: PWA_ORIGIN, PORT: "0" })).toThrow();
     expect(() => loadConfig({ ...productionEnvironment, ALLOWED_ORIGIN: PWA_ORIGIN, LOG_LEVEL: "verbose" })).toThrow();
   });
+
+  it("requires the confirmed VAPID contact address", () => {
+    expect(() => loadConfig({ ...productionEnvironment, ALLOWED_ORIGIN: PWA_ORIGIN, VAPID_SUBJECT: "mailto:other@example.com" })).toThrow();
+    expect(loadConfig({ ...productionEnvironment, ALLOWED_ORIGIN: PWA_ORIGIN }).vapidSubject).toBe("mailto:gerupon@gmail.com");
+  });
 });

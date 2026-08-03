@@ -9,7 +9,7 @@ const ConfigSchema = z
     DATABASE_URL: z.string().min(1),
     VAPID_PUBLIC_KEY: z.string().min(1),
     VAPID_PRIVATE_KEY: z.string().min(1),
-    VAPID_SUBJECT: z.string().startsWith("mailto:"),
+    VAPID_SUBJECT: z.literal("mailto:gerupon@gmail.com"),
     ALLOWED_ORIGIN: z.literal(PWA_ORIGIN),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   })

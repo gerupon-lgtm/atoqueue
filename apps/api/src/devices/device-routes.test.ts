@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { buildApp } from "../server.js";
 import { InMemoryDeviceRepository } from "./device-repository.js";
@@ -287,9 +288,10 @@ describe("device registration routes", () => {
     expect(oversized.json().error.code).toBe("PAYLOAD_TOO_LARGE");
     const output = logs.join("\n");
     const records = logs.map((line) => JSON.parse(line) as Record<string, unknown>);
+    const endpointHashPrefix = createHash("sha256").update(subscription.endpoint).digest("hex").slice(0, 12);
     expect(records).toEqual(expect.arrayContaining([
-      expect.objectContaining({ requestId: expect.stringMatching(/^req_/), method: "POST", statusCode: 400, durationMs: expect.any(Number) }),
-      expect.objectContaining({ requestId: expect.stringMatching(/^req_/), method: "POST", statusCode: 413, durationMs: expect.any(Number) }),
+      { requestId: expect.stringMatching(/^req_/), endpointHashPrefix, resultCode: 400, durationMs: expect.any(Number) },
+      { requestId: expect.stringMatching(/^req_/), resultCode: 413, durationMs: expect.any(Number) },
     ]));
     for (const secret of [subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth, "private-bearer", "SECRET_TASK_CANARY"]) {
       expect(output).not.toContain(secret);
