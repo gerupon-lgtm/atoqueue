@@ -33,7 +33,13 @@ test.describe("PWA shell", () => {
     await page.keyboard.press("Tab");
     await expect(saveButton).toBeFocused();
 
-    for (const [, label] of navigation) {
+    const [first, ...remainingNavigation] = navigation;
+    const firstLink = page.getByRole("link", { name: first[1] });
+    await firstLink.focus();
+    await expect(firstLink).toBeFocused();
+    await expect(firstLink).toHaveCSS("outline-style", "solid");
+
+    for (const [, label] of remainingNavigation) {
       await page.keyboard.press("Tab");
       const link = page.getByRole("link", { name: label });
       await expect(link).toBeFocused();
