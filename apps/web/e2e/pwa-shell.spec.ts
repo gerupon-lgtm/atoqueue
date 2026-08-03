@@ -19,10 +19,13 @@ test.describe("PWA shell", () => {
     }
   });
 
-  test("keeps focus visible and keyboard order aligned to the primary navigation", async ({
-    page,
-  }) => {
+  test("starts at quick capture and keeps forward keyboard order visible", async ({ page }) => {
     await page.goto("/");
+
+    await expect(page.getByRole("textbox", { name: "思いついたこと" })).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "保存して戻る" })).toBeFocused();
 
     for (const [, label] of navigation) {
       await page.keyboard.press("Tab");
