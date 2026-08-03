@@ -12,3 +12,4 @@ export * from "./reminder-policy";
 export * from "./prompts";
 export * from "./review-session";
 export * from "./task-actions";
+export * from "./task-query";

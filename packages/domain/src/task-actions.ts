@@ -17,6 +17,59 @@ export interface AnswerReviewInput {
   idFactory?: (kind: "action" | "outbox" | "reminder") => string;
 }
 
+export type DirectTaskChange =
+  | { type: "complete" }
+  | { type: "reopen" }
+  | { type: "reschedule"; due: DueResolution }
+  | { type: "no_due" }
+  | { type: "dismiss" }
+  | { type: "archive" }
+  | { type: "edit"; title?: string; category?: Task["category"] | null };
+
+export interface ModifyTaskInput {
+  snapshot: AppSnapshot;
+  taskId: string;
+  change: DirectTaskChange;
+  now: string;
+  calendar: ReviewCalendar;
+  idFactory?: (kind: "action" | "outbox" | "reminder") => string;
+}
+
+interface IdInput {
+  now: string;
+  idFactory?: (kind: "action" | "outbox" | "reminder") => string;
+}
+
+/**
+ * Changes a task outside a review session. The full mutation, history event,
+ * and anonymous notification record are prepared locally before persistence.
+ */
+export function modifyTask(input: ModifyTaskInput): AppSnapshot {
+  const task = input.snapshot.tasks.find((candidate) => candidate.id === input.taskId);
+  if (!task) throw new Error("Task not found.");
+
+  const updatedTask = applyDirectChange(task, input);
+  const event: ActionEvent = {
+    id: createId(input, "action"),
+    entityType: "task",
+    entityId: task.id,
+    action: directActionFor(input.change),
+    before: taskMetadata(task),
+    after: taskMetadata(updatedTask),
+    occurredAt: input.now,
+  };
+  const notification = queueNotification(input.snapshot, updatedTask, input);
+
+  return {
+    ...input.snapshot,
+    tasks: input.snapshot.tasks.map((candidate) => candidate.id === task.id ? updatedTask : candidate),
+    actionHistory: [...input.snapshot.actionHistory, event],
+    notificationOutbox: [...input.snapshot.notificationOutbox, notification.outbox],
+    reminderMap: notification.reminderMap,
+    savedAt: input.now,
+  };
+}
+
 /**
  * Applies a review answer completely in local state. Network delivery is
  * intentionally absent: a later outbox synchronizer may fail without rolling
@@ -119,7 +172,34 @@ function applyAnswer(task: Task, input: AnswerReviewInput): Task {
   }
 }
 
-function queueNotification(snapshot: AppSnapshot, task: Task, input: AnswerReviewInput): {
+function applyDirectChange(task: Task, input: ModifyTaskInput): Task {
+  const reviewInput: AnswerReviewInput = {
+    snapshot: input.snapshot,
+    sessionId: "",
+    answer: input.change.type === "reopen" || input.change.type === "edit" ? "dismiss" : input.change.type,
+    now: input.now,
+    calendar: input.calendar,
+    ...(input.change.type === "reschedule" ? { due: input.change.due } : {}),
+    idFactory: input.idFactory,
+  };
+
+  if (input.change.type === "reopen") {
+    const reopened = { ...task };
+    delete reopened.completedAt;
+    delete reopened.archivedAt;
+    return { ...reopened, status: "active", revision: task.revision + 1, updatedAt: input.now };
+  }
+  if (input.change.type === "edit") {
+    const edited = { ...task, revision: task.revision + 1, updatedAt: input.now };
+    if (input.change.title !== undefined) edited.title = input.change.title;
+    if (input.change.category === null) delete edited.category;
+    else if (input.change.category !== undefined) edited.category = input.change.category;
+    return edited;
+  }
+  return applyAnswer(task, reviewInput);
+}
+
+function queueNotification(snapshot: AppSnapshot, task: Task, input: IdInput): {
   outbox: NotificationOutboxItem;
   reminderMap: AppSnapshot["reminderMap"];
 } {
@@ -162,6 +242,12 @@ function actionFor(answer: ReviewAnswer): ActionEvent["action"] {
   }
 }
 
+function directActionFor(change: DirectTaskChange): ActionEvent["action"] {
+  if (change.type === "reopen") return "task_reopened";
+  if (change.type === "edit") return "task_edited";
+  return actionFor(change.type);
+}
+
 function completeStaleSession(snapshot: AppSnapshot, session: ReviewSession, currentIndex: number, now: string): AppSnapshot {
   const completed = { ...session, currentIndex: currentIndex, updatedAt: now, completedAt: now };
   return { ...snapshot, reviewSessions: snapshot.reviewSessions.map((candidate) => candidate.id === session.id ? completed : candidate), savedAt: now };
@@ -169,6 +255,8 @@ function completeStaleSession(snapshot: AppSnapshot, session: ReviewSession, cur
 
 function taskMetadata(task: Task): Record<string, unknown> {
   return {
+    title: task.title,
+    category: task.category,
     status: task.status,
     dueMode: task.dueMode,
     dueAt: task.dueAt,
@@ -181,6 +269,6 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-function createId(input: AnswerReviewInput, kind: "action" | "outbox" | "reminder"): string {
+function createId(input: IdInput, kind: "action" | "outbox" | "reminder"): string {
   return input.idFactory?.(kind) ?? crypto.randomUUID();
 }

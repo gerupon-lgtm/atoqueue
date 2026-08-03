@@ -3,6 +3,7 @@ import {
   answerReview,
   createEmptySnapshot,
   findNextReviewIndex,
+  modifyTask,
   startReviewSession,
   type AppSnapshot,
   type ReviewCalendar,
@@ -64,6 +65,52 @@ function answer(snapshot: AppSnapshot, action: "complete" | "do_today" | "resche
 }
 
 describe("review task actions", () => {
+  it.each([
+    ["complete", {}, { status: "completed", completedAt: now }, "task_completed", "cancel"],
+    ["reopen", {}, { status: "active" }, "task_reopened", "upsert"],
+    ["reschedule", { due: { dueMode: "scheduled", dueAt: "2026-08-10T23:59:00.000Z", nextReviewAt: "2026-08-10T23:59:00.000Z" } }, { status: "active", dueAt: "2026-08-10T23:59:00.000Z" }, "task_rescheduled", "upsert"],
+    ["no_due", {}, { dueMode: "none" }, "task_marked_no_due", "upsert"],
+    ["dismiss", {}, { status: "active", dismissCount: 1 }, "task_dismissed", "upsert"],
+    ["archive", {}, { status: "archived", archivedAt: now }, "task_archived", "cancel"],
+    ["edit", { title: "new title", category: "home" }, { title: "new title", category: "home" }, "task_edited", "upsert"],
+  ] as const)("F-015 changes a task directly with %s and keeps its anonymous sync record", (change, extra, expected, action, operation) => {
+    const initial = {
+      ...snapshotWithSession([task("task-1", { status: change === "reopen" ? "completed" : "active", completedAt: change === "reopen" ? now : undefined })]),
+      reminderMap: [{ reminderId: "reminder-1", taskId: "task-1", taskRevision: 1, createdAt: now }],
+    };
+
+    const next = modifyTask({
+      snapshot: initial,
+      taskId: "task-1",
+      change: { type: change, ...extra } as never,
+      now,
+      calendar,
+      idFactory: (kind) => `${kind}-id`,
+    });
+
+    expect(next.tasks[0]).toMatchObject({ ...expected, revision: 2, updatedAt: now });
+    expect(next.actionHistory.at(-1)).toMatchObject({ entityId: "task-1", action, occurredAt: now });
+    expect(next.notificationOutbox.at(-1)).toMatchObject({ operation, reminderId: "reminder-1", taskRevision: 2 });
+    expect(JSON.stringify(next.notificationOutbox.at(-1))).not.toContain("SECRET_TASK_TITLE");
+    expect(JSON.stringify(next.notificationOutbox.at(-1))).not.toContain("task-1");
+  });
+
+  it("F-015 removes an existing category when the direct edit selects no category", () => {
+    const initial = snapshotWithSession([task("task-1", { category: "work" })]);
+
+    const next = modifyTask({
+      snapshot: initial,
+      taskId: "task-1",
+      change: { type: "edit", category: null },
+      now,
+      calendar,
+      idFactory: (kind) => `${kind}-id`,
+    });
+
+    expect("category" in next.tasks[0]!).toBe(false);
+    expect(next.actionHistory.at(-1)?.after).toMatchObject({ category: undefined });
+  });
+
   it("F-009 advances one item after an answer and final answer records completion", () => {
     const first = answer(snapshotWithSession([task("first"), task("second")]), "complete");
     expect(first.reviewSessions[0]).toMatchObject({ currentIndex: 1, visitedTaskIds: ["first"], answeredTaskIds: ["first"] });

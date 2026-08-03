@@ -5,6 +5,8 @@ import { InboxPage } from "../features/inbox/InboxPage";
 import { TaskCandidatePage } from "../features/inbox/TaskCandidatePage";
 import { TodayReviewPage } from "../features/review/TodayReviewPage";
 import { ReviewResultPage } from "../features/review/ReviewResultPage";
+import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
+import { TaskListPage } from "../features/tasks/TaskListPage";
 import { AppShell } from "./AppShell";
 
 type PageDefinition = {
@@ -36,6 +38,8 @@ export const router = createBrowserRouter([
           <InboxRoute />
         ) : page.path === "today" ? (
           <TodayReviewRoute />
+        ) : page.path === "tasks" ? (
+          <TaskListPage repository={applicationRepository} />
         ) : (
           <Page title={page.label} />
         ),
@@ -86,5 +90,6 @@ function TodayReviewRoute() {
 
 function TaskCorrectionRoute() {
   const { taskId } = useParams();
-  return <section aria-labelledby="task-correction-title"><h1 id="task-correction-title">タスクを修正</h1><p>タスクID: {taskId}</p></section>;
+  if (!taskId) return <Page title="タスク" />;
+  return <TaskDetailPage repository={applicationRepository} taskId={taskId} />;
 }
