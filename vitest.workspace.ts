@@ -3,6 +3,14 @@ import { defineWorkspace } from "vitest/config";
 export default defineWorkspace([
   {
     test: {
+      name: "contracts",
+      root: "./packages/contracts",
+      environment: "node",
+      include: ["src/**/*.test.ts"],
+    },
+  },
+  {
+    test: {
       name: "domain",
       root: "./packages/domain",
       environment: "node",

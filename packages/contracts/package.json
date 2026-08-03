@@ -4,7 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "vitest --run",
     "typecheck": "tsc --noEmit",
     "build": "tsc"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   }
 }
