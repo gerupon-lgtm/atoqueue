@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "pnpm --dir ../.. exec vitest --run --workspace vitest.workspace.ts --project domain",
+    "test:coverage": "pnpm --dir ../.. exec vitest --run --workspace vitest.workspace.ts --project domain --coverage --coverage.include=packages/domain/src/reminder-policy.ts --coverage.thresholds.perFile --coverage.thresholds.branches=100",
     "typecheck": "tsc --noEmit",
     "build": "tsc"
   }

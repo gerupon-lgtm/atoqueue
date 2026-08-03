@@ -31,6 +31,7 @@ const calendar: ReminderCalendar = {
     const days: Record<string, number> = {
       "2026-08-02T03:00:00.000Z": 1,
       "2026-07-30T03:00:00.000Z": 4,
+      "2026-07-27T03:00:00.000Z": 7,
       "2026-07-26T03:00:00.000Z": 8,
     };
     expect(to).toBe(now);
@@ -161,6 +162,7 @@ describe("calculateNeglectLevel", () => {
     ["overdue for less than one day", { dueAt: "2026-08-03T02:00:00.000Z" }, 1],
     ["one day overdue", { dueAt: "2026-08-02T03:00:00.000Z" }, 2],
     ["four days overdue", { dueAt: "2026-07-30T03:00:00.000Z" }, 3],
+    ["exactly seven days overdue", { dueAt: "2026-07-27T03:00:00.000Z" }, 3],
     ["eight days overdue", { dueAt: "2026-07-26T03:00:00.000Z" }, 4],
     ["one in-app dismissal", { dismissCount: 1 }, 2],
     ["two in-app dismissals", { dismissCount: 2 }, 3],
