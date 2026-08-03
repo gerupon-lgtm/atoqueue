@@ -285,12 +285,12 @@ function reviewSession(value: unknown, index: number, requireActionEventIds: boo
   stringArray(entity.orderedTaskIds, `reviewSessions[${index}].orderedTaskIds`);
   stringArray(entity.visitedTaskIds, `reviewSessions[${index}].visitedTaskIds`);
   stringArray(entity.answeredTaskIds, `reviewSessions[${index}].answeredTaskIds`);
+  const orderedTaskIds = new Set(entity.orderedTaskIds as string[]);
+  if ((entity.answeredTaskIds as string[]).some((taskId) => !orderedTaskIds.has(taskId))) {
+    throw corrupt(`reviewSessions[${index}].answeredTaskIds must be a subset of orderedTaskIds`);
+  }
   if (requireActionEventIds) {
     stringArray(entity.actionEventIds, `reviewSessions[${index}].actionEventIds`);
-    const orderedTaskIds = new Set(entity.orderedTaskIds as string[]);
-    if ((entity.answeredTaskIds as string[]).some((taskId) => !orderedTaskIds.has(taskId))) {
-      throw corrupt(`reviewSessions[${index}].answeredTaskIds must be a subset of orderedTaskIds`);
-    }
   }
   number(entity.currentIndex, `reviewSessions[${index}].currentIndex`);
   optionalString(entity.completedAt, `reviewSessions[${index}].completedAt`);

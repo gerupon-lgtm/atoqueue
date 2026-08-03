@@ -111,6 +111,31 @@ describe("domain repository model", () => {
     });
   });
 
+  it("rejects a version 1 review session whose answered task was not ordered", () => {
+    const v1: unknown = {
+      ...createEmptySnapshot({
+        appVersion: "0.1.0",
+        localDeviceId: "device-1",
+        timeZone: "Asia/Tokyo",
+        now: "2026-08-03T00:00:00.000Z",
+      }),
+      schemaVersion: 1,
+      reviewSessions: [{
+        id: "session-1",
+        localDate: "2026-08-03",
+        orderedTaskIds: ["task-1"],
+        currentIndex: 0,
+        visitedTaskIds: [],
+        answeredTaskIds: ["foreign-task"],
+        startedAt: "2026-08-03T00:00:00.000Z",
+        updatedAt: "2026-08-03T00:00:00.000Z",
+      }],
+    };
+
+    expect(() => migrateSnapshot(v1)).toThrow(CorruptDataError);
+    expect(() => migrateSnapshot(v1)).toThrow("answeredTaskIds must be a subset of orderedTaskIds");
+  });
+
   it("validates that version 2 review sessions own an action-event ID array", () => {
     const v2WithoutOwnership: unknown = {
       ...createEmptySnapshot({
