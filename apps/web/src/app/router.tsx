@@ -3,6 +3,8 @@ import { LocalStorageRepository } from "../infrastructure/local-storage/local-st
 import { QuickCapturePage } from "../features/capture/QuickCapturePage";
 import { InboxPage } from "../features/inbox/InboxPage";
 import { TaskCandidatePage } from "../features/inbox/TaskCandidatePage";
+import { TodayReviewPage } from "../features/review/TodayReviewPage";
+import { ReviewResultPage } from "../features/review/ReviewResultPage";
 import { AppShell } from "./AppShell";
 
 type PageDefinition = {
@@ -32,11 +34,14 @@ export const router = createBrowserRouter([
           <QuickCapturePage repository={applicationRepository} />
         ) : page.path === "inbox" ? (
           <InboxRoute />
+        ) : page.path === "today" ? (
+          <TodayReviewRoute />
         ) : (
           <Page title={page.label} />
         ),
       })),
       { path: "inbox/:captureId", element: <TaskCandidateRoute /> },
+      { path: "today/result", element: <ReviewResultPage repository={applicationRepository} /> },
     ],
   },
 ]);
@@ -71,4 +76,9 @@ function TaskCandidateRoute() {
       repository={applicationRepository}
     />
   );
+}
+
+function TodayReviewRoute() {
+  const navigate = useNavigate();
+  return <TodayReviewPage onFinished={() => navigate("/today/result")} repository={applicationRepository} />;
 }
