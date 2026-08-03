@@ -9,6 +9,9 @@ import { ApiError } from "./errors/api-error.js";
 import { InMemoryDeviceRepository, PgDeviceRepository, type DeviceRepository } from "./devices/device-repository.js";
 import { registerDeviceRoutes } from "./devices/device-routes.js";
 import { DeviceService } from "./devices/device-service.js";
+import { InMemoryReminderRepository, PgReminderRepository, type ReminderRepository } from "./reminders/reminder-repository.js";
+import { registerReminderRoutes } from "./reminders/reminder-routes.js";
+import { ReminderService } from "./reminders/reminder-service.js";
 import { installRequestContext } from "./plugins/request-context.js";
 import { installSecurity } from "./plugins/security.js";
 
@@ -16,9 +19,11 @@ export interface BuildAppOptions {
   version: string;
   publicPushKey?: string;
   repository?: DeviceRepository;
+  reminderRepository?: ReminderRepository;
   logger?: { write(line: string): void };
   allowedOrigin?: string;
   health?: HealthPort;
+  now?: () => string;
 }
 
 export interface HealthPort {
@@ -30,7 +35,7 @@ export interface ProductionApp {
   pool: Pool;
 }
 
-export function buildApp({ version, publicPushKey = "test-public-key", repository = new InMemoryDeviceRepository(), logger, allowedOrigin = PWA_ORIGIN, health = { check: async () => undefined } }: BuildAppOptions) {
+export function buildApp({ version, publicPushKey = "test-public-key", repository = new InMemoryDeviceRepository(), reminderRepository = new InMemoryReminderRepository(), logger, allowedOrigin = PWA_ORIGIN, health = { check: async () => undefined }, now = () => new Date().toISOString() }: BuildAppOptions) {
   const app = Fastify({ bodyLimit: 16 * 1024, logger: false, trustProxy: ["127.0.0.1", "::1"] });
   installRequestContext(app);
   const deviceRateLimiter = installSecurity(app, allowedOrigin);
@@ -69,6 +74,7 @@ export function buildApp({ version, publicPushKey = "test-public-key", repositor
   });
 
   registerDeviceRoutes(app, { publicPushKey, deviceService: new DeviceService(repository, undefined, deviceRateLimiter) });
+  registerReminderRoutes(app, new ReminderService(repository, reminderRepository, now, deviceRateLimiter));
 
   return app;
 }
@@ -93,6 +99,7 @@ export async function buildProductionApp(input: { version: string; environment?:
       version: input.version,
       publicPushKey: config.vapidPublicKey,
       repository: new PgDeviceRepository(pool),
+      reminderRepository: new PgReminderRepository(pool),
       allowedOrigin: config.allowedOrigin,
       logger: { write: (line) => productionLogger.info(JSON.parse(line)) },
       health: { check: async () => { await pool.query("SELECT 1"); } },

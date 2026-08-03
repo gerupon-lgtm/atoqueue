@@ -1,0 +1,42 @@
+import { createHash } from "node:crypto";
+import argon2 from "argon2";
+import { ApiError } from "../errors/api-error.js";
+import type { DeviceRateLimiter } from "../plugins/security.js";
+import type { DeviceRepository } from "../devices/device-repository.js";
+import type { ReminderRepository } from "./reminder-repository.js";
+
+export class ReminderService {
+  constructor(
+    private readonly devices: DeviceRepository,
+    private readonly reminders: ReminderRepository,
+    private readonly now = () => new Date().toISOString(),
+    private readonly rateLimiter?: DeviceRateLimiter,
+  ) {}
+
+  async upsert(input: { deviceId: string; bearer: string | undefined; reminderId: string; scheduledAt: string; notificationType: "task_review" | "deadline_review" | "unset_due_review"; idempotencyKey: string }) {
+    await this.authenticate(input.deviceId, input.bearer);
+    this.rateLimiter?.consumeDevice(input.deviceId);
+    const now = this.now();
+    if (Date.parse(input.scheduledAt) < Date.parse(now) - 5 * 60_000) throw new ApiError(400, "INVALID_SCHEDULE", "Scheduled time is too far in the past.");
+    const result = await this.reminders.upsert({ id: input.reminderId, deviceId: input.deviceId, scheduledAt: input.scheduledAt, notificationType: input.notificationType, idempotencyKey: input.idempotencyKey, now });
+    if (result.kind === "conflict") throw new ApiError(409, "IDEMPOTENCY_CONFLICT", "Idempotency key conflicts with a different request.");
+    return { created: result.kind === "created" || (result.kind === "replay" && result.record.createdAt === result.record.updatedAt), response: { reminderId: result.record.id, status: "pending" as const, scheduledAt: result.record.scheduledAt, updatedAt: result.record.updatedAt } };
+  }
+
+  async cancel(input: { deviceId: string; bearer: string | undefined; reminderId: string }): Promise<void> {
+    await this.authenticate(input.deviceId, input.bearer);
+    this.rateLimiter?.consumeDevice(input.deviceId);
+    const result = await this.reminders.cancel(input.deviceId, input.reminderId, this.now());
+    if (result === "missing") throw new ApiError(404, "REMINDER_NOT_FOUND", "Reminder not found.");
+  }
+
+  private async authenticate(deviceId: string, bearer: string | undefined): Promise<void> {
+    const device = await this.devices.findByDeviceId(deviceId);
+    if (!device) throw new ApiError(404, "DEVICE_NOT_FOUND", "Device not found.");
+    if (!bearer || !(await argon2.verify(device.secretHash, bearer)) || device.status !== "active") throw new ApiError(401, "DEVICE_UNAUTHORIZED", "Device authentication failed.");
+  }
+}
+
+export function reminderFingerprint(input: Pick<{ reminderId: string; scheduledAt: string; notificationType: "task_review" | "deadline_review" | "unset_due_review" }, "reminderId" | "scheduledAt" | "notificationType">): string {
+  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
