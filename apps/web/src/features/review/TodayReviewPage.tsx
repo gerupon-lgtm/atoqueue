@@ -144,7 +144,7 @@ export function TodayReviewPage({
         <p>{presentation.deadline}</p>
         <p>{presentation.elapsed}</p>
         {priorAnswer ? <p>現在: {priorAnswer}</p> : null}
-        <ReviewActionSheet disabled={isSaving} onAnswer={(action) => void answer(action)} onReschedule={(date) => void answer("reschedule", date)} />
+        <ReviewActionSheet key={task.id} disabled={isSaving} onAnswer={(action) => void answer(action)} onReschedule={(date) => void answer("reschedule", date)} />
       </article>
       {error ? <p role="alert">{error}</p> : null}
     </section>

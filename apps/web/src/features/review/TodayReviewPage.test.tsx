@@ -94,6 +94,25 @@ describe("TodayReviewPage", () => {
     });
   });
 
+  it("F-012 resets a date-change sheet after task navigation so a returned task can be answered", async () => {
+    const repository = repositoryWithSession([task("one"), task("two"), task("three")]);
+    render(<TodayReviewPage calendar={calendar} now={() => now} repository={repository} />);
+
+    await screen.findByText("タスク one");
+    fireEvent.click(screen.getByRole("button", { name: "完了" }));
+    await screen.findByText("タスク two");
+    fireEvent.click(screen.getByRole("button", { name: "日付を変える" }));
+    fireEvent.change(screen.getByLabelText("新しい期限"), { target: { value: "2026-08-10" } });
+    fireEvent.click(screen.getByRole("button", { name: "この日付にする" }));
+    await screen.findByText("タスク three");
+
+    fireEvent.click(screen.getByRole("button", { name: "← 前のタスク" }));
+    await screen.findByText("タスク two");
+    fireEvent.click(screen.getByRole("button", { name: "← 前のタスク" }));
+    await screen.findByText("タスク one");
+    expect(screen.getByRole("button", { name: "期限なし" })).toBeTruthy();
+  });
+
   it("F-012 displays the exact empty-state copy when no task is reviewable", async () => {
     render(<TodayReviewPage calendar={calendar} now={() => now} repository={repositoryWithSession([])} />);
 
