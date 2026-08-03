@@ -23,7 +23,7 @@ describe("SettingsPage", () => {
     const repository = memory();
     render(<SettingsPage flushNotifications={flushNotifications} repository={repository} />);
 
-    const incoming = createEmptySnapshot({ appVersion: "0.1.0", localDeviceId: "source", timeZone: "Asia/Tokyo", now: "2026-08-04T09:00:00.000Z" });
+    const incoming = createEmptySnapshot({ appVersion: "0.1.0", localDeviceId: "88888888-8888-4888-8888-888888888888", timeZone: "Asia/Tokyo", now: "2026-08-04T09:00:00.000Z" });
     const input = screen.getByLabelText("JSONバックアップを復元");
     await userEvent.setup().upload(input, new File([await createBackup(incoming)], "backup.json", { type: "application/json" }));
     await userEvent.setup().click(await screen.findByRole("button", { name: "この内容で置き換える" }));

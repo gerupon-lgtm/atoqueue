@@ -16,10 +16,10 @@ test("F-017/F-018 restores an exported backup into a clean browser context after
   const sourceSnapshot = {
     schemaVersion: 2,
     appVersion: "0.1.0",
-    device: { localDeviceId: "source-device", pushSubscriptionStatus: "not_requested" },
+    device: { localDeviceId: "77777777-7777-4777-8777-777777777777", pushSubscriptionStatus: "not_requested" },
     settings: { locale: "ja-JP", timeZone: "Asia/Tokyo", notificationEnabled: false, weeklyReviewDay: 0 },
-    captures: [{ id: "capture-1", body: "clean context task", classification: "task", createdAt: "2026-08-04T09:00:00.000Z", updatedAt: "2026-08-04T09:00:00.000Z", classifiedAt: "2026-08-04T09:00:00.000Z", linkedTaskId: "task-1" }],
-    tasks: [{ id: "task-1", sourceCaptureId: "capture-1", title: "clean context task", status: "active", dueMode: "none", nextReviewAt: "2026-08-04T09:00:00.000Z", undecidedCount: 0, dismissCount: 0, postponeCount: 0, createdAt: "2026-08-04T09:00:00.000Z", updatedAt: "2026-08-04T09:00:00.000Z", revision: 1 }],
+    captures: [{ id: "11111111-1111-4111-8111-111111111111", body: "clean context task", classification: "task", createdAt: "2026-08-04T09:00:00.000Z", updatedAt: "2026-08-04T09:00:00.000Z", classifiedAt: "2026-08-04T09:00:00.000Z", linkedTaskId: "22222222-2222-4222-8222-222222222222" }],
+    tasks: [{ id: "22222222-2222-4222-8222-222222222222", sourceCaptureId: "11111111-1111-4111-8111-111111111111", title: "clean context task", status: "active", dueMode: "none", nextReviewAt: "2026-08-04T09:00:00.000Z", undecidedCount: 0, dismissCount: 0, postponeCount: 0, createdAt: "2026-08-04T09:00:00.000Z", updatedAt: "2026-08-04T09:00:00.000Z", revision: 1 }],
     reviewSessions: [],
     actionHistory: [],
     notificationOutbox: [],
@@ -52,7 +52,7 @@ test("F-017/F-018 restores an exported backup into a clean browser context after
     tasks: [expect.objectContaining({ title: "clean context task" })],
   });
   const restoredDevice = await page.evaluate(() => JSON.parse(window.localStorage.getItem("atoqueue:data:v1") ?? "{}").device);
-  expect(restoredDevice.localDeviceId).not.toBe("source-device");
+  expect(restoredDevice.localDeviceId).not.toBe("77777777-7777-4777-8777-777777777777");
   expect(restoredDevice).not.toHaveProperty("pushDeviceId");
   expect(restoredDevice).not.toHaveProperty("pushDeviceSecret");
   await destination.close();

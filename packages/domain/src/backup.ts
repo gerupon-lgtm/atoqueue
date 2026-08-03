@@ -1,10 +1,13 @@
 import { CorruptDataError } from "./errors";
+import { createLocalCalendar } from "./due-date";
 import { migrateSnapshot } from "./migrations";
+import { calculateNextReview } from "./reminder-policy";
 import { notificationTypeForTask } from "./task-actions";
-import type { ActionEvent, AppSnapshot, NotificationOutboxItem, ReminderMapEntry } from "./model";
+import type { ActionEvent, AppSnapshot, NotificationOutboxItem, ReminderMapEntry, Task } from "./model";
 
 export const BACKUP_FORMAT = "atoqueue-backup";
 export const BACKUP_VERSION = 1;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface BackupData {
   schemaVersion: AppSnapshot["schemaVersion"];
@@ -99,12 +102,14 @@ export async function inspectBackup(serialized: string): Promise<BackupInspectio
  */
 export async function restoreBackup(input: RestoreBackupInput): Promise<AppSnapshot> {
   const inspection = await inspectBackup(input.serialized);
-  const restored = snapshotFromData(inspection.data, input.current.device);
+  const snapshot = snapshotFromData(inspection.data, input.current.device);
+  const restored = { ...snapshot, tasks: recalculateRestoredTasks(snapshot.tasks, input.now, snapshot.settings.timeZone) };
   const delivery = rebuildReminderDelivery(input.current.reminderMap, restored.tasks, input.now, input.idFactory);
+  const actionId = idFor(input, "action");
   const event: ActionEvent = {
-    id: idFor(input, "action"),
+    id: actionId,
     entityType: "backup",
-    entityId: "local-backup",
+    entityId: actionId,
     action: "backup_restored",
     after: { ...inspection.counts },
     occurredAt: input.now,
@@ -138,6 +143,7 @@ function validateData(data: BackupData): void {
   if (!isRecord(data.device) || typeof data.device.localDeviceId !== "string" || Object.keys(data.device).length !== 1) {
     throw new CorruptDataError("Backup device must contain only localDeviceId.");
   }
+  assertUuid(data.device.localDeviceId, "Backup local device ID");
   validateBackupEntityIds(data);
   // Reuse the storage schema validator, with intentionally blank non-portable state.
   const snapshot = migrateSnapshot({
@@ -174,8 +180,14 @@ function validateReferences(snapshot: AppSnapshot): void {
   const captureIds = new Set(snapshot.captures.map((capture) => capture.id));
   const taskIds = new Set(snapshot.tasks.map((task) => task.id));
   const actionIds = new Set(snapshot.actionHistory.map((event) => event.id));
+  snapshot.captures.forEach((capture) => assertUuid(capture.id, "Capture ID"));
+  snapshot.tasks.forEach((task) => assertUuid(task.id, "Task ID"));
+  snapshot.reviewSessions.forEach((session) => assertUuid(session.id, "Review session ID"));
+  snapshot.actionHistory.forEach((event) => assertUuid(event.id, "Action event ID"));
   const taskSourceCaptureIds = new Set<string>();
   for (const task of snapshot.tasks) {
+    assertUuid(task.id, "Task ID");
+    assertUuid(task.sourceCaptureId, "Task source capture ID");
     validateUtcTimestamp(task.createdAt, "Task creation time");
     validateUtcTimestamp(task.updatedAt, "Task update time");
     validateUtcTimestamp(task.nextReviewAt, "Task next review time");
@@ -190,6 +202,7 @@ function validateReferences(snapshot: AppSnapshot): void {
     taskSourceCaptureIds.add(task.sourceCaptureId);
   }
   for (const capture of snapshot.captures) {
+    assertUuid(capture.id, "Capture ID");
     validateUtcTimestamp(capture.createdAt, "Capture creation time");
     validateUtcTimestamp(capture.updatedAt, "Capture update time");
     if (capture.classifiedAt) validateUtcTimestamp(capture.classifiedAt, "Capture classification time");
@@ -200,6 +213,7 @@ function validateReferences(snapshot: AppSnapshot): void {
     if (capture.classification === "task" && !capture.linkedTaskId) {
       throw new CorruptDataError("Task-classified capture must link to a task.");
     }
+    if (capture.linkedTaskId) assertUuid(capture.linkedTaskId, "Capture linked task ID");
     if (capture.linkedTaskId && !taskIds.has(capture.linkedTaskId)) throw new CorruptDataError("Capture references an unknown task.");
     if (capture.linkedTaskId) {
       const task = snapshot.tasks.find((candidate) => candidate.id === capture.linkedTaskId);
@@ -209,6 +223,11 @@ function validateReferences(snapshot: AppSnapshot): void {
     }
   }
   for (const session of snapshot.reviewSessions) {
+    assertUuid(session.id, "Review session ID");
+    assertUuidList(session.orderedTaskIds, "Review ordered task ID");
+    assertUuidList(session.visitedTaskIds, "Review visited task ID");
+    assertUuidList(session.answeredTaskIds, "Review answered task ID");
+    assertUuidList(session.actionEventIds, "Review action event ID");
     validateLocalDate(session.localDate, "Review date");
     validateUtcTimestamp(session.startedAt, "Review start time");
     validateUtcTimestamp(session.updatedAt, "Review update time");
@@ -219,10 +238,23 @@ function validateReferences(snapshot: AppSnapshot): void {
     if (session.actionEventIds.some((id) => !actionIds.has(id))) throw new CorruptDataError("Review session references an unknown action.");
   }
   for (const event of snapshot.actionHistory) {
+    assertUuid(event.id, "Action event ID");
+    assertUuid(event.entityId, "Action entity ID");
     validateUtcTimestamp(event.occurredAt, "Action time");
     if (event.entityType === "capture" && !captureIds.has(event.entityId)) throw new CorruptDataError("Action references an unknown capture.");
     if (event.entityType === "task" && !taskIds.has(event.entityId)) throw new CorruptDataError("Action references an unknown task.");
   }
+}
+
+function recalculateRestoredTasks(tasks: Task[], now: string, timeZone: string): Task[] {
+  const calendar = createLocalCalendar(timeZone);
+  return tasks.map((task) => {
+    if (task.status !== "active") return task;
+    const nextReviewAt = task.dueMode === "scheduled" && task.dueAt && task.dueAt > now
+      ? task.dueAt
+      : calculateNextReview({ now, dueMode: task.dueMode, undecidedCount: task.undecidedCount, dismissCount: task.dismissCount, calendar });
+    return { ...task, nextReviewAt };
+  });
 }
 
 function assertUniqueIds(items: Array<{ id: string }>, label: string): void {
@@ -231,6 +263,14 @@ function assertUniqueIds(items: Array<{ id: string }>, label: string): void {
     if (ids.has(item.id)) throw new CorruptDataError(`Duplicate ${label} ID.`);
     ids.add(item.id);
   }
+}
+
+function assertUuid(value: string, label: string): void {
+  if (!UUID_PATTERN.test(value)) throw new CorruptDataError(`${label} must be a UUID.`);
+}
+
+function assertUuidList(values: string[], label: string): void {
+  values.forEach((value) => assertUuid(value, label));
 }
 
 function validateUtcTimestamp(value: string, label: string): void {

@@ -8,11 +8,16 @@ import {
 } from "./index";
 
 const now = "2026-08-04T09:00:00.000Z";
+const captureId = "11111111-1111-4111-8111-111111111111";
+const taskId = "22222222-2222-4222-8222-222222222222";
+const actionId = "33333333-3333-4333-8333-333333333333";
+const reviewId = "44444444-4444-4444-8444-444444444444";
+const localDeviceId = "55555555-5555-4555-8555-555555555555";
 
 function snapshot(): AppSnapshot {
   const value = createEmptySnapshot({
     appVersion: "0.1.0",
-    localDeviceId: "local-device",
+    localDeviceId,
     timeZone: "Asia/Tokyo",
     now,
   });
@@ -21,12 +26,12 @@ function snapshot(): AppSnapshot {
   value.device.registeredAt = now;
   value.device.pushSubscriptionStatus = "granted";
   value.settings.notificationEnabled = true;
-  value.captures = [{ id: "capture-1", body: "買い物", classification: "task", createdAt: now, updatedAt: now, classifiedAt: now, linkedTaskId: "task-1" }];
-  value.tasks = [{ id: "task-1", sourceCaptureId: "capture-1", title: "牛乳を買う", status: "active", dueMode: "scheduled", dueAt: "2026-08-05T09:00:00.000Z", nextReviewAt: "2026-08-05T09:00:00.000Z", undecidedCount: 0, dismissCount: 0, postponeCount: 0, createdAt: now, updatedAt: now, revision: 3 }];
-  value.actionHistory = [{ id: "action-1", entityType: "task", entityId: "task-1", action: "task_created", occurredAt: now }];
-  value.reviewSessions = [{ id: "review-1", localDate: "2026-08-04", orderedTaskIds: ["task-1"], currentIndex: 0, visitedTaskIds: ["task-1"], answeredTaskIds: ["task-1"], actionEventIds: ["action-1"], startedAt: now, updatedAt: now }];
+  value.captures = [{ id: captureId, body: "買い物", classification: "task", createdAt: now, updatedAt: now, classifiedAt: now, linkedTaskId: taskId }];
+  value.tasks = [{ id: taskId, sourceCaptureId: captureId, title: "牛乳を買う", status: "active", dueMode: "scheduled", dueAt: "2026-08-05T09:00:00.000Z", nextReviewAt: "2026-08-05T09:00:00.000Z", undecidedCount: 0, dismissCount: 0, postponeCount: 0, createdAt: now, updatedAt: now, revision: 3 }];
+  value.actionHistory = [{ id: actionId, entityType: "task", entityId: taskId, action: "task_created", occurredAt: now }];
+  value.reviewSessions = [{ id: reviewId, localDate: "2026-08-04", orderedTaskIds: [taskId], currentIndex: 0, visitedTaskIds: [taskId], answeredTaskIds: [taskId], actionEventIds: [actionId], startedAt: now, updatedAt: now }];
   value.notificationOutbox = [{ id: "old-outbox", operation: "upsert", reminderId: "old-reminder", scheduledAt: value.tasks[0]!.nextReviewAt, notificationType: "deadline_review", taskRevision: 3, attemptCount: 0, nextAttemptAt: now, createdAt: now }];
-  value.reminderMap = [{ reminderId: "old-reminder", taskId: "task-1", taskRevision: 3, createdAt: now }];
+  value.reminderMap = [{ reminderId: "old-reminder", taskId, taskRevision: 3, createdAt: now }];
   return value;
 }
 
@@ -44,7 +49,7 @@ describe("local backup", () => {
     });
     expect(parsed).toHaveProperty("payload");
     expect(parsed).not.toHaveProperty("data");
-    expect(parsed).toHaveProperty("payload.device", { localDeviceId: "local-device" });
+    expect(parsed).toHaveProperty("payload.device", { localDeviceId });
     expect(backup).not.toContain("secret");
     expect(backup).not.toContain("server-device");
     expect(parsed).not.toHaveProperty("device");
@@ -55,7 +60,7 @@ describe("local backup", () => {
     expect(backup).not.toContain("old-reminder");
 
     const current = snapshot();
-    current.device.localDeviceId = "destination-device";
+    current.device.localDeviceId = "66666666-6666-4666-8666-666666666666";
     let id = 0;
     const restored = await restoreBackup({
       current,
@@ -68,14 +73,14 @@ describe("local backup", () => {
     expect(restored.reviewSessions).toEqual(original.reviewSessions);
     expect(restored.actionHistory).toEqual([...original.actionHistory, expect.objectContaining({ action: "backup_restored" })]);
     expect(restored.settings).toEqual(original.settings);
-    expect(restored.device.localDeviceId).toBe("destination-device");
+    expect(restored.device.localDeviceId).toBe("66666666-6666-4666-8666-666666666666");
     expect(restored.notificationOutbox).toEqual([
       expect.objectContaining({ id: "new-outbox-1", operation: "cancel", reminderId: "old-reminder", taskRevision: 3 }),
       expect.objectContaining({ id: "new-outbox-3", operation: "upsert", reminderId: "new-reminder-2", taskRevision: 3 }),
     ]);
-    expect(JSON.stringify(restored.notificationOutbox)).not.toContain("task-1");
+    expect(JSON.stringify(restored.notificationOutbox)).not.toContain(taskId);
     expect(JSON.stringify(restored.notificationOutbox)).not.toContain("牛乳を買う");
-    expect(restored.reminderMap).toEqual([expect.objectContaining({ reminderId: "new-reminder-2", taskId: "task-1" })]);
+    expect(restored.reminderMap).toEqual([expect.objectContaining({ reminderId: "new-reminder-2", taskId })]);
   });
 
   it("F-018 rejects an altered backup before a replacement can happen", async () => {
@@ -131,7 +136,7 @@ describe("local backup", () => {
     delete taskCaptureWithoutLink.captures[0]!.linkedTaskId;
 
     const duplicateTaskCapture = snapshot();
-    duplicateTaskCapture.tasks.push({ ...duplicateTaskCapture.tasks[0]!, id: "task-2", title: "同じ入力からの重複タスク" });
+    duplicateTaskCapture.tasks.push({ ...duplicateTaskCapture.tasks[0]!, id: "55555555-5555-4555-8555-555555555555", title: "同じ入力からの重複タスク" });
 
     const blankCaptureBody = snapshot();
     blankCaptureBody.captures[0] = { ...blankCaptureBody.captures[0]!, body: "  \t " };
@@ -148,5 +153,36 @@ describe("local backup", () => {
       await expect(restoreBackup({ current, serialized: backup, now })).rejects.toThrow(message);
       expect(current).toEqual(snapshot());
     }
+  });
+
+  it("F-017 rejects non-UUID entity IDs and references before preview or mutation", async () => {
+    const invalidDeviceId = snapshot();
+    invalidDeviceId.device.localDeviceId = "not-a-uuid";
+    const invalidCaptureId = snapshot();
+    invalidCaptureId.captures[0] = { ...invalidCaptureId.captures[0]!, id: "not-a-uuid" };
+    const invalidTaskReference = snapshot();
+    invalidTaskReference.tasks[0] = { ...invalidTaskReference.tasks[0]!, sourceCaptureId: "not-a-uuid" };
+
+    for (const invalid of [invalidDeviceId, invalidCaptureId, invalidTaskReference]) {
+      const backup = await createBackup(invalid);
+      const current = snapshot();
+      await expect(inspectBackup(backup)).rejects.toThrow("UUID");
+      await expect(restoreBackup({ current, serialized: backup, now })).rejects.toThrow("UUID");
+      expect(current).toEqual(snapshot());
+    }
+  });
+
+  it("F-017 recomputes imported active task review schedules from the current local clock", async () => {
+    const imported = snapshot();
+    imported.settings.timeZone = "Asia/Tokyo";
+    const staleTask = { ...imported.tasks[0]!, dueMode: "none" as const, nextReviewAt: "2026-01-01T09:00:00.000Z", dismissCount: 1 };
+    delete staleTask.dueAt;
+    imported.tasks[0] = staleTask;
+    const backup = await createBackup(imported);
+
+    const restored = await restoreBackup({ current: snapshot(), serialized: backup, now });
+    expect(restored.tasks[0]?.nextReviewAt).toBe("2026-08-07T09:00:00.000Z");
+    expect(restored.notificationOutbox.find((item) => item.operation === "upsert")?.scheduledAt).toBe("2026-08-07T09:00:00.000Z");
+    expect(restored.notificationOutbox.find((item) => item.operation === "upsert")?.scheduledAt).not.toBe("2026-01-01T09:00:00.000Z");
   });
 });

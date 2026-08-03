@@ -55,9 +55,9 @@ async function selectFile(contents: string): Promise<void> {
 }
 
 function example(): AppSnapshot {
-  const value = createEmptySnapshot({ appVersion: "0.1.0", localDeviceId: "source", timeZone: "Asia/Tokyo", now });
-  value.captures = [{ id: "capture-1", body: "買い物", classification: "task", createdAt: now, updatedAt: now, classifiedAt: now, linkedTaskId: "task-1" }];
-  value.tasks = [{ id: "task-1", sourceCaptureId: "capture-1", title: "牛乳", status: "active", dueMode: "none", nextReviewAt: now, undecidedCount: 0, dismissCount: 0, postponeCount: 0, createdAt: now, updatedAt: now, revision: 1 }];
+  const value = createEmptySnapshot({ appVersion: "0.1.0", localDeviceId: "99999999-9999-4999-8999-999999999999", timeZone: "Asia/Tokyo", now });
+  value.captures = [{ id: "11111111-1111-4111-8111-111111111111", body: "買い物", classification: "task", createdAt: now, updatedAt: now, classifiedAt: now, linkedTaskId: "22222222-2222-4222-8222-222222222222" }];
+  value.tasks = [{ id: "22222222-2222-4222-8222-222222222222", sourceCaptureId: "11111111-1111-4111-8111-111111111111", title: "牛乳", status: "active", dueMode: "none", nextReviewAt: now, undecidedCount: 0, dismissCount: 0, postponeCount: 0, createdAt: now, updatedAt: now, revision: 1 }];
   return value;
 }
 
