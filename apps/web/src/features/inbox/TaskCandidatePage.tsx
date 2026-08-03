@@ -2,9 +2,11 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   confirmTask,
   createLocalCalendar,
+  markAsNote,
   resolveDueChoice,
   type AppRepository,
   type DueChoice,
+  type Task,
 } from "../../../../../packages/domain/src";
 
 export interface TaskCandidatePageProps {
@@ -12,6 +14,7 @@ export interface TaskCandidatePageProps {
   captureId: string;
   now?: () => string;
   createId?: () => string;
+  onReturn?: () => void;
   onCompleted?: () => void;
 }
 
@@ -20,9 +23,11 @@ export function TaskCandidatePage({
   captureId,
   now = () => new Date().toISOString(),
   createId = defaultCreateId,
+  onReturn,
   onCompleted,
 }: TaskCandidatePageProps) {
   const [title, setTitle] = useState("");
+  const [category, setCategory] = useState<Task["category"] | "">("");
   const [dueType, setDueType] = useState<DueChoice["type"]>("unset");
   const [customDate, setCustomDate] = useState("");
   const [error, setError] = useState<string>();
@@ -68,17 +73,36 @@ export function TaskCandidatePage({
           captureId,
           taskId: createId(),
           title,
+          ...(category ? { category } : {}),
           due,
           now: timestamp,
         }),
       );
-      onCompleted?.();
+      (onReturn ?? onCompleted)?.();
     } catch {
       setError("タスクを保存できませんでした。もう一度お試しください。");
     } finally {
       setIsSaving(false);
     }
   }
+
+  async function saveAsNote(): Promise<void> {
+    if (isSaving) return;
+
+    setIsSaving(true);
+    setError(undefined);
+    try {
+      const snapshot = await repository.load();
+      await repository.save(markAsNote({ snapshot, captureId, now: now() }));
+      (onReturn ?? onCompleted)?.();
+    } catch {
+      setError("メモを保存できませんでした。もう一度お試しください。");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const categoryCandidate = suggestCategory(title);
 
   return (
     <section aria-labelledby="task-candidate-title">
@@ -91,6 +115,19 @@ export function TaskCandidatePage({
           readOnly={isSaving}
           value={title}
         />
+        {categoryCandidate ? <p>カテゴリ候補: {categoryLabel(categoryCandidate)}</p> : null}
+        <label htmlFor="task-category">カテゴリ</label>
+        <select
+          id="task-category"
+          onChange={(event) => setCategory(event.target.value as Task["category"] | "")}
+          value={category}
+        >
+          <option value="">選択しない</option>
+          <option value="work">仕事</option>
+          <option value="home">家</option>
+          <option value="shopping">買い物</option>
+          <option value="other">その他</option>
+        </select>
         <label htmlFor="task-due">期限</label>
         <select
           id="task-due"
@@ -119,6 +156,12 @@ export function TaskCandidatePage({
         <button disabled={isSaving || !title.trim()} type="submit">
           タスクにする
         </button>
+        <button disabled={isSaving} onClick={() => void saveAsNote()} type="button">
+          メモにする
+        </button>
+        <button disabled={isSaving} onClick={() => (onReturn ?? onCompleted)?.()} type="button">
+          受信箱へ戻る
+        </button>
       </form>
       {error ? <p role="alert">{error}</p> : null}
     </section>
@@ -131,4 +174,12 @@ function choiceFromForm(type: DueChoice["type"], customDate: string): DueChoice 
 
 function defaultCreateId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `task-${Date.now()}`;
+}
+
+function suggestCategory(title: string): NonNullable<Task["category"]> | undefined {
+  return /(?:買う|購入|スーパー|牛乳)/u.test(title) ? "shopping" : undefined;
+}
+
+function categoryLabel(category: NonNullable<Task["category"]>): string {
+  return { work: "仕事", home: "家", shopping: "買い物", other: "その他" }[category];
 }

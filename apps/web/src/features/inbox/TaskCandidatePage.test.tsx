@@ -52,4 +52,59 @@ describe("TaskCandidatePage", () => {
       expect.objectContaining({ id: "task-1", sourceCaptureId: "capture-1" }),
     ]);
   });
+
+  it("F-005 offers an optional category and persists the user-selected candidate", async () => {
+    const repository = repositoryWithCapture();
+    render(
+      <TaskCandidatePage
+        captureId="capture-1"
+        createId={() => "task-1"}
+        now={() => now}
+        repository={repository}
+      />,
+    );
+
+    await screen.findByDisplayValue("牛乳を買う");
+    fireEvent.change(screen.getByLabelText("カテゴリ"), { target: { value: "shopping" } });
+    fireEvent.click(screen.getByRole("button", { name: "タスクにする" }));
+
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect((repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].tasks[0]).toMatchObject({
+      category: "shopping",
+    });
+  });
+
+  it("F-006 changes the capture to a memo only after メモにする and returns", async () => {
+    const repository = repositoryWithCapture();
+    const onReturn = vi.fn();
+    render(
+      <TaskCandidatePage
+        captureId="capture-1"
+        now={() => now}
+        onReturn={onReturn}
+        repository={repository}
+      />,
+    );
+
+    await screen.findByDisplayValue("牛乳を買う");
+    fireEvent.click(screen.getByRole("button", { name: "メモにする" }));
+
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect((repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].captures[0]).toMatchObject({
+      classification: "note",
+    });
+    expect(onReturn).toHaveBeenCalledOnce();
+  });
+
+  it("F-004 returns to the inbox without classifying when 受信箱へ戻る is pressed", async () => {
+    const repository = repositoryWithCapture();
+    const onReturn = vi.fn();
+    render(<TaskCandidatePage captureId="capture-1" onReturn={onReturn} repository={repository} />);
+
+    await screen.findByDisplayValue("牛乳を買う");
+    fireEvent.click(screen.getByRole("button", { name: "受信箱へ戻る" }));
+
+    expect(repository.save).not.toHaveBeenCalled();
+    expect(onReturn).toHaveBeenCalledOnce();
+  });
 });

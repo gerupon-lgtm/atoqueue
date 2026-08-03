@@ -67,7 +67,7 @@ function TaskCandidateRoute() {
   return (
     <TaskCandidatePage
       captureId={captureId}
-      onCompleted={() => navigate("/inbox")}
+      onReturn={() => navigate("/inbox")}
       repository={applicationRepository}
     />
   );

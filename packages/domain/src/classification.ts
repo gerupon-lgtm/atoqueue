@@ -26,6 +26,7 @@ export function confirmTask(input: ConfirmTaskInput): AppSnapshot {
   const capture = getUnclassifiedCapture(input.snapshot, input.captureId);
   const title = input.title.trim();
   if (!title) throw new Error("A task title is required.");
+  validateDueResolution(input.due);
   if (input.snapshot.tasks.some((task) => task.id === input.taskId)) {
     throw new Error("A task ID must be unique.");
   }
@@ -72,6 +73,15 @@ export function confirmTask(input: ConfirmTaskInput): AppSnapshot {
     ],
     savedAt: input.now,
   };
+}
+
+function validateDueResolution(due: DueResolution): void {
+  if (due.dueMode === "scheduled" && !due.dueAt) {
+    throw new Error("Scheduled tasks require a due date.");
+  }
+  if (due.dueMode !== "scheduled" && due.dueAt) {
+    throw new Error("Only scheduled tasks can have a due date.");
+  }
 }
 
 export function markAsNote(input: ClassifyCaptureInput): AppSnapshot {

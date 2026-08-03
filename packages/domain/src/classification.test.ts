@@ -95,6 +95,35 @@ describe("classification", () => {
     ).toThrow(AlreadyClassifiedError);
   });
 
+  it("F-007 rejects a scheduled task without a due date", () => {
+    expect(() =>
+      confirmTask({
+        snapshot: snapshotWithCapture(),
+        captureId: "capture-1",
+        taskId: "task-1",
+        title: "牛乳を買う",
+        due: { dueMode: "scheduled", nextReviewAt: now },
+        now,
+      }),
+    ).toThrow("Scheduled tasks require a due date.");
+  });
+
+  it.each(["none", "unset"] as const)(
+    "F-007 rejects a %s task that carries a due date",
+    (dueMode) => {
+      expect(() =>
+        confirmTask({
+          snapshot: snapshotWithCapture(),
+          captureId: "capture-1",
+          taskId: "task-1",
+          title: "牛乳を買う",
+          due: { dueMode, dueAt: "2026-08-03T14:59:00.000Z", nextReviewAt: now },
+          now,
+        }),
+      ).toThrow("Only scheduled tasks can have a due date.");
+    },
+  );
+
   it("F-006 records note and unneeded classifications in action history", () => {
     const note = markAsNote({ snapshot: snapshotWithCapture(), captureId: "capture-1", now });
     const unneeded = markAsUnneeded({
