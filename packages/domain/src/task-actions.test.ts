@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   answerReview,
   createEmptySnapshot,
+  findNextReviewIndex,
   startReviewSession,
   type AppSnapshot,
   type ReviewCalendar,
@@ -135,5 +136,93 @@ describe("review task actions", () => {
     expect(JSON.stringify(outbox)).not.toContain("SECRET_TASK_TITLE");
     expect(JSON.stringify(outbox)).not.toContain("task-1");
     expect(next.reminderMap).toEqual([expect.objectContaining({ reminderId: "reminder-id", taskId: "task-1", taskRevision: 2 })]);
+  });
+
+  it("F-009 completes a resumed session when every remaining task became stale", () => {
+    const initial = snapshotWithSession([task("task-1")]);
+    const stale = {
+      ...initial,
+      tasks: [task("task-1", { status: "completed", completedAt: now })],
+      reviewSessions: [
+        initial.reviewSessions[0]!,
+        { ...initial.reviewSessions[0]!, id: "other-session" },
+      ],
+    };
+
+    const next = answer(stale, "dismiss");
+
+    expect(next.reviewSessions[0]).toMatchObject({ currentIndex: 1, completedAt: now });
+    expect(next.actionHistory).toEqual([]);
+    expect(next.notificationOutbox).toEqual([]);
+  });
+
+  it.each([
+    ["is missing", (snapshot: AppSnapshot) => ({ ...snapshot, reviewSessions: [] })],
+    ["is already complete", (snapshot: AppSnapshot) => ({
+      ...snapshot,
+      reviewSessions: [{ ...snapshot.reviewSessions[0]!, completedAt: now }],
+    })],
+  ] as const)("F-009 rejects an answer when the review session %s", (_reason, prepare) => {
+    expect(() => answer(prepare(snapshotWithSession([task("task-1")])), "dismiss")).toThrow();
+  });
+
+  it("F-012 rejects an explicit reschedule without a scheduled date", () => {
+    expect(() => answerReview({
+      snapshot: snapshotWithSession([task("task-1")]),
+      sessionId: "session-1",
+      answer: "reschedule",
+      now,
+      calendar,
+      idFactory: (kind) => `${kind}-id`,
+    })).toThrow("Rescheduling requires a scheduled due date.");
+  });
+
+  it("F-009 returns the terminal index when no review tasks remain", () => {
+    const session = startReviewSession({ sessionId: "session-1", now, calendar, tasks: [task("task-1")] });
+
+    expect(findNextReviewIndex(session, [task("task-1", { status: "archived", archivedAt: now })], 0)).toBe(1);
+  });
+
+  it("F-012 uses a local random ID generator when no test ID factory is supplied", () => {
+    const next = answerReview({
+      snapshot: snapshotWithSession([task("task-1")]),
+      sessionId: "session-1",
+      answer: "dismiss",
+      now,
+      calendar,
+    });
+
+    expect(next.actionHistory[0]!.id).toEqual(expect.any(String));
+    expect(next.notificationOutbox[0]!.id).toEqual(expect.any(String));
+    expect(next.reminderMap[0]!.reminderId).toEqual(expect.any(String));
+  });
+
+  it("F-012 updates only the matching local session and reminder mapping", () => {
+    const initial = snapshotWithSession([task("task-1")]);
+    const snapshot: AppSnapshot = {
+      ...initial,
+      reviewSessions: [initial.reviewSessions[0]!, { ...initial.reviewSessions[0]!, id: "other-session" }],
+      reminderMap: [
+        { reminderId: "other-reminder", taskId: "other-task", taskRevision: 1, createdAt: now },
+        { reminderId: "task-reminder", taskId: "task-1", taskRevision: 1, createdAt: "2026-08-01T00:00:00.000Z" },
+      ],
+    };
+
+    const next = answer(snapshot, "dismiss");
+
+    expect(next.reviewSessions[1]).toEqual({ ...initial.reviewSessions[0], id: "other-session" });
+    expect(next.reminderMap).toEqual([
+      { reminderId: "other-reminder", taskId: "other-task", taskRevision: 1, createdAt: now },
+      expect.objectContaining({ reminderId: "task-reminder", taskId: "task-1", taskRevision: 2, createdAt: "2026-08-01T00:00:00.000Z" }),
+    ]);
+  });
+
+  it("F-014 uses generic unset-due metadata for an unset task", () => {
+    const unset = task("task-1", { dueMode: "unset" });
+    delete unset.dueAt;
+
+    const next = answer(snapshotWithSession([unset]), "dismiss");
+
+    expect(next.notificationOutbox[0]).toMatchObject({ notificationType: "unset_due_review" });
   });
 });

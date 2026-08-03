@@ -42,6 +42,9 @@ function validateSnapshot(snapshot: RecordValue, requireReviewEventIds: boolean)
   entities(snapshot.tasks, "tasks", task);
   entities(snapshot.reviewSessions, "reviewSessions", (value, index) => reviewSession(value, index, requireReviewEventIds));
   entities(snapshot.actionHistory, "actionHistory", actionEvent);
+  if (requireReviewEventIds) {
+    validateReviewActionOwnership(snapshot.reviewSessions as unknown[], snapshot.actionHistory as unknown[]);
+  }
   entities(snapshot.notificationOutbox, "notificationOutbox", notificationOutboxItem);
   entities(snapshot.reminderMap, "reminderMap", reminderMapEntry);
   string(snapshot.savedAt, "savedAt");
@@ -261,6 +264,18 @@ function task(value: unknown, index: number): void {
   if (entity.dueMode !== "scheduled" && entity.dueAt !== undefined) {
     throw corrupt(`tasks[${index}].dueAt is only valid for scheduled tasks`);
   }
+  if (entity.status === "completed" && typeof entity.completedAt !== "string") {
+    throw corrupt(`tasks[${index}].completedAt is required for completed tasks`);
+  }
+  if (entity.status !== "completed" && entity.completedAt !== undefined) {
+    throw corrupt(`tasks[${index}].completedAt is only valid for completed tasks`);
+  }
+  if (entity.status === "archived" && typeof entity.archivedAt !== "string") {
+    throw corrupt(`tasks[${index}].archivedAt is required for archived tasks`);
+  }
+  if (entity.status !== "archived" && entity.archivedAt !== undefined) {
+    throw corrupt(`tasks[${index}].archivedAt is only valid for archived tasks`);
+  }
   numbers(entity, ["undecidedCount", "dismissCount", "postponeCount", "revision"]);
 }
 
@@ -289,6 +304,42 @@ function actionEvent(value: unknown, index: number): void {
   oneOf(entity.action, `actionHistory[${index}].action`, actionTypes);
   optionalObject(entity.before, `actionHistory[${index}].before`);
   optionalObject(entity.after, `actionHistory[${index}].after`);
+}
+
+/**
+ * Version 2 session ownership is a durable reference, not a display hint.
+ * Validate it after every individual entity so referential checks never need
+ * to normalize or infer corrupted records.
+ */
+function validateReviewActionOwnership(reviewSessions: unknown[], actionHistory: unknown[]): void {
+  const eventsById = new Map<string, RecordValue>();
+  actionHistory.forEach((value, index) => {
+    const event = object(value, `actionHistory[${index}]`);
+    const id = event.id as string;
+    if (eventsById.has(id)) throw corrupt(`actionHistory[${index}].id must be unique`);
+    eventsById.set(id, event);
+  });
+
+  const claimedEventIds = new Set<string>();
+  reviewSessions.forEach((value, index) => {
+    const session = object(value, `reviewSessions[${index}]`);
+    const answeredTaskIds = new Set(session.answeredTaskIds as string[]);
+    for (const eventId of session.actionEventIds as string[]) {
+      if (claimedEventIds.has(eventId)) {
+        throw corrupt(`reviewSessions[${index}].actionEventIds must not be owned by another session`);
+      }
+      claimedEventIds.add(eventId);
+
+      const event = eventsById.get(eventId);
+      if (!event) throw corrupt(`reviewSessions[${index}].actionEventIds references an unknown action event`);
+      if (event.entityType !== "task") {
+        throw corrupt(`reviewSessions[${index}].actionEventIds must reference task action events`);
+      }
+      if (!answeredTaskIds.has(event.entityId as string)) {
+        throw corrupt(`reviewSessions[${index}].actionEventIds must reference answered tasks`);
+      }
+    }
+  });
 }
 
 function notificationOutboxItem(value: unknown, index: number): void {

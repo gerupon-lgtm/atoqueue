@@ -6,7 +6,7 @@
   "scripts": {
     "test": "pnpm --dir ../.. exec vitest --run --workspace vitest.workspace.ts --project domain",
     "test:coverage": "pnpm --dir ../.. exec vitest --run --workspace vitest.workspace.ts --project domain --coverage --coverage.include=packages/domain/src/reminder-policy.ts --coverage.thresholds.perFile --coverage.thresholds.branches=100",
-    "test:task7:coverage": "pnpm --dir ../.. exec vitest --run --workspace vitest.workspace.ts --project domain --coverage --coverage.include=packages/domain/src/review-session.ts --coverage.include=packages/domain/src/task-actions.ts",
+    "test:task7:coverage": "pnpm --dir ../.. exec vitest --run --workspace vitest.workspace.ts --project domain --coverage --coverage.include=packages/domain/src/review-session.ts --coverage.include=packages/domain/src/task-actions.ts --coverage.thresholds.perFile --coverage.thresholds.branches=100",
     "typecheck": "tsc --noEmit",
     "build": "tsc"
   }

@@ -156,6 +156,30 @@ describe("review session", () => {
     }).orderedTaskIds).toEqual(["dismissed-today"]);
   });
 
+  it("F-012 orders equally eligible neglected tasks by their derived neglect level", () => {
+    const value = startReviewSession({
+      sessionId: "session-1",
+      now,
+      calendar,
+      tasks: [
+        task("less-neglected", { dismissCount: 1 }),
+        task("more-neglected", { dismissCount: 2 }),
+      ],
+    });
+
+    expect(value.orderedTaskIds).toEqual(["more-neglected", "less-neglected"]);
+  });
+
+  it("F-012 excludes active tasks which are not eligible for any review group", () => {
+    const futureTask = task("future", {
+      dueMode: "scheduled",
+      dueAt: "2026-08-04T23:59:00.000Z",
+      nextReviewAt: "2026-08-03T08:00:00.000Z",
+    });
+
+    expect(startReviewSession({ sessionId: "session-1", now, calendar, tasks: [futureTask] }).orderedTaskIds).toEqual([]);
+  });
+
   it("F-016 retains every processed task in the completed result", () => {
     const session = {
       ...startReviewSession({ sessionId: "session-1", now, calendar, tasks: [task("first"), task("second")] }),
