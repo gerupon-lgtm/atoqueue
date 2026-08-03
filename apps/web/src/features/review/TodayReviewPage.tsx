@@ -16,6 +16,7 @@ import {
 import { createReviewCalendar } from "../../infrastructure/review-calendar/review-calendar";
 import { ReviewActionSheet } from "./ReviewActionSheet";
 import { createReviewPresentation, latestSessionAnswer } from "./review-presentation";
+import { resolveReminderTaskId } from "../../infrastructure/notifications/reminder-navigation";
 import "./TodayReviewPage.css";
 
 export interface TodayReviewPageProps {
@@ -24,6 +25,8 @@ export interface TodayReviewPageProps {
   calendar?: ReviewCalendar;
   createId?: () => string;
   onFinished?: () => void;
+  /** Anonymous ID supplied by a generic push link; resolved only from loaded local state. */
+  preferredReminderId?: string;
 }
 
 const currentTime = () => new Date().toISOString();
@@ -34,6 +37,7 @@ export function TodayReviewPage({
   calendar,
   createId = defaultCreateId,
   onFinished,
+  preferredReminderId,
 }: TodayReviewPageProps) {
   const [snapshot, setSnapshot] = useState<AppSnapshot>();
   const [session, setSession] = useState<ReviewSession>();
@@ -57,21 +61,25 @@ export function TodayReviewPage({
         }
         const timestamp = now();
         const started = startReviewSession({ sessionId: createId(), now: timestamp, calendar: selectedCalendar, tasks: loaded.tasks });
+        const preferredTaskId = resolveReminderTaskId(loaded, preferredReminderId ?? null);
+        const prioritized = preferredTaskId
+          ? { ...started, orderedTaskIds: [preferredTaskId, ...started.orderedTaskIds.filter((taskId) => taskId !== preferredTaskId)] }
+          : started;
         const completedSessions = unfinished
           ? loaded.reviewSessions.map((candidate) => candidate.id === unfinished.id ? { ...candidate, completedAt: timestamp, updatedAt: timestamp } : candidate)
           : loaded.reviewSessions;
-        const next = { ...loaded, reviewSessions: [...completedSessions, started], savedAt: timestamp };
+        const next = { ...loaded, reviewSessions: [...completedSessions, prioritized], savedAt: timestamp };
         await repository.save(next);
         if (active) {
           setSnapshot(next);
-          setSession(started);
+          setSession(prioritized);
         }
       } catch {
         if (active) setError("今日の確認を読み込めませんでした。もう一度お試しください。");
       }
     })();
     return () => { active = false; };
-  }, [createId, now, repository, reviewCalendar]);
+  }, [createId, now, preferredReminderId, repository, reviewCalendar]);
 
   async function answer(answerType: ReviewAnswer, date?: string): Promise<void> {
     if (!snapshot || !session || isSaving) return;

@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "service-worker.ts",
       registerType: "prompt",
       manifest: {
         name: "あとキュー",

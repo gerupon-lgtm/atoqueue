@@ -1,4 +1,4 @@
-import { createBrowserRouter, useNavigate, useParams } from "react-router-dom";
+import { createBrowserRouter, useLocation, useNavigate, useParams } from "react-router-dom";
 import { LocalStorageRepository } from "../infrastructure/local-storage/local-storage-repository";
 import { QuickCapturePage } from "../features/capture/QuickCapturePage";
 import { InboxPage } from "../features/inbox/InboxPage";
@@ -8,6 +8,7 @@ import { ReviewResultPage } from "../features/review/ReviewResultPage";
 import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
 import { TaskListPage } from "../features/tasks/TaskListPage";
 import { AppShell } from "./AppShell";
+import { NotificationSettings } from "../features/settings/NotificationSettings";
 
 type PageDefinition = {
   index?: true;
@@ -40,6 +41,8 @@ export const router = createBrowserRouter([
           <TodayReviewRoute />
         ) : page.path === "tasks" ? (
           <TaskListPage repository={applicationRepository} />
+        ) : page.path === "settings" ? (
+          <NotificationSettings repository={applicationRepository} />
         ) : (
           <Page title={page.label} />
         ),
@@ -85,7 +88,8 @@ function TaskCandidateRoute() {
 
 function TodayReviewRoute() {
   const navigate = useNavigate();
-  return <TodayReviewPage onFinished={() => navigate("/today/result")} repository={applicationRepository} />;
+  const location = useLocation();
+  return <TodayReviewPage onFinished={() => navigate("/today/result")} preferredReminderId={new URLSearchParams(location.search).get("reminder") ?? undefined} repository={applicationRepository} />;
 }
 
 function TaskCorrectionRoute() {
