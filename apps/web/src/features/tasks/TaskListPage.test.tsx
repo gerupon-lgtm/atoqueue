@@ -18,6 +18,7 @@ function repository(): AppRepository {
     task("今日", { dueMode: "scheduled", dueAt: "2026-08-03T23:59:00.000Z" }),
     task("未設定", { dueMode: "unset" }),
     task("なし"),
+    task("明日", { dueMode: "scheduled", dueAt: "2026-08-04T23:59:00.000Z" }),
   ] };
   return { load: async () => snapshot, save: async () => undefined, loadDraft: async () => "", saveDraft: async () => undefined, clearDraft: async () => undefined };
 }
@@ -33,6 +34,16 @@ describe("TaskListPage", () => {
     expect(screen.getByLabelText("今日の期限状態").textContent).toBe("今日が期限");
     expect(screen.getByLabelText("未設定の期限状態").textContent).toBe("期限未設定");
     expect(screen.getByLabelText("なしの期限状態").textContent).toBe("期限なし");
+    expect(screen.getByLabelText("明日の期限状態").textContent).toBe("期限あり");
     expect(screen.getByRole("link", { name: "期限切れ" }).getAttribute("href")).toBe("/tasks/期限切れ");
+  });
+
+  it("NF-006 gives every primary list control a 44px minimum touch target", async () => {
+    render(<MemoryRouter><TaskListPage now={() => now} repository={repository()} /></MemoryRouter>);
+
+    await screen.findByRole("link", { name: "期限切れ" });
+    for (const control of document.querySelectorAll<HTMLElement>("select, input, a")) {
+      expect(getComputedStyle(control).minHeight).toBe("44px");
+    }
   });
 });
