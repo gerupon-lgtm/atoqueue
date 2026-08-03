@@ -24,7 +24,7 @@ export function QuickCapturePage({
   const lastPersistedDraft = useRef<string | undefined>(undefined);
   const draftGeneration = useRef(0);
   const draftWriteQueue = useRef<Promise<void>>(Promise.resolve());
-  const pendingDraftClear = useRef(false);
+  const pendingDraftClear = useRef<string | undefined>(undefined);
   const [body, setBody] = useState("");
   const [unclassifiedCount, setUnclassifiedCount] = useState(0);
   const [isDraftLoaded, setIsDraftLoaded] = useState(false);
@@ -59,11 +59,11 @@ export function QuickCapturePage({
 
         if (!isResolvedDraft(snapshot, draft)) return;
 
-        pendingDraftClear.current = true;
+        pendingDraftClear.current = draft;
         try {
           await repository.clearDraft();
           if (!isCurrent) return;
-          pendingDraftClear.current = false;
+          pendingDraftClear.current = undefined;
           lastPersistedDraft.current = "";
           setBody("");
         } catch {
@@ -114,22 +114,24 @@ export function QuickCapturePage({
     setError(undefined);
 
     try {
-      if (pendingDraftClear.current) {
+      if (pendingDraftClear.current === body) {
         await repository.clearDraft();
-        pendingDraftClear.current = false;
+        pendingDraftClear.current = undefined;
         lastPersistedDraft.current = "";
         setBody("");
         setMessage(SUCCESS_MESSAGE);
         return;
       }
 
+      pendingDraftClear.current = undefined;
+
       draftGeneration.current += 1;
       await draftWriteQueue.current;
       const next = createCapture(await repository.load(), body, now(), createId());
       await repository.save(next);
-      pendingDraftClear.current = true;
+      pendingDraftClear.current = body;
       await repository.clearDraft();
-      pendingDraftClear.current = false;
+      pendingDraftClear.current = undefined;
       lastPersistedDraft.current = "";
       setBody("");
       setMessage(SUCCESS_MESSAGE);

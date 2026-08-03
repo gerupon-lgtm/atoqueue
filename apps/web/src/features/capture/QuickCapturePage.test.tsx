@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppRepository, AppSnapshot } from "../../../../../packages/domain/src";
-import { createEmptySnapshot } from "../../../../../packages/domain/src";
+import { createCapture, createEmptySnapshot } from "../../../../../packages/domain/src";
 import { QuickCapturePage } from "./QuickCapturePage";
 
 const now = "2026-08-03T00:00:00.000Z";
@@ -221,6 +221,52 @@ describe("QuickCapturePage", () => {
     expect(repository.save).toHaveBeenCalledTimes(1);
     expect(storedSnapshot.captures).toHaveLength(1);
     expect(firstInput).not.toBe(reloadedInput);
+  });
+
+  it("saves an edited recovered draft as a new capture", async () => {
+    let storedSnapshot = createCapture(
+      createEmptySnapshot({
+        appVersion: "0.1.0",
+        localDeviceId: "device-1",
+        timeZone: "Asia/Tokyo",
+        now,
+      }),
+      "古い下書き",
+      now,
+      "capture-old",
+    );
+    let storedDraft = "古い下書き";
+    let clearAllowed = false;
+    const repository: AppRepository = {
+      load: vi.fn().mockImplementation(async () => storedSnapshot),
+      save: vi.fn().mockImplementation(async (next) => {
+        storedSnapshot = next;
+      }),
+      loadDraft: vi.fn().mockImplementation(async () => storedDraft),
+      saveDraft: vi.fn().mockResolvedValue(undefined),
+      clearDraft: vi.fn().mockImplementation(async () => {
+        if (!clearAllowed) throw new Error("quota exceeded");
+        storedDraft = "";
+      }),
+    };
+    const user = userEvent.setup();
+    render(
+      <QuickCapturePage createId={() => "capture-new"} now={() => now} repository={repository} />,
+    );
+    const input = await screen.findByRole("textbox", { name: "思いついたこと" });
+    await screen.findByRole("alert");
+
+    await user.clear(input);
+    await user.type(input, "新しい下書き");
+    clearAllowed = true;
+    await user.click(screen.getByRole("button", { name: "保存して戻る" }));
+
+    await waitFor(() => expect(storedDraft).toBe(""));
+    expect(repository.save).toHaveBeenCalledTimes(1);
+    expect(storedSnapshot.captures.map((capture) => capture.body)).toEqual([
+      "古い下書き",
+      "新しい下書き",
+    ]);
   });
 
   it("keeps the newest draft when asynchronous draft writes complete out of order", async () => {
