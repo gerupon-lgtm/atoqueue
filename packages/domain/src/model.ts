@@ -62,7 +62,7 @@ export interface Task {
   revision: number;
 }
 
-export type NeglectLevel = 0 | 1 | 2 | 3;
+export type NeglectLevel = 0 | 1 | 2 | 3 | 4;
 
 export interface ReviewSession {
   id: string;
