@@ -107,15 +107,20 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
     "updatedAt",
     "completedAt",
   ]);
-  normalized.actionHistory = normalizedEntities(snapshot.actionHistory, [
-    "id",
-    "entityType",
-    "entityId",
-    "action",
-    "before",
-    "after",
-    "occurredAt",
-  ]);
+  normalized.actionHistory = (snapshot.actionHistory as unknown[]).map((entry) => {
+    const action = copyKnown(object(entry, "actionHistory entry"), [
+      "id",
+      "entityType",
+      "entityId",
+      "action",
+      "before",
+      "after",
+      "occurredAt",
+    ]);
+    if (action.before !== undefined) action.before = sanitizeActionMetadata(action.before);
+    if (action.after !== undefined) action.after = sanitizeActionMetadata(action.after);
+    return action;
+  });
   normalized.notificationOutbox = normalizedEntities(snapshot.notificationOutbox, [
     "id",
     "operation",
@@ -146,6 +151,25 @@ function copyKnown(value: RecordValue, fields: readonly string[]): RecordValue {
     fields
       .filter((field) => value[field] !== undefined)
       .map((field) => [field, value[field]]),
+  );
+}
+
+const derivedMetadataFields = new Set([
+  "overdue",
+  "isOverdue",
+  "neglectLevel",
+  "neglectState",
+  "neglectStatus",
+]);
+
+function sanitizeActionMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeActionMetadata);
+  if (value === null || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !derivedMetadataFields.has(key))
+      .map(([key, nestedValue]) => [key, sanitizeActionMetadata(nestedValue)]),
   );
 }
 

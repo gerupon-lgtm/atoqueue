@@ -194,6 +194,38 @@ describe("LocalStorageRepository persistence failures", () => {
     expect(persisted.tasks[0]?.neglectLevel).toBeUndefined();
     expect(persisted.tasks[0]?.unrecognizedTaskValue).toBeUndefined();
   });
+
+  it("removes derived values from action history while preserving valid metadata", async () => {
+    const storedSnapshot = {
+      ...sampleSnapshot(),
+      actionHistory: [
+        {
+          id: "event-1",
+          entityType: "task",
+          entityId: "task-1",
+          action: "task_edited",
+          before: { overdue: true, title: "変更前" },
+          after: { neglectLevel: 3, title: "変更後" },
+          occurredAt: "2026-08-03T00:00:00.000Z",
+        },
+      ],
+    };
+    window.localStorage.setItem(DATA_KEY, JSON.stringify(storedSnapshot));
+    const repository = new LocalStorageRepository(window.localStorage);
+
+    await repository.save(await repository.load());
+
+    const persisted = JSON.parse(window.localStorage.getItem(DATA_KEY) ?? "") as {
+      actionHistory: Array<{
+        before?: { overdue?: unknown; title?: unknown };
+        after?: { neglectLevel?: unknown; title?: unknown };
+      }>;
+    };
+    expect(persisted.actionHistory[0]?.before?.overdue).toBeUndefined();
+    expect(persisted.actionHistory[0]?.after?.neglectLevel).toBeUndefined();
+    expect(persisted.actionHistory[0]?.before?.title).toBe("変更前");
+    expect(persisted.actionHistory[0]?.after?.title).toBe("変更後");
+  });
 });
 
 function sampleSnapshot(): AppSnapshot {
