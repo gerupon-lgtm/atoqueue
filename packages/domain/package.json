@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "pnpm --dir ../.. exec vitest --run --workspace vitest.workspace.ts --project domain",
     "typecheck": "tsc --noEmit",
     "build": "tsc"
   }
