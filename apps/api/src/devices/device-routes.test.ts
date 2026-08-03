@@ -43,6 +43,7 @@ describe("device registration routes", () => {
     const unauthorized = await app.inject({
       method: "PUT",
       url: `/v1/devices/${deviceId}/subscription`,
+      headers: { "idempotency-key": "unauthorized-update" },
       payload: { subscription },
     });
     expect(unauthorized.statusCode).toBe(401);
@@ -50,7 +51,7 @@ describe("device registration routes", () => {
     const updated = await app.inject({
       method: "PUT",
       url: `/v1/devices/${deviceId}/subscription`,
-      headers: { authorization: `Bearer ${deviceSecret}` },
+      headers: { authorization: `Bearer ${deviceSecret}`, "idempotency-key": "update-key-1" },
       payload: { subscription: { ...subscription, endpoint: "https://push.example/updated" } },
     });
     expect(updated.statusCode).toBe(200);
@@ -58,7 +59,7 @@ describe("device registration routes", () => {
     const deleted = await app.inject({
       method: "DELETE",
       url: `/v1/devices/${deviceId}`,
-      headers: { authorization: `Bearer ${deviceSecret}` },
+      headers: { authorization: `Bearer ${deviceSecret}`, "idempotency-key": "delete-key-1" },
     });
     expect(deleted.statusCode).toBe(204);
     expect(repository.get(deviceId)?.status).toBe("disabled");
@@ -86,6 +87,155 @@ describe("device registration routes", () => {
     expect(limited.statusCode).toBe(429);
     expect(limited.json().error).toMatchObject({ code: "RATE_LIMITED", requestId: expect.stringMatching(/^req_/) });
     expect(limited.headers["retry-after"]).toBeDefined();
+    await app.close();
+  });
+
+  it("uses the forwarded client address from Caddy and keeps its registration bucket separate", async () => {
+    const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
+    for (let index = 0; index < 10; index += 1) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/devices",
+        remoteAddress: "127.0.0.1",
+        headers: { "x-forwarded-for": "198.51.100.10" },
+        payload: { subscription: { ...subscription, endpoint: `https://push.example/first-client-${index}` } },
+      });
+      expect(response.statusCode).toBe(201);
+    }
+    const secondClient = await app.inject({
+      method: "POST",
+      url: "/v1/devices",
+      remoteAddress: "127.0.0.1",
+      headers: { "x-forwarded-for": "198.51.100.11" },
+      payload: { subscription: { ...subscription, endpoint: "https://push.example/second-client" } },
+    });
+    expect(secondClient.statusCode).toBe(201);
+    await app.close();
+  });
+
+  it("does not trust a forwarded address supplied by an untrusted client", async () => {
+    const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
+    for (let index = 0; index < 10; index += 1) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/devices",
+        remoteAddress: "203.0.113.90",
+        headers: { "x-forwarded-for": `198.51.100.${index + 50}` },
+        payload: { subscription: { ...subscription, endpoint: `https://push.example/untrusted-${index}` } },
+      });
+      expect(response.statusCode).toBe(201);
+    }
+    const limited = await app.inject({
+      method: "POST",
+      url: "/v1/devices",
+      remoteAddress: "203.0.113.90",
+      headers: { "x-forwarded-for": "198.51.100.99" },
+      payload: { subscription: { ...subscription, endpoint: "https://push.example/untrusted-limited" } },
+    });
+    expect(limited.statusCode).toBe(429);
+    await app.close();
+  });
+
+  it("limits registrations by endpoint even when they come from different client addresses", async () => {
+    const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
+    for (let index = 0; index < 3; index += 1) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/devices",
+        remoteAddress: "127.0.0.1",
+        headers: { "x-forwarded-for": `198.51.100.${index + 20}` },
+        payload: { subscription: { ...subscription, endpoint: "https://push.example/shared-endpoint" } },
+      });
+      expect(response.statusCode).toBe(201);
+    }
+    const limited = await app.inject({
+      method: "POST",
+      url: "/v1/devices",
+      remoteAddress: "127.0.0.1",
+      headers: { "x-forwarded-for": "198.51.100.24" },
+      payload: { subscription: { ...subscription, endpoint: "https://push.example/shared-endpoint" } },
+    });
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json().error.code).toBe("RATE_LIMITED");
+    await app.close();
+  });
+
+  it("returns INVALID_REQUEST for malformed JSON", async () => {
+    const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/devices",
+      headers: { "content-type": "application/json" },
+      payload: "{",
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatchObject({ code: "INVALID_REQUEST", message: "Request validation failed." });
+    await app.close();
+  });
+
+  it("requires an idempotency key for subscription updates", async () => {
+    const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
+    const created = await app.inject({ method: "POST", url: "/v1/devices", payload: { subscription } });
+    const { deviceId, deviceSecret } = created.json();
+    const response = await app.inject({
+      method: "PUT",
+      url: `/v1/devices/${deviceId}/subscription`,
+      headers: { authorization: `Bearer ${deviceSecret}` },
+      payload: { subscription },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("INVALID_REQUEST");
+    await app.close();
+  });
+
+  it("replays a lost delete response when the idempotency key is repeated", async () => {
+    const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
+    const created = await app.inject({ method: "POST", url: "/v1/devices", payload: { subscription } });
+    const { deviceId, deviceSecret } = created.json();
+    const request = {
+      method: "DELETE" as const,
+      url: `/v1/devices/${deviceId}`,
+      headers: { authorization: `Bearer ${deviceSecret}`, "idempotency-key": "delete-key-1" },
+    };
+    expect((await app.inject(request)).statusCode).toBe(204);
+    expect((await app.inject(request)).statusCode).toBe(204);
+    await app.close();
+  });
+
+  it("replays a subscription update and rejects a changed request with the same key", async () => {
+    const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
+    const created = await app.inject({ method: "POST", url: "/v1/devices", payload: { subscription } });
+    const { deviceId, deviceSecret } = created.json();
+    const request = {
+      method: "PUT" as const,
+      url: `/v1/devices/${deviceId}/subscription`,
+      headers: { authorization: `Bearer ${deviceSecret}`, "idempotency-key": "update-replay-key" },
+      payload: { subscription: { ...subscription, endpoint: "https://push.example/first-update" } },
+    };
+    const first = await app.inject(request);
+    const replay = await app.inject(request);
+    expect(first.statusCode).toBe(200);
+    expect(replay.json()).toEqual(first.json());
+    const conflict = await app.inject({
+      ...request,
+      payload: { subscription: { ...subscription, endpoint: "https://push.example/second-update" } },
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().error.code).toBe("IDEMPOTENCY_CONFLICT");
+    await app.close();
+  });
+
+  it("requires an idempotency key for deletion", async () => {
+    const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
+    const created = await app.inject({ method: "POST", url: "/v1/devices", payload: { subscription } });
+    const { deviceId, deviceSecret } = created.json();
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/v1/devices/${deviceId}`,
+      headers: { authorization: `Bearer ${deviceSecret}` },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("INVALID_REQUEST");
     await app.close();
   });
 

@@ -1,4 +1,4 @@
-CREATE TABLE device_subscriptions (
+CREATE TABLE IF NOT EXISTS device_subscriptions (
   id TEXT PRIMARY KEY,
   device_id TEXT NOT NULL UNIQUE,
   endpoint TEXT NOT NULL UNIQUE,
@@ -11,7 +11,7 @@ CREATE TABLE device_subscriptions (
   last_error_code TEXT NULL
 );
 
-CREATE TABLE reminder_jobs (
+CREATE TABLE IF NOT EXISTS reminder_jobs (
   id TEXT PRIMARY KEY,
   device_id TEXT NOT NULL,
   scheduled_at TEXT NOT NULL,
@@ -27,8 +27,20 @@ CREATE TABLE reminder_jobs (
   FOREIGN KEY (device_id) REFERENCES device_subscriptions(device_id)
 );
 
-CREATE INDEX idx_reminder_jobs_due
+CREATE INDEX IF NOT EXISTS idx_reminder_jobs_due
 ON reminder_jobs(status, scheduled_at);
 
-CREATE UNIQUE INDEX idx_reminder_jobs_idempotency
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reminder_jobs_idempotency
 ON reminder_jobs(device_id, idempotency_key);
+
+CREATE TABLE IF NOT EXISTS device_idempotency_operations (
+  device_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  request_fingerprint TEXT NOT NULL,
+  response_status INTEGER NOT NULL,
+  response_body TEXT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (device_id, operation, idempotency_key),
+  FOREIGN KEY (device_id) REFERENCES device_subscriptions(device_id)
+);

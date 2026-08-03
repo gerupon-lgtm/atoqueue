@@ -32,6 +32,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@atoqueue/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@fastify/cors':
         specifier: ^11.3.0
         version: 11.3.0

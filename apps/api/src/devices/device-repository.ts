@@ -21,16 +21,31 @@ export interface DeviceRecord {
   lastErrorCode: string | null;
 }
 
+export type DeviceOperation = "subscription_update" | "device_delete";
+
+export interface IdempotencyOperation {
+  deviceId: string;
+  operation: DeviceOperation;
+  idempotencyKey: string;
+  requestFingerprint: string;
+  responseStatus: number;
+  responseBody: unknown | null;
+  createdAt: string;
+}
+
 export interface DeviceRepository {
   create(input: DeviceRecord): Promise<void>;
   findByDeviceId(deviceId: string): Promise<DeviceRecord | undefined>;
   updateSubscription(deviceId: string, subscription: SubscriptionRecord, updatedAt: string): Promise<void>;
   deactivateAndCancelPending(deviceId: string, updatedAt: string): Promise<void>;
+  findOperation(deviceId: string, operation: DeviceOperation, idempotencyKey: string): Promise<IdempotencyOperation | undefined>;
+  createOperation(input: IdempotencyOperation): Promise<void>;
 }
 
 export class InMemoryDeviceRepository implements DeviceRepository {
   private readonly devices = new Map<string, DeviceRecord>();
   private readonly pendingJobs = new Map<string, Set<string>>();
+  private readonly operations = new Map<string, IdempotencyOperation>();
 
   async create(input: DeviceRecord): Promise<void> {
     this.devices.set(input.deviceId, { ...input });
@@ -58,6 +73,15 @@ export class InMemoryDeviceRepository implements DeviceRepository {
     const record = this.devices.get(deviceId);
     if (record) this.devices.set(deviceId, { ...record, status: "disabled", updatedAt });
     this.pendingJobs.delete(deviceId);
+  }
+
+  async findOperation(deviceId: string, operation: DeviceOperation, idempotencyKey: string): Promise<IdempotencyOperation | undefined> {
+    const found = this.operations.get(`${deviceId}:${operation}:${idempotencyKey}`);
+    return found && { ...found };
+  }
+
+  async createOperation(input: IdempotencyOperation): Promise<void> {
+    this.operations.set(`${input.deviceId}:${input.operation}:${input.idempotencyKey}`, { ...input });
   }
 
   get(deviceId: string): DeviceRecord | undefined {
@@ -121,5 +145,31 @@ export class PgDeviceRepository implements DeviceRepository {
     } finally {
       client.release();
     }
+  }
+
+  async findOperation(deviceId: string, operation: DeviceOperation, idempotencyKey: string): Promise<IdempotencyOperation | undefined> {
+    const result = await this.pool.query<{
+      device_id: string; operation: DeviceOperation; idempotency_key: string; request_fingerprint: string;
+      response_status: number; response_body: string | null; created_at: string;
+    }>(
+      "SELECT * FROM device_idempotency_operations WHERE device_id = $1 AND operation = $2 AND idempotency_key = $3",
+      [deviceId, operation, idempotencyKey],
+    );
+    const row = result.rows[0];
+    return row && {
+      deviceId: row.device_id, operation: row.operation, idempotencyKey: row.idempotency_key,
+      requestFingerprint: row.request_fingerprint, responseStatus: row.response_status,
+      responseBody: row.response_body === null ? null : JSON.parse(row.response_body), createdAt: row.created_at,
+    };
+  }
+
+  async createOperation(input: IdempotencyOperation): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO device_idempotency_operations
+       (device_id, operation, idempotency_key, request_fingerprint, response_status, response_body, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [input.deviceId, input.operation, input.idempotencyKey, input.requestFingerprint, input.responseStatus,
+        input.responseBody === null ? null : JSON.stringify(input.responseBody), input.createdAt],
+    );
   }
 }

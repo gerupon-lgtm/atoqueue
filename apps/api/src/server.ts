@@ -23,7 +23,7 @@ export interface ProductionApp {
 }
 
 export function buildApp({ version, publicPushKey = "test-public-key", repository = new InMemoryDeviceRepository(), logger }: BuildAppOptions) {
-  const app = Fastify({ bodyLimit: 16 * 1024, logger: false });
+  const app = Fastify({ bodyLimit: 16 * 1024, logger: false, trustProxy: ["127.0.0.1", "::1"] });
   installRequestContext(app);
   installSecurity(app);
 
@@ -36,6 +36,8 @@ export function buildApp({ version, publicPushKey = "test-public-key", repositor
       ? error
       : (error as { code?: string }).code === "FST_ERR_CTP_BODY_TOO_LARGE"
         ? new ApiError(413, "PAYLOAD_TOO_LARGE", "Payload too large.")
+        : (error as { code?: string }).code?.startsWith("FST_ERR_CTP_")
+          ? new ApiError(400, "INVALID_REQUEST", "Request validation failed.")
         : new ApiError(500, "INTERNAL_ERROR", "Internal server error.");
     return reply.code(apiError.statusCode).send({
       error: { code: apiError.code, message: apiError.message, requestId: request.requestId, ...(apiError.details ? { details: apiError.details } : {}) },
