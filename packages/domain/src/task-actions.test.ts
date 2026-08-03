@@ -81,6 +81,30 @@ describe("review task actions", () => {
     expect(rescheduled.reviewSessions[0]!.answeredTaskIds).toEqual(["first"]);
   });
 
+  it("F-016 records every new action event ID on its owning review session", () => {
+    let actionNumber = 0;
+    const first = answerReview({
+      snapshot: snapshotWithSession([task("first"), task("second")]),
+      sessionId: "session-1",
+      answer: "complete",
+      now,
+      calendar,
+      idFactory: (kind) => kind === "action" ? `event-${++actionNumber}` : `${kind}-id`,
+    });
+    const revisiting = { ...first, reviewSessions: [{ ...first.reviewSessions[0]!, currentIndex: 0 }] };
+    const reanswered = answerReview({
+      snapshot: revisiting,
+      sessionId: "session-1",
+      answer: "reschedule",
+      now,
+      calendar,
+      due: { dueMode: "scheduled", dueAt: "2026-08-10T23:59:00.000Z", nextReviewAt: "2026-08-10T23:59:00.000Z" },
+      idFactory: (kind) => kind === "action" ? `event-${++actionNumber}` : `${kind}-id`,
+    });
+
+    expect(reanswered.reviewSessions[0]!.actionEventIds).toEqual(["event-1", "event-2"]);
+  });
+
   it.each([
     ["complete", { status: "completed", completedAt: now }, "task_completed", "cancel"],
     ["do_today", { status: "active", dueAt: "2026-08-03T23:59:00.000Z" }, "task_rescheduled", "upsert"],
@@ -94,6 +118,13 @@ describe("review task actions", () => {
     expect(next.tasks[0]).toMatchObject({ ...expectedTask, revision: 2, updatedAt: now });
     expect(next.actionHistory[0]).toMatchObject({ entityId: "task-1", action: eventAction, occurredAt: now });
     expect(next.notificationOutbox[0]).toMatchObject({ operation, reminderId: "reminder-id", taskRevision: 2, attemptCount: 0, nextAttemptAt: now });
+  });
+
+  it("F-012 removes a scheduled dueAt entirely when no due is chosen", () => {
+    const next = answer(snapshotWithSession([task("task-1")]), "no_due");
+
+    expect(next.tasks[0]).toMatchObject({ dueMode: "none" });
+    expect("dueAt" in next.tasks[0]!).toBe(false);
   });
 
   it("F-014 queues anonymous metadata only, never private task content or a task ID", () => {

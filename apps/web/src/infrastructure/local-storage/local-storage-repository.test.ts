@@ -28,11 +28,11 @@ function repositoryContract(
   describe(_name, () => {
     afterEach(() => window.localStorage.clear());
 
-    it("returns an empty version 1 snapshot when storage is missing", async () => {
+    it("returns an empty version 2 snapshot when storage is missing", async () => {
       const snapshot = await createRepository().load();
 
       expect(snapshot).toMatchObject({
-        schemaVersion: 1,
+        schemaVersion: 2,
         captures: [],
         tasks: [],
         actionHistory: [],
@@ -92,7 +92,7 @@ function repositoryContract(
     });
 
     it("rejects a future schema version without overwriting it", async () => {
-      const stored = JSON.stringify({ schemaVersion: 2 });
+      const stored = JSON.stringify({ schemaVersion: 3 });
       window.localStorage.setItem(DATA_KEY, stored);
 
       await expect(createRepository().load()).rejects.toBeInstanceOf(
@@ -144,7 +144,7 @@ describe("LocalStorageRepository persistence failures", () => {
   });
 
   it("preserves an unknown existing schema version when save is attempted", async () => {
-    const existing = JSON.stringify({ schemaVersion: 2 });
+    const existing = JSON.stringify({ schemaVersion: 3 });
     window.localStorage.setItem(DATA_KEY, existing);
 
     await expect(
@@ -230,7 +230,7 @@ describe("LocalStorageRepository persistence failures", () => {
 
 function sampleSnapshot(): AppSnapshot {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     appVersion: "0.1.0",
     device: {
       localDeviceId: "device-1",

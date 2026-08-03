@@ -22,25 +22,40 @@ export function migrateSnapshot(input: unknown): AppSnapshot {
   const snapshot = object(input, "snapshot");
   const version = snapshot.schemaVersion;
 
-  if (version !== 1) {
-    if (typeof version === "number") {
-      throw new UnsupportedSchemaVersionError(version);
-    }
-    throw corrupt("schemaVersion must be 1");
+  if (version === 1) {
+    validateSnapshot(snapshot, false);
+    return normalizeSnapshot(upgradeV1ToV2(snapshot));
   }
+  if (version === 2) {
+    validateSnapshot(snapshot, true);
+    return normalizeSnapshot(snapshot);
+  }
+  if (typeof version === "number") throw new UnsupportedSchemaVersionError(version);
+  throw corrupt("schemaVersion must be 1 or 2");
+}
 
+function validateSnapshot(snapshot: RecordValue, requireReviewEventIds: boolean): void {
   string(snapshot.appVersion, "appVersion");
   device(snapshot.device);
   settings(snapshot.settings);
   entities(snapshot.captures, "captures", capture);
   entities(snapshot.tasks, "tasks", task);
-  entities(snapshot.reviewSessions, "reviewSessions", reviewSession);
+  entities(snapshot.reviewSessions, "reviewSessions", (value, index) => reviewSession(value, index, requireReviewEventIds));
   entities(snapshot.actionHistory, "actionHistory", actionEvent);
   entities(snapshot.notificationOutbox, "notificationOutbox", notificationOutboxItem);
   entities(snapshot.reminderMap, "reminderMap", reminderMapEntry);
   string(snapshot.savedAt, "savedAt");
+}
 
-  return normalizeSnapshot(snapshot);
+function upgradeV1ToV2(snapshot: RecordValue): RecordValue {
+  return {
+    ...snapshot,
+    schemaVersion: 2,
+    reviewSessions: (snapshot.reviewSessions as unknown[]).map((value, index) => ({
+      ...object(value, `reviewSessions[${index}]`),
+      actionEventIds: [],
+    })),
+  };
 }
 
 function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
@@ -103,6 +118,7 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
     "currentIndex",
     "visitedTaskIds",
     "answeredTaskIds",
+    "actionEventIds",
     "startedAt",
     "updatedAt",
     "completedAt",
@@ -239,15 +255,24 @@ function task(value: unknown, index: number): void {
     "completedAt",
     "archivedAt",
   ], `tasks[${index}]`);
+  if (entity.dueMode === "scheduled" && typeof entity.dueAt !== "string") {
+    throw corrupt(`tasks[${index}].dueAt is required for scheduled tasks`);
+  }
+  if (entity.dueMode !== "scheduled" && entity.dueAt !== undefined) {
+    throw corrupt(`tasks[${index}].dueAt is only valid for scheduled tasks`);
+  }
   numbers(entity, ["undecidedCount", "dismissCount", "postponeCount", "revision"]);
 }
 
-function reviewSession(value: unknown, index: number): void {
+function reviewSession(value: unknown, index: number, requireActionEventIds: boolean): void {
   const entity = object(value, `reviewSessions[${index}]`);
   strings(entity, ["id", "localDate", "startedAt", "updatedAt"]);
   stringArray(entity.orderedTaskIds, `reviewSessions[${index}].orderedTaskIds`);
   stringArray(entity.visitedTaskIds, `reviewSessions[${index}].visitedTaskIds`);
   stringArray(entity.answeredTaskIds, `reviewSessions[${index}].answeredTaskIds`);
+  if (requireActionEventIds) {
+    stringArray(entity.actionEventIds, `reviewSessions[${index}].actionEventIds`);
+  }
   number(entity.currentIndex, `reviewSessions[${index}].currentIndex`);
   optionalString(entity.completedAt, `reviewSessions[${index}].completedAt`);
 }

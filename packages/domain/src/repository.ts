@@ -7,7 +7,7 @@ export function createEmptySnapshot(params: {
   now: string;
 }): AppSnapshot {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     appVersion: params.appVersion,
     device: {
       localDeviceId: params.localDeviceId,

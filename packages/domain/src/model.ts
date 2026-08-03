@@ -1,5 +1,5 @@
 export interface AppSnapshot {
-  schemaVersion: 1;
+  schemaVersion: 2;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -71,6 +71,7 @@ export interface ReviewSession {
   currentIndex: number;
   visitedTaskIds: string[];
   answeredTaskIds: string[];
+  actionEventIds: string[];
   startedAt: string;
   updatedAt: string;
   completedAt?: string;

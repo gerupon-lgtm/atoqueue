@@ -139,10 +139,28 @@ describe("review session", () => {
     }).orderedTaskIds).toEqual(["weekly-unset"]);
   });
 
+  it("F-012 suppresses a dismissed due-today task until its future next review", () => {
+    const dismissedToday = task("dismissed-today", {
+      dueMode: "scheduled",
+      dueAt: "2026-08-03T23:59:00.000Z",
+      nextReviewAt: "2026-08-04T18:00:00.000Z",
+      dismissCount: 1,
+    });
+
+    expect(startReviewSession({ sessionId: "before", now, calendar, tasks: [dismissedToday] }).orderedTaskIds).toEqual([]);
+    expect(startReviewSession({
+      sessionId: "at",
+      now: "2026-08-04T18:00:00.000Z",
+      calendar,
+      tasks: [dismissedToday],
+    }).orderedTaskIds).toEqual(["dismissed-today"]);
+  });
+
   it("F-016 retains every processed task in the completed result", () => {
     const session = {
       ...startReviewSession({ sessionId: "session-1", now, calendar, tasks: [task("first"), task("second")] }),
       answeredTaskIds: ["first", "second"],
+      actionEventIds: ["event-1", "event-2"],
       completedAt: now,
     };
     const summary = summarizeReview(session, [
@@ -157,9 +175,10 @@ describe("review session", () => {
     const session = {
       ...startReviewSession({ sessionId: "session-1", now, calendar, tasks: [task("first")] }),
       answeredTaskIds: ["first"],
+      actionEventIds: ["answer", "re-answer"],
     };
     const summary = summarizeReview(session, [
-      { id: "historical", entityType: "task", entityId: "first", action: "task_archived", occurredAt: "2026-08-03T08:59:59.000Z" },
+      { id: "historical", entityType: "task", entityId: "first", action: "task_archived", occurredAt: "2026-08-03T09:00:30.000Z" },
       { id: "answer", entityType: "task", entityId: "first", action: "task_completed", occurredAt: now },
       { id: "re-answer", entityType: "task", entityId: "first", action: "task_rescheduled", occurredAt: "2026-08-03T09:01:00.000Z" },
       { id: "unprocessed", entityType: "task", entityId: "other", action: "task_completed", occurredAt: "2026-08-03T09:02:00.000Z" },

@@ -55,6 +55,7 @@ export function answerReview(input: AnswerReviewInput): AppSnapshot {
     currentIndex: nextIndex,
     visitedTaskIds,
     answeredTaskIds,
+    actionEventIds: [...session.actionEventIds, event.id],
     updatedAt: input.now,
     ...(nextIndex >= session.orderedTaskIds.length ? { completedAt: input.now } : {}),
   };
@@ -96,7 +97,9 @@ function applyAnswer(task: Task, input: AnswerReviewInput): Task {
       return active({ ...input.due, dismissCount: 0 });
     case "no_due": {
       const due = resolveDueChoice({ choice: { type: "none" }, now: input.now, calendar: input.calendar });
-      return active(due);
+      const noDue = active(due);
+      delete noDue.dueAt;
+      return noDue;
     }
     case "dismiss": {
       const nextReviewAt = calculateNextReview({
