@@ -22,7 +22,7 @@ export function TaskDetailPage({ repository, taskId, now = () => new Date().toIS
       setSnapshot(next);
       const task = next.tasks.find((item) => item.id === taskId)!;
       setTitle(task.title); setCategory(task.category ?? "");
-      if (sync) { try { await sync(next); setMessage(undefined); } catch { setMessage("通知の更新を後で同期します。"); } }
+      if (sync) { try { await sync(next); setMessage(undefined); } catch { setMessage("通知の更新を送信待ちにしています"); } }
     } catch { setMessage("変更を保存できませんでした。もう一度お試しください。"); }
   }
 

@@ -51,7 +51,7 @@ describe("TaskDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "完了" }));
 
     await waitFor(() => expect(snapshot().tasks[0]).toMatchObject({ status: "completed", revision: 2 }));
-    expect(screen.getByRole("alert").textContent).toBe("通知の更新を後で同期します。");
+    expect(screen.getByRole("alert").textContent).toBe("通知の更新を送信待ちにしています");
     expect(snapshot().notificationOutbox[0]).toMatchObject({ operation: "cancel" });
     expect(JSON.stringify(snapshot().notificationOutbox)).not.toContain("牛乳を買う");
   });
