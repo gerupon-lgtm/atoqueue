@@ -22,10 +22,16 @@ test.describe("PWA shell", () => {
   test("starts at quick capture and keeps forward keyboard order visible", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.getByRole("textbox", { name: "思いついたこと" })).toBeFocused();
+    const input = page.getByRole("textbox", { name: "思いついたこと" });
+    const saveButton = page.getByRole("button", { name: "保存して戻る" });
+    await expect(input).toBeFocused();
+    await expect(saveButton).toBeDisabled();
+
+    await input.fill("フォーカス順を確認する");
+    await expect(saveButton).toBeEnabled();
 
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("button", { name: "保存して戻る" })).toBeFocused();
+    await expect(saveButton).toBeFocused();
 
     for (const [, label] of navigation) {
       await page.keyboard.press("Tab");
