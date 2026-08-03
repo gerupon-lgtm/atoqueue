@@ -2,6 +2,8 @@
   color: #173b33;
   background: #f7f5ee;
   font-family: system-ui, sans-serif;
+  --app-content-padding: 1.5rem;
+  --app-navigation-width: 0px;
 }
 
 * {
@@ -20,7 +22,7 @@ body {
 }
 
 .app-shell__content {
-  padding: 1.5rem;
+  padding: var(--app-content-padding);
 }
 
 .app-shell__navigation {
@@ -62,8 +64,9 @@ body {
 }
 
 @media (min-width: 768px) {
+  :root { --app-navigation-width: clamp(12rem, 18vw, 18rem); }
   .app-shell {
-    grid-template-columns: minmax(12rem, 18rem) 1fr;
+    grid-template-columns: var(--app-navigation-width) 1fr;
     grid-template-rows: 1fr;
   }
 

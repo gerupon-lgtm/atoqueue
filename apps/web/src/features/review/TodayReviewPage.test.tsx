@@ -50,6 +50,17 @@ function repositoryWithSession(tasks: Task[]): AppRepository {
   };
 }
 
+function repositoryWithSnapshot(initial: AppSnapshot): AppRepository {
+  let snapshot = initial;
+  return {
+    load: async () => snapshot,
+    save: async (next) => { snapshot = next; },
+    loadDraft: async () => "",
+    saveDraft: async () => undefined,
+    clearDraft: async () => undefined,
+  };
+}
+
 describe("TodayReviewPage", () => {
   afterEach(cleanup);
 
@@ -87,5 +98,45 @@ describe("TodayReviewPage", () => {
     render(<TodayReviewPage calendar={calendar} now={() => now} repository={repositoryWithSession([])} />);
 
     expect(await screen.findByText("今日確認するものはありません。記録したことは受信箱やタスク一覧からいつでも見直せます")).toBeTruthy();
+  });
+
+  it("F-012 completes an empty stale session and computes fresh candidates that appeared later", async () => {
+    const initial = createEmptySnapshot({ appVersion: "0.1.0", localDeviceId: "device-1", timeZone: "UTC", now });
+    const repository = repositoryWithSnapshot({
+      ...initial,
+      tasks: [task("later")],
+      reviewSessions: [{ id: "empty-session", localDate: "2026-08-03", orderedTaskIds: [], currentIndex: 0, visitedTaskIds: [], answeredTaskIds: [], actionEventIds: [], startedAt: "2026-08-03T08:00:00.000Z", updatedAt: "2026-08-03T08:00:00.000Z" }],
+    });
+
+    render(<TodayReviewPage calendar={calendar} createId={() => "fresh-session"} now={() => now} repository={repository} />);
+
+    expect(await screen.findByText("タスク later")).toBeTruthy();
+    await waitFor(async () => {
+      const persisted = await repository.load();
+      expect(persisted.reviewSessions).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "empty-session", completedAt: now }),
+        expect.objectContaining({ id: "fresh-session", orderedTaskIds: ["later"] }),
+      ]));
+    });
+  });
+
+  it.each([
+    ["task_rescheduled", { dueMode: "scheduled", dueAt: "2026-08-03T23:59:00.000Z" }, "今日やる"],
+    ["task_rescheduled", { dueMode: "scheduled", dueAt: "2026-08-10T23:59:00.000Z" }, "日付を変えた"],
+    ["task_marked_no_due", { dueMode: "none" }, "期限なし"],
+    ["task_dismissed", { dueMode: "scheduled", dueAt: "2026-08-02T23:59:00.000Z" }, "今回は閉じる"],
+  ] as const)("F-015 shows the latest session-owned %s answer rather than a generic task status", async (action, changes, label) => {
+    const initial = createEmptySnapshot({ appVersion: "0.1.0", localDeviceId: "device-1", timeZone: "UTC", now });
+    const current = task("one", changes);
+    const repository = repositoryWithSnapshot({
+      ...initial,
+      tasks: [current],
+      reviewSessions: [{ id: "session-1", localDate: "2026-08-03", orderedTaskIds: ["one"], currentIndex: 0, visitedTaskIds: ["one"], answeredTaskIds: ["one"], actionEventIds: ["event-1"], startedAt: now, updatedAt: now }],
+      actionHistory: [{ id: "event-1", entityType: "task", entityId: "one", action, after: { dueAt: current.dueAt, dueMode: current.dueMode }, occurredAt: now }],
+    });
+
+    render(<TodayReviewPage calendar={calendar} now={() => now} repository={repository} />);
+
+    expect(await screen.findByText(`現在: ${label}`)).toBeTruthy();
   });
 });

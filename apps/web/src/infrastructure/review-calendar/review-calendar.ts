@@ -12,7 +12,12 @@ export function createReviewCalendar(timeZone: string): ReviewCalendar {
       return Math.sign(Date.parse(left) - Date.parse(right));
     },
     elapsedDays(from, to) {
-      return Math.floor((Date.parse(to) - Date.parse(from)) / 86_400_000);
+      return dayNumber(local.today(to)) - dayNumber(local.today(from));
     },
   };
+}
+
+function dayNumber(date: string): number {
+  const [year, month, day] = date.split("-").map(Number);
+  return Date.UTC(year!, month! - 1, day!) / 86_400_000;
 }

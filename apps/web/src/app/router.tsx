@@ -42,6 +42,7 @@ export const router = createBrowserRouter([
       })),
       { path: "inbox/:captureId", element: <TaskCandidateRoute /> },
       { path: "today/result", element: <ReviewResultPage repository={applicationRepository} /> },
+      { path: "tasks/:taskId", element: <TaskCorrectionRoute /> },
     ],
   },
 ]);
@@ -81,4 +82,9 @@ function TaskCandidateRoute() {
 function TodayReviewRoute() {
   const navigate = useNavigate();
   return <TodayReviewPage onFinished={() => navigate("/today/result")} repository={applicationRepository} />;
+}
+
+function TaskCorrectionRoute() {
+  const { taskId } = useParams();
+  return <section aria-labelledby="task-correction-title"><h1 id="task-correction-title">タスクを修正</h1><p>タスクID: {taskId}</p></section>;
 }

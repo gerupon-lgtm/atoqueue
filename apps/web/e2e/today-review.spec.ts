@@ -35,11 +35,14 @@ test("processes three tasks one at a time, re-answers a previous task, and shows
     savedAt: now,
   });
 
-  await page.setViewportSize({ width: 320, height: 640 });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/today");
   await expect(page.getByRole("heading", { name: "今日の確認" })).toBeVisible();
   await expect(page.getByText("確認タスク one")).toBeVisible();
   await expect(page.getByRole("button", { name: "← 前のタスク" })).toBeDisabled();
+  const titleBox = await page.getByRole("heading", { name: "今日の確認" }).boundingBox();
+  expect(titleBox).not.toBeNull();
+  expect(Math.abs((titleBox!.x + titleBox!.width / 2) - 640)).toBeLessThan(2);
 
   await page.getByRole("button", { name: "完了" }).click();
   await expect(page.getByText("確認タスク two")).toBeVisible();
@@ -66,6 +69,8 @@ test("processes three tasks one at a time, re-answers a previous task, and shows
     .poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("atoqueue:data:v1") ?? "{}").actionHistory.map((event: { action: string }) => event.action)))
     .toEqual(["task_completed", "task_rescheduled", "task_marked_no_due", "task_marked_no_due", "task_marked_no_due"]);
 
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await expect(page.getByRole("heading", { name: "今日の確認結果" })).toBeVisible();
+  await page.getByRole("link", { name: "確認タスク oneを修正" }).click();
+  await expect(page.getByRole("heading", { name: "タスクを修正" })).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 640 });
+  await expect(page.getByRole("heading", { name: "タスクを修正" })).toBeVisible();
 });

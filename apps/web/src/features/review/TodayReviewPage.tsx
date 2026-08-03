@@ -15,6 +15,7 @@ import {
 } from "../../../../../packages/domain/src";
 import { createReviewCalendar } from "../../infrastructure/review-calendar/review-calendar";
 import { ReviewActionSheet } from "./ReviewActionSheet";
+import { createReviewPresentation, latestSessionAnswer } from "./review-presentation";
 import "./TodayReviewPage.css";
 
 export interface TodayReviewPageProps {
@@ -47,15 +48,19 @@ export function TodayReviewPage({
         const loaded = await repository.load();
         const selectedCalendar = reviewCalendar ?? createReviewCalendar(loaded.settings.timeZone);
         const unfinished = [...loaded.reviewSessions].reverse().find((candidate) => !candidate.completedAt);
-        if (unfinished) {
+        if (unfinished && unfinished.orderedTaskIds.length > 0 && currentReviewTask({ session: unfinished, tasks: loaded.tasks })) {
           if (active) {
             setSnapshot(loaded);
             setSession(unfinished);
           }
           return;
         }
-        const started = startReviewSession({ sessionId: createId(), now: now(), calendar: selectedCalendar, tasks: loaded.tasks });
-        const next = { ...loaded, reviewSessions: [...loaded.reviewSessions, started], savedAt: now() };
+        const timestamp = now();
+        const started = startReviewSession({ sessionId: createId(), now: timestamp, calendar: selectedCalendar, tasks: loaded.tasks });
+        const completedSessions = unfinished
+          ? loaded.reviewSessions.map((candidate) => candidate.id === unfinished.id ? { ...candidate, completedAt: timestamp, updatedAt: timestamp } : candidate)
+          : loaded.reviewSessions;
+        const next = { ...loaded, reviewSessions: [...completedSessions, started], savedAt: timestamp };
         await repository.save(next);
         if (active) {
           setSnapshot(next);
@@ -124,7 +129,8 @@ export function TodayReviewPage({
   }
 
   const level = calculateNeglectLevel({ ...task, now: now(), calendar: selectedCalendar });
-  const priorAnswer = session.answeredTaskIds.includes(task.id) ? actionLabelForTask(task) : undefined;
+  const presentation = createReviewPresentation({ task, now: now(), calendar: selectedCalendar });
+  const priorAnswer = latestSessionAnswer({ actionEventIds: session.actionEventIds, events: snapshot.actionHistory, taskId: task.id, now: now(), calendar: selectedCalendar });
   return (
     <section aria-labelledby="today-review-title">
       <header className="reviewHeader" data-testid="review-header">
@@ -135,24 +141,14 @@ export function TodayReviewPage({
       <article aria-label="確認するタスク" className="reviewTaskCard">
         <p>{choosePrompt(level).message}</p>
         <h2>{task.title}</h2>
-        <p>{dueLabel(task.dueMode)}</p>
+        <p>{presentation.deadline}</p>
+        <p>{presentation.elapsed}</p>
         {priorAnswer ? <p>現在: {priorAnswer}</p> : null}
         <ReviewActionSheet disabled={isSaving} onAnswer={(action) => void answer(action)} onReschedule={(date) => void answer("reschedule", date)} />
       </article>
       {error ? <p role="alert">{error}</p> : null}
     </section>
   );
-}
-
-function dueLabel(dueMode: "unset" | "scheduled" | "none"): string {
-  return dueMode === "scheduled" ? "期限あり" : dueMode === "none" ? "期限なし" : "期限未設定";
-}
-
-function actionLabelForTask(task: { status: string; dueMode: string }): string {
-  if (task.status === "completed") return "完了";
-  if (task.status === "archived") return "不要";
-  if (task.dueMode === "none") return "期限なし";
-  return "更新済み";
 }
 
 function defaultCreateId(): string {
