@@ -18,3 +18,10 @@ export class PersistenceError extends Error {
     this.name = "PersistenceError";
   }
 }
+
+export class AlreadyClassifiedError extends Error {
+  constructor(captureId: string) {
+    super(`Capture has already been classified: ${captureId}`);
+    this.name = "AlreadyClassifiedError";
+  }
+}
