@@ -27,4 +27,10 @@ describe("production API build", () => {
     expect(executed).toHaveLength(1);
     expect(executed[0]).toContain("CREATE TABLE IF NOT EXISTS device_subscriptions");
   }, 20_000);
+
+  it("can import the compiled production startup without resolving workspace TypeScript source", () => {
+    buildApi();
+    const entry = new URL("../dist/start.js", import.meta.url).href;
+    execFileSync(process.execPath, ["--input-type=module", "--eval", `import(${JSON.stringify(entry)})`], { cwd: repositoryRoot, stdio: "pipe" });
+  }, 20_000);
 });
