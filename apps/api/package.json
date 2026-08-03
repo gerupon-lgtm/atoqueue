@@ -7,7 +7,7 @@
     "dev": "node --watch --experimental-strip-types src/server.ts",
     "test": "vitest --run",
     "typecheck": "tsc --noEmit",
-    "build": "tsc"
+    "build": "tsc && node ./scripts/copy-migrations.mjs"
   },
   "dependencies": {
     "@atoqueue/contracts": "workspace:*",

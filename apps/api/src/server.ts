@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import type { Pool } from "pg";
-import { loadConfig } from "./config.js";
-import { PWA_ORIGIN } from "./config.js";
+import pino from "pino";
+import { loadConfig, PWA_ORIGIN } from "./config.js";
 import { createDatabasePool } from "./db/connection.js";
 import { applyInitialMigration } from "./db/migrate.js";
 import { ApiError } from "./errors/api-error.js";
@@ -17,6 +17,11 @@ export interface BuildAppOptions {
   repository?: DeviceRepository;
   logger?: { write(line: string): void };
   allowedOrigin?: string;
+  health?: HealthPort;
+}
+
+export interface HealthPort {
+  check(): Promise<void>;
 }
 
 export interface ProductionApp {
@@ -24,13 +29,14 @@ export interface ProductionApp {
   pool: Pool;
 }
 
-export function buildApp({ version, publicPushKey = "test-public-key", repository = new InMemoryDeviceRepository(), logger, allowedOrigin = PWA_ORIGIN }: BuildAppOptions) {
+export function buildApp({ version, publicPushKey = "test-public-key", repository = new InMemoryDeviceRepository(), logger, allowedOrigin = PWA_ORIGIN, health = { check: async () => undefined } }: BuildAppOptions) {
   const app = Fastify({ bodyLimit: 16 * 1024, logger: false, trustProxy: ["127.0.0.1", "::1"] });
   installRequestContext(app);
   const deviceRateLimiter = installSecurity(app, allowedOrigin);
 
   app.addHook("onResponse", async (request, reply) => {
-    logger?.write(JSON.stringify({ requestId: request.requestId, method: request.method, statusCode: reply.statusCode }));
+    const durationMs = Number(process.hrtime.bigint() - request.requestStartedAt) / 1_000_000;
+    logger?.write(JSON.stringify({ requestId: request.requestId, method: request.method, statusCode: reply.statusCode, durationMs }));
   });
 
   app.setErrorHandler((error, request, reply) => {
@@ -47,11 +53,14 @@ export function buildApp({ version, publicPushKey = "test-public-key", repositor
     });
   });
 
-  app.get("/healthz", () => ({
-    status: "ok",
-    version,
-    time: new Date().toISOString(),
-  }));
+  app.get("/healthz", async (_request, reply) => {
+    try {
+      await health.check();
+      return { status: "ok", version, time: new Date().toISOString() };
+    } catch {
+      return reply.code(503).send({ status: "unhealthy", version, time: new Date().toISOString() });
+    }
+  });
 
   registerDeviceRoutes(app, { publicPushKey, deviceService: new DeviceService(repository, undefined, deviceRateLimiter) });
 
@@ -63,8 +72,16 @@ export async function buildProductionApp(input: { version: string; environment?:
   const config = loadConfig(input.environment);
   const pool = createDatabasePool(config);
   await applyInitialMigration(pool);
+  const productionLogger = pino({ level: config.logLevel, base: undefined });
   return {
-    app: buildApp({ version: input.version, publicPushKey: config.vapidPublicKey, repository: new PgDeviceRepository(pool), allowedOrigin: config.allowedOrigin }),
+    app: buildApp({
+      version: input.version,
+      publicPushKey: config.vapidPublicKey,
+      repository: new PgDeviceRepository(pool),
+      allowedOrigin: config.allowedOrigin,
+      logger: { write: (line) => productionLogger.info(JSON.parse(line)) },
+      health: { check: async () => { await pool.query("SELECT 1"); } },
+    }),
     pool,
   };
 }
