@@ -33,24 +33,43 @@ function snapshot(): AppSnapshot {
 describe("local backup", () => {
   it("F-017 round-trips user data while excluding push credentials and notification delivery state", async () => {
     const original = snapshot();
-    const backup = await createBackup(original);
+    const backup = await createBackup(original, "2026-08-04T10:00:00.000Z");
     const parsed = JSON.parse(backup) as Record<string, unknown>;
 
+    expect(parsed).toMatchObject({
+      format: "atoqueue-backup",
+      version: 1,
+      exportedAt: "2026-08-04T10:00:00.000Z",
+      appVersion: "0.1.0",
+    });
+    expect(parsed).toHaveProperty("payload");
+    expect(parsed).not.toHaveProperty("data");
     expect(backup).not.toContain("secret");
     expect(backup).not.toContain("server-device");
     expect(parsed).not.toHaveProperty("device");
     expect(backup).not.toContain("old-outbox");
     expect(backup).not.toContain("old-reminder");
 
-    const restored = await restoreBackup({ current: createEmptySnapshot({ appVersion: "0.1.0", localDeviceId: "new-local", timeZone: "Asia/Tokyo", now }), serialized: backup, now, idFactory: (kind) => `new-${kind}` });
+    let id = 0;
+    const restored = await restoreBackup({
+      current: original,
+      serialized: backup,
+      now,
+      idFactory: (kind) => `new-${kind}-${++id}`,
+    });
     expect(restored.captures).toEqual(original.captures);
     expect(restored.tasks).toEqual(original.tasks);
     expect(restored.reviewSessions).toEqual(original.reviewSessions);
     expect(restored.actionHistory).toEqual([...original.actionHistory, expect.objectContaining({ action: "backup_restored" })]);
     expect(restored.settings).toEqual(original.settings);
-    expect(restored.device.localDeviceId).toBe("new-local");
-    expect(restored.notificationOutbox).toEqual([expect.objectContaining({ id: "new-outbox", reminderId: "new-reminder", taskRevision: 3 })]);
-    expect(restored.reminderMap).toEqual([expect.objectContaining({ reminderId: "new-reminder", taskId: "task-1" })]);
+    expect(restored.device.localDeviceId).toBe("local-device");
+    expect(restored.notificationOutbox).toEqual([
+      expect.objectContaining({ id: "new-outbox-1", operation: "cancel", reminderId: "old-reminder", taskRevision: 3 }),
+      expect.objectContaining({ id: "new-outbox-3", operation: "upsert", reminderId: "new-reminder-2", taskRevision: 3 }),
+    ]);
+    expect(JSON.stringify(restored.notificationOutbox)).not.toContain("task-1");
+    expect(JSON.stringify(restored.notificationOutbox)).not.toContain("牛乳を買う");
+    expect(restored.reminderMap).toEqual([expect.objectContaining({ reminderId: "new-reminder-2", taskId: "task-1" })]);
   });
 
   it("F-018 rejects an altered backup before a replacement can happen", async () => {
@@ -67,8 +86,8 @@ describe("local backup", () => {
     const backup = await createBackup(snapshot());
     await expect(inspectBackup(backup.replace("atoqueue-backup", "unknown"))).rejects.toThrow("format");
 
-    const document = JSON.parse(backup) as { data: { tasks: Array<{ sourceCaptureId: string }> } };
-    document.data.tasks[0]!.sourceCaptureId = "missing-capture";
+    const document = JSON.parse(backup) as { payload: { tasks: Array<{ sourceCaptureId: string }> } };
+    document.payload.tasks[0]!.sourceCaptureId = "missing-capture";
     const invalidReferences = JSON.stringify(document);
     await expect(inspectBackup(invalidReferences)).rejects.toThrow("checksum");
   });

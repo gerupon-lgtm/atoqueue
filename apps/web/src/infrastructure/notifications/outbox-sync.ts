@@ -73,6 +73,9 @@ async function persist(repository: AppRepository, snapshot: AppSnapshot, savedAt
 }
 
 function isStale(item: NotificationOutboxItem, snapshot: AppSnapshot): boolean {
+  // Restore deliberately removes obsolete mappings after queuing their anonymous cancels.
+  // DELETE is idempotent, so a cancel must still reach the server without a local mapping.
+  if (item.operation === "cancel") return false;
   const mapping = snapshot.reminderMap.find((entry) => entry.reminderId === item.reminderId);
   if (!mapping) return true;
   const task = snapshot.tasks.find((candidate) => candidate.id === mapping.taskId);

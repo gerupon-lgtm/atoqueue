@@ -39,6 +39,25 @@ describe("flushOutbox", () => {
     expect((await cancelling.load()).reminderMap).toEqual([]);
   });
 
+  it("sends a restore cancellation even after its local reminder mapping was replaced", async () => {
+    const snapshot = snapshotWithOutbox("cancel");
+    snapshot.reminderMap = [];
+    const repository = memory(snapshot);
+    const cancelled: string[] = [];
+
+    await flushOutbox({
+      repository,
+      now: () => now,
+      api: {
+        upsert: async () => undefined,
+        cancel: async (item) => { cancelled.push(item.reminderId); },
+      },
+    });
+
+    expect(cancelled).toEqual(["22222222-2222-4222-8222-222222222222"]);
+    expect((await repository.load()).notificationOutbox).toEqual([]);
+  });
+
   it("recovers documented error codes without retrying a successful missing cancel", async () => {
     const lostDevice = memory(snapshotWithOutbox());
     const stale = await flushOutbox({ repository: lostDevice, now: () => now, api: { upsert: async () => { throw new NotificationApiError(404, undefined, "DEVICE_NOT_FOUND"); }, cancel: async () => undefined } });

@@ -20,7 +20,9 @@ export interface BackupData {
 export interface BackupDocument {
   format: typeof BACKUP_FORMAT;
   version: typeof BACKUP_VERSION;
-  data: BackupData;
+  exportedAt: string;
+  appVersion: string;
+  payload: BackupData;
   checksum: string;
 }
 
@@ -44,8 +46,8 @@ export interface RestoreBackupInput {
 }
 
 /** Produces a portable, checksum-protected document without device or Push state. */
-export async function createBackup(snapshot: AppSnapshot): Promise<string> {
-  const data: BackupData = {
+export async function createBackup(snapshot: AppSnapshot, exportedAt = new Date().toISOString()): Promise<string> {
+  const payload: BackupData = {
     schemaVersion: snapshot.schemaVersion,
     appVersion: snapshot.appVersion,
     settings: snapshot.settings,
@@ -55,7 +57,7 @@ export async function createBackup(snapshot: AppSnapshot): Promise<string> {
     actionHistory: snapshot.actionHistory,
     savedAt: snapshot.savedAt,
   };
-  const unsigned = { format: BACKUP_FORMAT, version: BACKUP_VERSION, data };
+  const unsigned = { format: BACKUP_FORMAT, version: BACKUP_VERSION, exportedAt, appVersion: snapshot.appVersion, payload };
   const checksum = await checksumFor(unsigned);
   return canonicalJson({ ...unsigned, checksum });
 }
@@ -69,13 +71,22 @@ export async function inspectBackup(serialized: string): Promise<BackupInspectio
     throw new CorruptDataError("Backup is not valid JSON.");
   }
   const document = documentFrom(raw);
-  const expected = await checksumFor({ format: document.format, version: document.version, data: document.data });
+  const expected = await checksumFor({
+    format: document.format,
+    version: document.version,
+    exportedAt: document.exportedAt,
+    appVersion: document.appVersion,
+    payload: document.payload,
+  });
   if (document.checksum !== expected) throw new CorruptDataError("Backup checksum does not match.");
 
-  validateData(document.data);
+  if (document.appVersion !== document.payload.appVersion) {
+    throw new CorruptDataError("Backup app version does not match its payload.");
+  }
+  validateData(document.payload);
   return {
-    data: document.data,
-    counts: countsFor(document.data),
+    data: document.payload,
+    counts: countsFor(document.payload),
   };
 }
 
@@ -86,7 +97,7 @@ export async function inspectBackup(serialized: string): Promise<BackupInspectio
 export async function restoreBackup(input: RestoreBackupInput): Promise<AppSnapshot> {
   const inspection = await inspectBackup(input.serialized);
   const restored = snapshotFromData(inspection.data, input.current.device);
-  const delivery = rebuildReminderDelivery(restored.tasks, input.now, input.idFactory);
+  const delivery = rebuildReminderDelivery(input.current.reminderMap, restored.tasks, input.now, input.idFactory);
   const event: ActionEvent = {
     id: idFor(input, "action"),
     entityType: "backup",
@@ -113,7 +124,9 @@ function documentFrom(value: unknown): BackupDocument {
   if (!isRecord(value)) throw new CorruptDataError("Backup document must be an object.");
   if (value.format !== BACKUP_FORMAT) throw new CorruptDataError("Backup format is not supported.");
   if (value.version !== BACKUP_VERSION) throw new CorruptDataError("Backup version is not supported.");
-  if (!isRecord(value.data)) throw new CorruptDataError("Backup data must be an object.");
+  if (typeof value.exportedAt !== "string") throw new CorruptDataError("Backup export time is missing.");
+  if (typeof value.appVersion !== "string") throw new CorruptDataError("Backup app version is missing.");
+  if (!isRecord(value.payload)) throw new CorruptDataError("Backup payload must be an object.");
   if (typeof value.checksum !== "string") throw new CorruptDataError("Backup checksum is missing.");
   return value as unknown as BackupDocument;
 }
@@ -160,10 +173,19 @@ function validateReferences(snapshot: AppSnapshot): void {
   }
 }
 
-function rebuildReminderDelivery(tasks: AppSnapshot["tasks"], now: string, idFactory?: RestoreBackupInput["idFactory"]): {
+function rebuildReminderDelivery(previousMappings: AppSnapshot["reminderMap"], tasks: AppSnapshot["tasks"], now: string, idFactory?: RestoreBackupInput["idFactory"]): {
   notificationOutbox: NotificationOutboxItem[];
   reminderMap: ReminderMapEntry[];
 } {
+  const notificationOutbox: NotificationOutboxItem[] = previousMappings.map((mapping) => ({
+    id: idFactory?.("outbox") ?? randomId(),
+    operation: "cancel",
+    reminderId: mapping.reminderId,
+    taskRevision: mapping.taskRevision,
+    attemptCount: 0,
+    nextAttemptAt: now,
+    createdAt: now,
+  }));
   return tasks.filter((task) => task.status === "active").reduce<{ notificationOutbox: NotificationOutboxItem[]; reminderMap: ReminderMapEntry[] }>((result, task) => {
     const reminderId = idFactory?.("reminder") ?? randomId();
     result.reminderMap.push({ reminderId, taskId: task.id, taskRevision: task.revision, createdAt: now });
@@ -179,7 +201,7 @@ function rebuildReminderDelivery(tasks: AppSnapshot["tasks"], now: string, idFac
       createdAt: now,
     });
     return result;
-  }, { notificationOutbox: [], reminderMap: [] });
+  }, { notificationOutbox, reminderMap: [] });
 }
 
 function countsFor(data: BackupData): BackupCounts {
