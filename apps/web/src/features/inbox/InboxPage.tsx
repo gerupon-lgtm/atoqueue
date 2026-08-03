@@ -71,7 +71,8 @@ export function InboxPage({
       const next = updateCaptureBody(await repository.load(), captureId, body, now());
       await repository.save(next);
       setBodyDrafts((drafts) => {
-        const { [captureId]: _discarded, ...remaining } = drafts;
+        const remaining = { ...drafts };
+        delete remaining[captureId];
         return remaining;
       });
       await reload();

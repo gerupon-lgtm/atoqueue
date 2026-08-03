@@ -13,12 +13,13 @@ export interface TaskCandidateSuggestion {
  */
 export function generateTaskCandidate(body: string): TaskCandidateSuggestion {
   const dueChoice = dueChoiceFromBody(body);
+  const category = categoryFromBody(body);
   const title = stripDateExpression(body).trim() || body.trim();
 
   return {
     title,
     ...(dueChoice ? { dueChoice } : {}),
-    ...(categoryFromBody(body) ? { category: categoryFromBody(body) } : {}),
+    ...(category ? { category } : {}),
   };
 }
 
