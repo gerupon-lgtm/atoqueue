@@ -6,10 +6,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
       manifest: {
-        name: "縺ゅ→繧ｭ繝･繝ｼ",
-        short_name: "縺ゅ→繧ｭ繝･繝ｼ",
+        name: "あとキュー",
+        short_name: "あとキュー",
         lang: "ja",
         start_url: "/",
         display: "standalone",

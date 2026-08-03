@@ -8,11 +8,11 @@ type PageDefinition = {
 };
 
 const pages: PageDefinition[] = [
-  { index: true, label: "險倬鹸" },
-  { path: "inbox", label: "蜿嶺ｿ｡邂ｱ" },
-  { path: "today", label: "莉頑律" },
-  { path: "tasks", label: "繧ｿ繧ｹ繧ｯ" },
-  { path: "settings", label: "險ｭ螳啻" },
+  { index: true, label: "記録" },
+  { path: "inbox", label: "受信箱" },
+  { path: "today", label: "今日" },
+  { path: "tasks", label: "タスク" },
+  { path: "settings", label: "設定" },
 ];
 
 export const router = createBrowserRouter([

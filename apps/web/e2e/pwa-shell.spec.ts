@@ -1,20 +1,21 @@
 import { expect, test } from "@playwright/test";
 
 const navigation = [
-  ["/", "險倬鹸"],
-  ["/inbox", "蜿嶺ｿ｡邂ｱ"],
-  ["/today", "莉頑律"],
-  ["/tasks", "繧ｿ繧ｹ繧ｯ"],
-  ["/settings", "險ｭ螳啻"],
+  ["/", "記録", "✎"],
+  ["/inbox", "受信箱", "▣"],
+  ["/today", "今日", "☀"],
+  ["/tasks", "タスク", "✓"],
+  ["/settings", "設定", "⚙"],
 ] as const;
 
 test.describe("PWA shell", () => {
   test("serves every primary route with labeled current navigation", async ({ page }) => {
-    for (const [path, label] of navigation) {
+    for (const [path, label, icon] of navigation) {
       await page.goto(path);
 
       const currentLink = page.getByRole("link", { name: label });
       await expect(currentLink).toHaveAttribute("aria-current", "page");
+      await expect(currentLink.locator('[aria-hidden="true"]')).toHaveText(icon);
     }
   });
 
@@ -29,6 +30,22 @@ test.describe("PWA shell", () => {
       await expect(link).toBeFocused();
       await expect(link).toHaveCSS("outline-style", "solid");
     }
+  });
+
+  test("uses bottom navigation below 768px and a left rail at 768px or wider", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 767, height: 800 });
+    await page.goto("/");
+    const nav = page.getByRole("navigation", { name: "主要ナビゲーション" });
+    await expect(nav).toHaveCSS("flex-direction", "row");
+    await expect(page.getByRole("link", { name: "記録" })).toHaveCSS(
+      "min-height",
+      "44px",
+    );
+
+    await page.setViewportSize({ width: 768, height: 800 });
+    await expect(nav).toHaveCSS("flex-direction", "column");
   });
 
   test("reloads the visited shell while offline", async ({ context, page }) => {
@@ -50,7 +67,7 @@ test.describe("PWA shell", () => {
     await context.setOffline(true);
     await page.reload();
 
-    await expect(page.getByRole("link", { name: "險倬鹸" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "記録" })).toBeVisible();
   });
 
   test("publishes an installable standalone Japanese manifest", async ({ page }) => {
@@ -67,8 +84,8 @@ test.describe("PWA shell", () => {
     }, manifestUrl);
 
     expect(manifest).toMatchObject({
-      name: "縺ゅ→繧ｭ繝･繝ｼ",
-      short_name: "縺ゅ→繧ｭ繝･繝ｼ",
+      name: "あとキュー",
+      short_name: "あとキュー",
       lang: "ja",
       start_url: "/",
       display: "standalone",
