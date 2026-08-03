@@ -97,4 +97,32 @@ describe("local backup", () => {
     const invalidReferences = JSON.stringify(document);
     await expect(inspectBackup(invalidReferences)).rejects.toThrow("checksum");
   });
+
+  it("F-018 rejects duplicate entity IDs before restoring a checksum-valid backup", async () => {
+    const invalidCapture = snapshot();
+    invalidCapture.captures.push({ ...invalidCapture.captures[0]! });
+    const invalidTask = snapshot();
+    invalidTask.tasks.push({ ...invalidTask.tasks[0]! });
+    const invalidSession = snapshot();
+    invalidSession.reviewSessions.push({ ...invalidSession.reviewSessions[0]! });
+
+    for (const [invalid, message] of [
+      [invalidCapture, "Duplicate capture ID"],
+      [invalidTask, "Duplicate task ID"],
+      [invalidSession, "Duplicate review session ID"],
+    ] as const) {
+      const backup = await createBackup(invalid);
+      await expect(inspectBackup(backup)).rejects.toThrow(message);
+      await expect(restoreBackup({ current: snapshot(), serialized: backup, now })).rejects.toThrow(message);
+    }
+  });
+
+  it("F-018 rejects non-date timestamps before restoring a checksum-valid backup", async () => {
+    const invalid = snapshot();
+    invalid.tasks[0] = { ...invalid.tasks[0]!, nextReviewAt: "not-a-date" };
+    const backup = await createBackup(invalid);
+
+    await expect(inspectBackup(backup)).rejects.toThrow("Task next review time");
+    await expect(restoreBackup({ current: snapshot(), serialized: backup, now })).rejects.toThrow("Task next review time");
+  });
 });

@@ -1,5 +1,7 @@
 import { createBrowserRouter, useLocation, useNavigate, useParams } from "react-router-dom";
 import { LocalStorageRepository } from "../infrastructure/local-storage/local-storage-repository";
+import { createNotificationSyncService } from "../application/notification-sync-service";
+import { NotificationApi } from "../infrastructure/notifications/notification-api";
 import { QuickCapturePage } from "../features/capture/QuickCapturePage";
 import { InboxPage } from "../features/inbox/InboxPage";
 import { TaskCandidatePage } from "../features/inbox/TaskCandidatePage";
@@ -25,6 +27,10 @@ const pages: PageDefinition[] = [
 ];
 
 const applicationRepository = new LocalStorageRepository(window.localStorage);
+const notificationSync = createNotificationSyncService({
+  repository: applicationRepository,
+  api: new NotificationApi("https://api.atoqueue.sikumilab.com"),
+});
 
 export const router = createBrowserRouter([
   {
@@ -42,7 +48,7 @@ export const router = createBrowserRouter([
         ) : page.path === "tasks" ? (
           <TaskListPage repository={applicationRepository} />
         ) : page.path === "settings" ? (
-          <SettingsPage repository={applicationRepository} />
+          <SettingsPage flushNotifications={() => notificationSync.flushAfterRestore()} repository={applicationRepository} />
         ) : (
           <Page title={page.label} />
         ),

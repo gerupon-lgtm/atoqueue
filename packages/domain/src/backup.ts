@@ -85,6 +85,7 @@ export async function inspectBackup(serialized: string): Promise<BackupInspectio
   if (document.appVersion !== document.payload.appVersion) {
     throw new CorruptDataError("Backup app version does not match its payload.");
   }
+  validateUtcTimestamp(document.exportedAt, "Backup export time");
   validateData(document.payload);
   return {
     data: document.payload,
@@ -134,6 +135,10 @@ function documentFrom(value: unknown): BackupDocument {
 }
 
 function validateData(data: BackupData): void {
+  if (!isRecord(data.device) || typeof data.device.localDeviceId !== "string" || Object.keys(data.device).length !== 1) {
+    throw new CorruptDataError("Backup device must contain only localDeviceId.");
+  }
+  validateBackupEntityIds(data);
   // Reuse the storage schema validator, with intentionally blank non-portable state.
   const snapshot = migrateSnapshot({
     ...data,
@@ -142,6 +147,13 @@ function validateData(data: BackupData): void {
     reminderMap: [],
   });
   validateReferences(snapshot);
+}
+
+function validateBackupEntityIds(data: BackupData): void {
+  if (Array.isArray(data.captures)) assertUniqueIds(data.captures, "capture");
+  if (Array.isArray(data.tasks)) assertUniqueIds(data.tasks, "task");
+  if (Array.isArray(data.reviewSessions)) assertUniqueIds(data.reviewSessions, "review session");
+  if (Array.isArray(data.actionHistory)) assertUniqueIds(data.actionHistory, "action event");
 }
 
 function snapshotFromData(data: BackupData, device: AppSnapshot["device"]): AppSnapshot {
@@ -154,24 +166,65 @@ function snapshotFromData(data: BackupData, device: AppSnapshot["device"]): AppS
 }
 
 function validateReferences(snapshot: AppSnapshot): void {
+  assertUniqueIds(snapshot.captures, "capture");
+  assertUniqueIds(snapshot.tasks, "task");
+  assertUniqueIds(snapshot.reviewSessions, "review session");
+  assertUniqueIds(snapshot.actionHistory, "action event");
+  validateUtcTimestamp(snapshot.savedAt, "Backup saved time");
   const captureIds = new Set(snapshot.captures.map((capture) => capture.id));
   const taskIds = new Set(snapshot.tasks.map((task) => task.id));
   const actionIds = new Set(snapshot.actionHistory.map((event) => event.id));
   for (const task of snapshot.tasks) {
+    validateUtcTimestamp(task.createdAt, "Task creation time");
+    validateUtcTimestamp(task.updatedAt, "Task update time");
+    validateUtcTimestamp(task.nextReviewAt, "Task next review time");
+    if (task.dueAt) validateUtcTimestamp(task.dueAt, "Task due time");
+    if (task.lastPromptedAt) validateUtcTimestamp(task.lastPromptedAt, "Task last prompt time");
+    if (task.completedAt) validateUtcTimestamp(task.completedAt, "Task completion time");
+    if (task.archivedAt) validateUtcTimestamp(task.archivedAt, "Task archive time");
     if (!captureIds.has(task.sourceCaptureId)) throw new CorruptDataError("Task references an unknown capture.");
   }
   for (const capture of snapshot.captures) {
+    validateUtcTimestamp(capture.createdAt, "Capture creation time");
+    validateUtcTimestamp(capture.updatedAt, "Capture update time");
+    if (capture.classifiedAt) validateUtcTimestamp(capture.classifiedAt, "Capture classification time");
     if (capture.linkedTaskId && !taskIds.has(capture.linkedTaskId)) throw new CorruptDataError("Capture references an unknown task.");
   }
   for (const session of snapshot.reviewSessions) {
+    validateLocalDate(session.localDate, "Review date");
+    validateUtcTimestamp(session.startedAt, "Review start time");
+    validateUtcTimestamp(session.updatedAt, "Review update time");
+    if (session.completedAt) validateUtcTimestamp(session.completedAt, "Review completion time");
     if (session.orderedTaskIds.some((id) => !taskIds.has(id)) || session.visitedTaskIds.some((id) => !taskIds.has(id))) {
       throw new CorruptDataError("Review session references an unknown task.");
     }
     if (session.actionEventIds.some((id) => !actionIds.has(id))) throw new CorruptDataError("Review session references an unknown action.");
   }
   for (const event of snapshot.actionHistory) {
+    validateUtcTimestamp(event.occurredAt, "Action time");
     if (event.entityType === "capture" && !captureIds.has(event.entityId)) throw new CorruptDataError("Action references an unknown capture.");
     if (event.entityType === "task" && !taskIds.has(event.entityId)) throw new CorruptDataError("Action references an unknown task.");
+  }
+}
+
+function assertUniqueIds(items: Array<{ id: string }>, label: string): void {
+  const ids = new Set<string>();
+  for (const item of items) {
+    if (ids.has(item.id)) throw new CorruptDataError(`Duplicate ${label} ID.`);
+    ids.add(item.id);
+  }
+}
+
+function validateUtcTimestamp(value: string, label: string): void {
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp) || new Date(timestamp).toISOString() !== value) {
+    throw new CorruptDataError(`${label} must be an ISO 8601 UTC timestamp.`);
+  }
+}
+
+function validateLocalDate(value: string, label: string): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) !== value) {
+    throw new CorruptDataError(`${label} must be an ISO 8601 date.`);
   }
 }
 
