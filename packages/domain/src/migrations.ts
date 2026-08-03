@@ -40,7 +40,113 @@ export function migrateSnapshot(input: unknown): AppSnapshot {
   entities(snapshot.reminderMap, "reminderMap", reminderMapEntry);
   string(snapshot.savedAt, "savedAt");
 
-  return snapshot as unknown as AppSnapshot;
+  return normalizeSnapshot(snapshot);
+}
+
+function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
+  const normalized = copyKnown(snapshot, ["schemaVersion", "appVersion", "savedAt"]);
+  const normalizedDevice = copyKnown(object(snapshot.device, "device"), [
+    "localDeviceId",
+    "pushDeviceId",
+    "pushDeviceSecret",
+    "pushSubscriptionStatus",
+    "registeredAt",
+  ]);
+  const settingsValue = object(snapshot.settings, "settings");
+  const normalizedSettings = copyKnown(settingsValue, [
+    "locale",
+    "timeZone",
+    "notificationEnabled",
+    "weeklyReviewDay",
+  ]);
+  if (settingsValue.quietHours !== undefined) {
+    normalizedSettings.quietHours = copyKnown(
+      object(settingsValue.quietHours, "settings.quietHours"),
+      ["start", "end"],
+    );
+  }
+
+  normalized.device = normalizedDevice;
+  normalized.settings = normalizedSettings;
+  normalized.captures = normalizedEntities(snapshot.captures, [
+    "id",
+    "body",
+    "classification",
+    "createdAt",
+    "updatedAt",
+    "classifiedAt",
+    "linkedTaskId",
+  ]);
+  normalized.tasks = normalizedEntities(snapshot.tasks, [
+    "id",
+    "sourceCaptureId",
+    "title",
+    "category",
+    "status",
+    "dueMode",
+    "dueAt",
+    "nextReviewAt",
+    "undecidedCount",
+    "dismissCount",
+    "postponeCount",
+    "lastPromptedAt",
+    "completedAt",
+    "archivedAt",
+    "createdAt",
+    "updatedAt",
+    "revision",
+  ]);
+  normalized.reviewSessions = normalizedEntities(snapshot.reviewSessions, [
+    "id",
+    "localDate",
+    "orderedTaskIds",
+    "currentIndex",
+    "visitedTaskIds",
+    "answeredTaskIds",
+    "startedAt",
+    "updatedAt",
+    "completedAt",
+  ]);
+  normalized.actionHistory = normalizedEntities(snapshot.actionHistory, [
+    "id",
+    "entityType",
+    "entityId",
+    "action",
+    "before",
+    "after",
+    "occurredAt",
+  ]);
+  normalized.notificationOutbox = normalizedEntities(snapshot.notificationOutbox, [
+    "id",
+    "operation",
+    "reminderId",
+    "scheduledAt",
+    "notificationType",
+    "taskRevision",
+    "attemptCount",
+    "nextAttemptAt",
+    "createdAt",
+  ]);
+  normalized.reminderMap = normalizedEntities(snapshot.reminderMap, [
+    "reminderId",
+    "taskId",
+    "taskRevision",
+    "createdAt",
+  ]);
+
+  return normalized as unknown as AppSnapshot;
+}
+
+function normalizedEntities(value: unknown, fields: readonly string[]): RecordValue[] {
+  return (value as unknown[]).map((entry) => copyKnown(object(entry, "entity"), fields));
+}
+
+function copyKnown(value: RecordValue, fields: readonly string[]): RecordValue {
+  return Object.fromEntries(
+    fields
+      .filter((field) => value[field] !== undefined)
+      .map((field) => [field, value[field]]),
+  );
 }
 
 function device(value: unknown): void {

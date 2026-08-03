@@ -128,6 +128,72 @@ describe("LocalStorageRepository persistence failures", () => {
     setItem.mockRestore();
     expect(window.localStorage.getItem(DATA_KEY)).toBe(existing);
   });
+
+  it("backs up and preserves malformed existing data when save is attempted", async () => {
+    const existing = "{not-json";
+    window.localStorage.setItem(DATA_KEY, existing);
+
+    await expect(
+      new LocalStorageRepository(window.localStorage).save(sampleSnapshot()),
+    ).rejects.toBeInstanceOf(CorruptDataError);
+
+    expect(window.localStorage.getItem(DATA_KEY)).toBe(existing);
+    expect(window.localStorage.getItem("atoqueue:corrupt:2026-08-03T00:00:00.000Z")).toBe(
+      existing,
+    );
+  });
+
+  it("preserves an unknown existing schema version when save is attempted", async () => {
+    const existing = JSON.stringify({ schemaVersion: 2 });
+    window.localStorage.setItem(DATA_KEY, existing);
+
+    await expect(
+      new LocalStorageRepository(window.localStorage).save(sampleSnapshot()),
+    ).rejects.toBeInstanceOf(UnsupportedSchemaVersionError);
+
+    expect(window.localStorage.getItem(DATA_KEY)).toBe(existing);
+  });
+
+  it("does not re-persist derived or unknown fields from stored snapshots", async () => {
+    const storedSnapshot = {
+      ...sampleSnapshot(),
+      overdue: true,
+      unrecognizedRootValue: "remove me",
+      tasks: [
+        {
+          id: "task-1",
+          sourceCaptureId: "capture-1",
+          title: "買い物",
+          status: "active",
+          dueMode: "scheduled",
+          dueAt: "2026-08-02T00:00:00.000Z",
+          nextReviewAt: "2026-08-03T00:00:00.000Z",
+          undecidedCount: 0,
+          dismissCount: 0,
+          postponeCount: 0,
+          createdAt: "2026-08-01T00:00:00.000Z",
+          updatedAt: "2026-08-01T00:00:00.000Z",
+          revision: 1,
+          neglectLevel: 3,
+          unrecognizedTaskValue: "remove me",
+        },
+      ],
+    };
+    window.localStorage.setItem(DATA_KEY, JSON.stringify(storedSnapshot));
+    const repository = new LocalStorageRepository(window.localStorage);
+
+    await repository.save(await repository.load());
+
+    const persisted = JSON.parse(window.localStorage.getItem(DATA_KEY) ?? "") as {
+      overdue?: unknown;
+      unrecognizedRootValue?: unknown;
+      tasks: Array<{ neglectLevel?: unknown; unrecognizedTaskValue?: unknown }>;
+    };
+    expect(persisted.overdue).toBeUndefined();
+    expect(persisted.unrecognizedRootValue).toBeUndefined();
+    expect(persisted.tasks[0]?.neglectLevel).toBeUndefined();
+    expect(persisted.tasks[0]?.unrecognizedTaskValue).toBeUndefined();
+  });
 });
 
 function sampleSnapshot(): AppSnapshot {

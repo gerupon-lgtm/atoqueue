@@ -3,6 +3,7 @@ import {
   createEmptySnapshot,
   migrateSnapshot,
   PersistenceError,
+  UnsupportedSchemaVersionError,
   type AppRepository,
   type AppSnapshot,
 } from "../../../../../packages/domain/src/index";
@@ -44,23 +45,22 @@ export class LocalStorageRepository implements AppRepository {
       });
     }
 
-    try {
-      return migrateSnapshot(JSON.parse(stored));
-    } catch (error) {
-      if (error instanceof CorruptDataError || error instanceof SyntaxError) {
-        this.backUpCorruptValue(stored);
-        throw new CorruptDataError("Stored application data is corrupt.");
-      }
-      throw error;
-    }
+    return this.parseStoredSnapshot(stored);
   }
 
   async save(next: AppSnapshot): Promise<void> {
     try {
+      const existing = this.storage.getItem(DATA_KEY);
+      if (existing !== null) this.parseStoredSnapshot(existing);
       const serialized = JSON.stringify(migrateSnapshot(next));
       this.storage.setItem(DATA_KEY, serialized);
     } catch (error) {
-      if (error instanceof CorruptDataError) throw error;
+      if (
+        error instanceof CorruptDataError ||
+        error instanceof UnsupportedSchemaVersionError
+      ) {
+        throw error;
+      }
       throw new PersistenceError("Unable to persist application data.", {
         cause: error,
       });
@@ -92,6 +92,18 @@ export class LocalStorageRepository implements AppRepository {
       this.storage.setItem(`atoqueue:corrupt:${this.now()}`, value);
     } catch {
       // The original data remains untouched even when its backup cannot be written.
+    }
+  }
+
+  private parseStoredSnapshot(value: string): AppSnapshot {
+    try {
+      return migrateSnapshot(JSON.parse(value));
+    } catch (error) {
+      if (error instanceof CorruptDataError || error instanceof SyntaxError) {
+        this.backUpCorruptValue(value);
+        throw new CorruptDataError("Stored application data is corrupt.");
+      }
+      throw error;
     }
   }
 }
