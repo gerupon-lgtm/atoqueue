@@ -1,0 +1,908 @@
+<!doctype html>
+<html>
+  <head>
+    <title>atoqueue_idea_sketch.md</title>
+    <meta http-equiv="Content-type" content="text/html;charset=UTF-8" />
+
+    <style>
+      /* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+      /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+      body {
+        font-family: var(
+          --vscode-markdown-font-family,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe WPC",
+          "Segoe UI",
+          "Ubuntu",
+          "Droid Sans",
+          sans-serif
+        );
+        font-size: var(--vscode-markdown-font-size, 14px);
+        padding: 0 26px;
+        line-height: var(--vscode-markdown-line-height, 22px);
+        word-wrap: break-word;
+      }
+
+      #code-csp-warning {
+        position: fixed;
+        top: 0;
+        right: 0;
+        color: white;
+        margin: 16px;
+        text-align: center;
+        font-size: 12px;
+        font-family: sans-serif;
+        background-color: #444444;
+        cursor: pointer;
+        padding: 6px;
+        box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.25);
+      }
+
+      #code-csp-warning:hover {
+        text-decoration: none;
+        background-color: #007acc;
+        box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.25);
+      }
+
+      body.scrollBeyondLastLine {
+        margin-bottom: calc(100vh - 22px);
+      }
+
+      body.showEditorSelection .code-line {
+        position: relative;
+      }
+
+      body.showEditorSelection .code-active-line:before,
+      body.showEditorSelection .code-line:hover:before {
+        content: "";
+        display: block;
+        position: absolute;
+        top: 0;
+        left: -12px;
+        height: 100%;
+      }
+
+      body.showEditorSelection li.code-active-line:before,
+      body.showEditorSelection li.code-line:hover:before {
+        left: -30px;
+      }
+
+      .vscode-light.showEditorSelection .code-active-line:before {
+        border-left: 3px solid rgba(0, 0, 0, 0.15);
+      }
+
+      .vscode-light.showEditorSelection .code-line:hover:before {
+        border-left: 3px solid rgba(0, 0, 0, 0.4);
+      }
+
+      .vscode-light.showEditorSelection .code-line .code-line:hover:before {
+        border-left: none;
+      }
+
+      .vscode-dark.showEditorSelection .code-active-line:before {
+        border-left: 3px solid rgba(255, 255, 255, 0.4);
+      }
+
+      .vscode-dark.showEditorSelection .code-line:hover:before {
+        border-left: 3px solid rgba(255, 255, 255, 0.6);
+      }
+
+      .vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+        border-left: none;
+      }
+
+      .vscode-high-contrast.showEditorSelection .code-active-line:before {
+        border-left: 3px solid rgba(255, 160, 0, 0.7);
+      }
+
+      .vscode-high-contrast.showEditorSelection .code-line:hover:before {
+        border-left: 3px solid rgba(255, 160, 0, 1);
+      }
+
+      .vscode-high-contrast.showEditorSelection
+        .code-line
+        .code-line:hover:before {
+        border-left: none;
+      }
+
+      img {
+        max-width: 100%;
+        max-height: 100%;
+      }
+
+      a {
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      a:focus,
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: 1px solid -webkit-focus-ring-color;
+        outline-offset: -1px;
+      }
+
+      hr {
+        border: 0;
+        height: 2px;
+        border-bottom: 2px solid;
+      }
+
+      h1 {
+        padding-bottom: 0.3em;
+        line-height: 1.2;
+        border-bottom-width: 1px;
+        border-bottom-style: solid;
+      }
+
+      h1,
+      h2,
+      h3 {
+        font-weight: normal;
+      }
+
+      table {
+        border-collapse: collapse;
+      }
+
+      table > thead > tr > th {
+        text-align: left;
+        border-bottom: 1px solid;
+      }
+
+      table > thead > tr > th,
+      table > thead > tr > td,
+      table > tbody > tr > th,
+      table > tbody > tr > td {
+        padding: 5px 10px;
+      }
+
+      table > tbody > tr + tr > td {
+        border-top: 1px solid;
+      }
+
+      blockquote {
+        margin: 0 7px 0 5px;
+        padding: 0 16px 0 10px;
+        border-left-width: 5px;
+        border-left-style: solid;
+      }
+
+      code {
+        font-family:
+          Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace,
+          "Droid Sans Fallback";
+        font-size: 1em;
+        line-height: 1.357em;
+      }
+
+      body.wordWrap pre {
+        white-space: pre-wrap;
+      }
+
+      pre:not(.hljs),
+      pre.hljs code > div {
+        padding: 16px;
+        border-radius: 3px;
+        overflow: auto;
+      }
+
+      pre code {
+        color: var(--vscode-editor-foreground);
+        tab-size: 4;
+      }
+
+      /** Theming */
+
+      .vscode-light pre {
+        background-color: rgba(220, 220, 220, 0.4);
+      }
+
+      .vscode-dark pre {
+        background-color: rgba(10, 10, 10, 0.4);
+      }
+
+      .vscode-high-contrast pre {
+        background-color: rgb(0, 0, 0);
+      }
+
+      .vscode-high-contrast h1 {
+        border-color: rgb(0, 0, 0);
+      }
+
+      .vscode-light table > thead > tr > th {
+        border-color: rgba(0, 0, 0, 0.69);
+      }
+
+      .vscode-dark table > thead > tr > th {
+        border-color: rgba(255, 255, 255, 0.69);
+      }
+
+      .vscode-light h1,
+      .vscode-light hr,
+      .vscode-light table > tbody > tr + tr > td {
+        border-color: rgba(0, 0, 0, 0.18);
+      }
+
+      .vscode-dark h1,
+      .vscode-dark hr,
+      .vscode-dark table > tbody > tr + tr > td {
+        border-color: rgba(255, 255, 255, 0.18);
+      }
+    </style>
+
+    <style>
+      /* Tomorrow Theme */
+      /* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+      /* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+      /* Tomorrow Comment */
+      .hljs-comment,
+      .hljs-quote {
+        color: #8e908c;
+      }
+
+      /* Tomorrow Red */
+      .hljs-variable,
+      .hljs-template-variable,
+      .hljs-tag,
+      .hljs-name,
+      .hljs-selector-id,
+      .hljs-selector-class,
+      .hljs-regexp,
+      .hljs-deletion {
+        color: #c82829;
+      }
+
+      /* Tomorrow Orange */
+      .hljs-number,
+      .hljs-built_in,
+      .hljs-builtin-name,
+      .hljs-literal,
+      .hljs-type,
+      .hljs-params,
+      .hljs-meta,
+      .hljs-link {
+        color: #f5871f;
+      }
+
+      /* Tomorrow Yellow */
+      .hljs-attribute {
+        color: #eab700;
+      }
+
+      /* Tomorrow Green */
+      .hljs-string,
+      .hljs-symbol,
+      .hljs-bullet,
+      .hljs-addition {
+        color: #718c00;
+      }
+
+      /* Tomorrow Blue */
+      .hljs-title,
+      .hljs-section {
+        color: #4271ae;
+      }
+
+      /* Tomorrow Purple */
+      .hljs-keyword,
+      .hljs-selector-tag {
+        color: #8959a8;
+      }
+
+      .hljs {
+        display: block;
+        overflow-x: auto;
+        color: #4d4d4c;
+        padding: 0.5em;
+      }
+
+      .hljs-emphasis {
+        font-style: italic;
+      }
+
+      .hljs-strong {
+        font-weight: bold;
+      }
+    </style>
+
+    <style>
+      /*
+ * Markdown PDF CSS
+ */
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu",
+          "Droid Sans", sans-serif, "Meiryo";
+        padding: 0 12px;
+      }
+
+      pre {
+        background-color: #f8f8f8;
+        border: 1px solid #cccccc;
+        border-radius: 3px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+      }
+
+      pre:not(.hljs) {
+        padding: 23px;
+        line-height: 19px;
+      }
+
+      blockquote {
+        background: rgba(127, 127, 127, 0.1);
+        border-color: rgba(0, 122, 204, 0.5);
+      }
+
+      .emoji {
+        height: 1.4em;
+      }
+
+      code {
+        font-size: 14px;
+        line-height: 19px;
+      }
+
+      /* for inline code */
+      :not(pre):not(.hljs) > code {
+        color: #c9ae75; /* Change the old color so it seems less like an error */
+        font-size: inherit;
+      }
+
+      /* Page Break : use <div class="page"/> or <div class="page"></div> to insert page break
+-------------------------------------------------------- */
+      .page {
+        page-break-after: always;
+      }
+    </style>
+
+    <script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+  </head>
+  <body>
+    <script>
+      mermaid.initialize({
+        startOnLoad: true,
+        theme:
+          document.body.classList.contains("vscode-dark") ||
+          document.body.classList.contains("vscode-high-contrast")
+            ? "dark"
+            : "default",
+      });
+    </script>
+    <h1 id="構想たたき台-あとキュー仮称--思いつきを逃さずあとで行動に戻すpwa">
+      構想たたき台: あとキュー（仮称） — 思いつきを逃さず、あとで行動に戻すPWA
+    </h1>
+    <table>
+      <thead>
+        <tr>
+          <th>作成日</th>
+          <th>作成者</th>
+          <th>状態</th>
+          <th>名称</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>2026-08-03</td>
+          <td></td>
+          <td>構想段階（フィードバック募集中）</td>
+          <td>【想定】あとキュー（仮称。正式名称は要件定義で確定）</td>
+        </tr>
+      </tbody>
+    </table>
+    <blockquote>
+      <p>
+        ⚠
+        この資料は思いつき段階のたたき台です。【想定】は作成者の仮置き、【要確認】は未確定事項を示します。<br />
+        「あとキュー」は議論のための仮称です。「あとで扱うキュー」と、適切な時に行動のきっかけ（cue）を出す役割を表しています。
+      </p>
+    </blockquote>
+    <h2 id="1-一言でいうと">1. 一言でいうと</h2>
+    <p>
+      作業中や日常生活で浮かんだ用事・気づき・アイデアを、スマホやPCから数秒で退避できる個人向けPWAです。保存したメモをあとから解析し、「いつ・何をすればよいか」というタスク候補に変換して、適切なタイミングで提案します。
+    </p>
+    <h2 id="2-背景課題">2. 背景・課題</h2>
+    <p>
+      仕事に集中している最中でも、「別件のアイデアを思いついた」「猫の餌を買う必要がある」「冷蔵庫の食材の賞味期限が近い」といった、今すぐ取り組む必要はないものの忘れたくない情報が突然浮かびます。
+    </p>
+    <p>
+      その場で別のタスク管理アプリを開き、分類・期限・優先度まで入力しようとすると、現在の作業への集中が切れます。一方で「あとで登録しよう」と考えるだけでは、思いつき自体を忘れて後悔します。通常のメモアプリへ残しても、見返されず、行動につながらないことがあります。
+    </p>
+    <p>
+      必要なのは高機能なタスク管理を最初から行うことではなく、次の2段階を分ける仕組みです。
+    </p>
+    <ol>
+      <li><strong>今は数秒で逃がす</strong>：入力時に整理を要求しない</li>
+      <li>
+        <strong>あとで行動に戻す</strong
+        >：内容を整理し、タスク候補や確認時期を提案する
+      </li>
+    </ol>
+    <h2 id="3-提案するアイデア">3. 提案するアイデア</h2>
+    <p>
+      「あとキュー」は、入力時の負担を極力減らした受信箱と、あとから整理する提案画面を持ちます。
+    </p>
+    <pre><code class="language-mermaid"><div class="mermaid">flowchart LR
+    A["ふと気づく"] --> B["スマホのホーム画面／PCショートカットから起動"]
+    B --> C["一文だけ入力して保存"]
+    C --> D["受信箱へ退避"]
+    D --> E["内容からタスク候補・期限・分類を提案"]
+    E --> F{"本人が確認"}
+    F -->|採用・編集| G["タスクとして管理"]
+    F -->|メモのまま| H["アイデア／記録として保持"]
+    F -->|不要| I["破棄・アーカイブ"]
+    G --> J["適切な時に再提案"]
+</div></code></pre>
+    <h3 id="mvpのコア体験">MVPのコア体験</h3>
+    <ul>
+      <li>
+        スマホではホーム画面、PCではデスクトップ・タスクバー等のショートカットからPWAを起動する
+      </li>
+      <li>
+        起動直後から入力欄へカーソルが入り、一文入力してEnterまたは保存ボタンで退避できる
+      </li>
+      <li>保存完了を短く表示し、そのまま閉じてもデータが失われない</li>
+      <li>入力した内容は端末内のlocalStorageに保存し、オフラインでも使える</li>
+      <li>受信箱の内容から「タスク名・期限・カテゴリ」の候補を生成する</li>
+      <li>
+        自動生成した内容を勝手に確定せず、本人が採用・編集・メモのまま保持・破棄を選べる
+      </li>
+      <li>
+        未整理のメモや期限の近いタスクを、アプリを開いた時や設定した見直し時刻にサジェストする
+      </li>
+    </ul>
+    <h3 id="入力例と提案例">入力例と提案例</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>入力した一文</th>
+          <th>あとキューからの提案</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>猫の餌が残り少ない</td>
+          <td>「猫の餌を買う」／カテゴリ: 買い物／期限: 【要確認】</td>
+        </tr>
+        <tr>
+          <td>豆腐の賞味期限が明日</td>
+          <td>「豆腐を使う、または状態を確認する」／期限: 明日</td>
+        </tr>
+        <tr>
+          <td>会議資料に比較表を入れると分かりやすそう</td>
+          <td>「会議資料へ比較表を追加する」／カテゴリ: 仕事</td>
+        </tr>
+        <tr>
+          <td>旅行先で使えそうなアプリを思いついた</td>
+          <td>タスク化せず「アイデア」として保持する候補も提示</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="4-想定ユーザーと利用シーン">4. 想定ユーザーと利用シーン</h2>
+    <h3 id="想定ユーザー">想定ユーザー</h3>
+    <p>
+      【想定】仕事と私生活の両方で複数のことを並行しており、思いつきを忘れたくない個人。最初は自分専用の利用を想定し、チーム共有や他者への割り当ては扱いません。
+    </p>
+    <h3 id="利用シーンa仕事中の割り込み">利用シーンA：仕事中の割り込み</h3>
+    <p>
+      資料作成中に、別プロジェクトの改善案を思いつきます。PCのショートカットから「あとキュー」を開き、一文だけ入力して保存します。分類はその場で行わず、すぐ資料作成へ戻ります。休憩時に受信箱を開くと、仕事カテゴリのタスク候補が表示されます。
+    </p>
+    <h3 id="利用シーンb家庭内の気づき">利用シーンB：家庭内の気づき</h3>
+    <p>
+      朝、猫の餌が少ないことに気づきます。スマホのホーム画面から起動して「猫の餌があと2日分」と保存します。夕方の見直し時に「今日の買い物に追加しますか？」と提案され、採用すると買い物タスクになります。
+    </p>
+    <h2 id="5-主要機能の候補">5. 主要機能の候補</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>機能</th>
+          <th>概要</th>
+          <th>優先度（ラフ）</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>クイックキャプチャ</td>
+          <td>起動直後に一文を入力し、最小操作で保存</td>
+          <td>核</td>
+        </tr>
+        <tr>
+          <td>ローカル保存</td>
+          <td>メモ、タスク、設定をlocalStorageへ保持</td>
+          <td>核</td>
+        </tr>
+        <tr>
+          <td>PWA対応</td>
+          <td>スマホのホーム画面、PCのショートカットから起動</td>
+          <td>核</td>
+        </tr>
+        <tr>
+          <td>オフライン利用</td>
+          <td>ネット接続がなくても入力・閲覧できる</td>
+          <td>核</td>
+        </tr>
+        <tr>
+          <td>受信箱</td>
+          <td>未整理のメモを一覧し、処理待ちを見失わない</td>
+          <td>核</td>
+        </tr>
+        <tr>
+          <td>タスク候補生成</td>
+          <td>メモから行動、期限、カテゴリを抽出して候補表示</td>
+          <td>核</td>
+        </tr>
+        <tr>
+          <td>確認・編集フロー</td>
+          <td>候補の採用、修正、メモ保持、破棄を選択</td>
+          <td>核</td>
+        </tr>
+        <tr>
+          <td>今日のサジェスト</td>
+          <td>期限、未整理期間、カテゴリ等から確認候補を表示</td>
+          <td>核</td>
+        </tr>
+        <tr>
+          <td>完了・アーカイブ</td>
+          <td>終わったものと保留中のものを区別</td>
+          <td>核</td>
+        </tr>
+        <tr>
+          <td>通知</td>
+          <td>設定時刻や期限に端末通知を出す</td>
+          <td>あれば</td>
+        </tr>
+        <tr>
+          <td>音声入力</td>
+          <td>手が離せない時に声で退避する</td>
+          <td>あれば</td>
+        </tr>
+        <tr>
+          <td>検索・タグ</td>
+          <td>過去のメモやアイデアを探す</td>
+          <td>あれば</td>
+        </tr>
+        <tr>
+          <td>エクスポート／インポート</td>
+          <td>JSON等でバックアップ・端末移行</td>
+          <td>あれば（MVP後半）</td>
+        </tr>
+        <tr>
+          <td>アカウント・同期</td>
+          <td>スマホとPCで同じデータを共有</td>
+          <td>将来</td>
+        </tr>
+        <tr>
+          <td>クラウドDB</td>
+          <td>ユーザーごとに安全にデータを保存</td>
+          <td>将来</td>
+        </tr>
+        <tr>
+          <td>外部カレンダー連携</td>
+          <td>期限付きタスクを予定へ反映</td>
+          <td>将来</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="6-実現方式の選択肢">6. 実現方式の選択肢</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>案</th>
+          <th>概要</th>
+          <th>良い点</th>
+          <th>気になる点</th>
+          <th>ざっくり規模感</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>松：アカウント・クラウド同期・AIを含むフル開発</td>
+          <td>PWA、認証、クラウドDB、端末間同期、AI解析、通知まで一体で構築</td>
+          <td>最初からスマホとPCで同じデータを使える。将来像に近い</td>
+          <td>
+            認証、同期競合、セキュリティ、運用費の検討が必要。検証前の投資が大きい
+          </td>
+          <td>【想定】2〜4か月以上</td>
+        </tr>
+        <tr>
+          <td>竹：local-first PWA＋限定的な解析API</td>
+          <td>
+            保存の主軸はlocalStorage。必要な時だけ安全な中継APIを通してAI解析
+          </td>
+          <td>MVPの軽さを保ちながら、高品質な候補生成を試せる</td>
+          <td>
+            入力内容が外部へ送られる場合の同意とプライバシー設計が必要。API費用が発生
+          </td>
+          <td>【想定】3〜6週間</td>
+        </tr>
+        <tr>
+          <td>梅：端末内完結のPWA</td>
+          <td>
+            localStorageとルールベース解析で、日付・カテゴリ・行動語を抽出
+          </td>
+          <td>低コストで早く作れ、オフライン・プライバシー面に強い</td>
+          <td>自由文の理解力には限界がある。端末間同期はできない</td>
+          <td>【想定】1〜3週間</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="現時点の推奨">現時点の推奨</h3>
+    <p>
+      まずは<strong>梅案</strong>で、「本当に数秒で残せるか」「あとからの提案が役に立つか」を検証します。候補生成の精度が価値のボトルネックだと分かった時点で竹案へ進み、継続利用が確認できたら松案のアカウント・同期基盤を検討します。
+    </p>
+    <p>
+      ブラウザへAIサービスの秘密鍵を直接埋め込む方式は採用しません。AI解析を追加する場合は、秘密鍵を保護できる中継APIを用意します。
+    </p>
+    <h2 id="7-期待効果とリスク懸念">7. 期待効果とリスク・懸念</h2>
+    <h3 id="期待効果">期待効果</h3>
+    <ul>
+      <li>
+        【想定】思いつきの退避を5〜10秒程度で終え、元の作業へ戻りやすくする
+      </li>
+      <li>「覚えておかなければ」という心理的負担を下げる</li>
+      <li>メモを見返すだけで終わらせず、具体的な行動へつなげる</li>
+      <li>仕事と日常の気づきを一つの受信箱へ集め、抜け漏れを減らす</li>
+      <li>タスクにしにくいアイデアも、無理に行動へ変換せず残せる</li>
+    </ul>
+    <h3 id="リスク懸念">リスク・懸念</h3>
+    <ul>
+      <li>
+        localStorageだけではスマホとPCのデータが同期されず、端末故障やブラウザデータ削除で失われる
+      </li>
+      <li>入力のたびに分類を求めると、手軽さという価値が失われる</li>
+      <li>
+        自動タスク化の誤りや過剰な通知が続くと、サジェスト自体を無視するようになる
+      </li>
+      <li>PWAのインストール方法や通知機能はOS・ブラウザごとに差がある</li>
+      <li>
+        仕事上の機密情報や私生活の内容をAIへ送る場合、明確な説明と同意が必要になる
+      </li>
+      <li>
+        端末を複数使うユーザーにとって、MVPの端末別データが分かりにくい可能性がある
+      </li>
+    </ul>
+    <h2 id="8-フィードバックをもらいたい点">8. フィードバックをもらいたい点</h2>
+    <ol>
+      <li>
+        MVPの自動整理は、端末内の簡易ルールで始めるか、最初からAI解析用の中継APIまで用意するか？<br />
+        → 開発規模、候補生成の精度、入力内容のプライバシー説明が変わります。
+      </li>
+      <li>
+        サジェストの主な入口を「アプリを開いた時の今日画面」にするか、決まった時刻の通知にするか？<br />
+        → 通知権限やOS差への対応範囲と、利用習慣の作り方が変わります。
+      </li>
+      <li>
+        localStorage版でも、早期にエクスポート／インポートを用意するか？<br />
+        → MVPの開発量は増えますが、データ消失と端末移行の不安を軽減できます。
+      </li>
+    </ol>
+    <h2 id="補助メモrequirements-definition-への申し送り">
+      補助メモ（requirements-definition への申し送り）
+    </h2>
+    <h3 id="初回価値と重大な行き止まり">初回価値と重大な行き止まり</h3>
+    <ul>
+      <li>
+        最初の成果：インストール後、説明を読まなくても一文を保存し、受信箱で確認できる
+      </li>
+      <li>
+        到達を妨げる前提：MVPではアカウントや初期データを不要とする。PWA未インストールでもブラウザから利用可能にする
+      </li>
+      <li>
+        安全な中断・復帰：入力途中で閉じた場合の下書き保持は【要確認】。保存済みデータは次回起動時に受信箱から再開できる
+      </li>
+      <li>
+        通知を許可しない場合：通知なしでも「今日」画面から主要フローを完走できるようにする
+      </li>
+    </ul>
+    <h3 id="要件定義で決めるライフサイクル">要件定義で決めるライフサイクル</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>対象リソース</th>
+          <th>未決の観点</th>
+          <th>決定する工程</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>キャプチャメモ</td>
+          <td>
+            下書き、保存、整理済み、アーカイブ、削除、復元の状態と保持期間
+          </td>
+          <td>requirements-definition</td>
+        </tr>
+        <tr>
+          <td>タスク候補</td>
+          <td>自動生成の契機、確信度、再提案、却下後の扱い</td>
+          <td>requirements-definition</td>
+        </tr>
+        <tr>
+          <td>確定タスク</td>
+          <td>期限、繰り返し、完了、再開、延期、削除</td>
+          <td>requirements-definition</td>
+        </tr>
+        <tr>
+          <td>通知</td>
+          <td>通知頻度、スヌーズ、許可拒否時の代替、過剰通知の抑制</td>
+          <td>requirements-definition</td>
+        </tr>
+        <tr>
+          <td>ローカルデータ</td>
+          <td>容量上限、バックアップ、初期化、端末移行</td>
+          <td>requirements-definition</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="9-未確定事項と次のステップ">9. 未確定事項と次のステップ</h2>
+    <ul>
+      <li>
+        【要確認】ルールベース解析で検証を始めるか、初期版からAI解析を含めるか
+      </li>
+      <li>【要確認】サジェストの基本頻度と、通知を使う範囲</li>
+      <li>【要確認】MVPにバックアップ用エクスポート／インポートを含めるか</li>
+      <li>【要確認】入力途中の下書きを自動保存するか</li>
+      <li>【要確認】タスク候補の優先順位付けと、提案しない条件</li>
+      <li>
+        【要確認】PWAの主な対応対象（iOS、Android、Windows、macOSとブラウザ範囲）
+      </li>
+      <li>
+        次のステップ：この構想へのフィードバック反映 → 方向が固まったら
+        <code>requirements-definition</code> でMVP要件を確定 →
+        画面プロトタイプで「保存までの秒数」と「提案の納得感」を検証
+      </li>
+    </ul>
+    <h2 id="10-決定ログ追記専用">10. 決定ログ（追記専用）</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>決定日</th>
+          <th>項目</th>
+          <th>判断</th>
+          <th>理由</th>
+          <th>再検討の条件</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>2026-08-03</td>
+          <td>サービス名</td>
+          <td>仮称「あとキュー」を採用（他案：タスクポケット／Captodo）</td>
+          <td>呼び名を揃えて検討を進めるため。正式名称は未決</td>
+          <td>要件定義フェーズで再確認する</td>
+        </tr>
+        <tr>
+          <td>2026-08-03</td>
+          <td>提供形態</td>
+          <td>スマホのホーム画面とPCショートカットから使えるPWAを軸にする</td>
+          <td>場所を選ばず、起動の手間を減らしたいという要望に合う</td>
+          <td>ネイティブ固有機能が不可欠と判明したら</td>
+        </tr>
+        <tr>
+          <td>2026-08-03</td>
+          <td>MVPの保存先</td>
+          <td>localStorageを採用する</td>
+          <td>アカウント・DBなしでコア体験を早く検証できる</td>
+          <td>端末間同期またはデータ保全が継続利用の障害になったら</td>
+        </tr>
+        <tr>
+          <td>2026-08-03</td>
+          <td>自動タスク化</td>
+          <td>自動確定ではなく、候補を提示して本人が採用する</td>
+          <td>誤変換や不要なタスクの増殖を防ぐ</td>
+          <td>候補精度と利用者の信頼が十分に確認できたら</td>
+        </tr>
+        <tr>
+          <td>2026-08-03</td>
+          <td>アカウント・同期</td>
+          <td>将来案として保留</td>
+          <td>MVPの検証対象をクイック入力とサジェスト価値に絞る</td>
+          <td>複数端末利用の需要と継続利用が確認できたら</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="11-要件定義への引継ぎ">11. 要件定義への引継ぎ</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>種別</th>
+          <th>項目</th>
+          <th>状態</th>
+          <th>次工程</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>名称</td>
+          <td>サービス名「あとキュー」</td>
+          <td>【想定】仮称</td>
+          <td>要件定義で正式名称を再確認</td>
+        </tr>
+        <tr>
+          <td>対象</td>
+          <td>最初は個人利用。仕事と私生活の両方を扱う</td>
+          <td>【想定】</td>
+          <td>対象ユーザーと利用境界を確認</td>
+        </tr>
+        <tr>
+          <td>コア体験</td>
+          <td>今の作業を大きく中断せず、一文を数秒で退避する</td>
+          <td>確定</td>
+          <td>保存操作と成功基準を定義</td>
+        </tr>
+        <tr>
+          <td>提供形態</td>
+          <td>スマホ・PCから起動できるPWA</td>
+          <td>確定</td>
+          <td>対応OS・ブラウザを定義</td>
+        </tr>
+        <tr>
+          <td>保存</td>
+          <td>MVPはlocalStorageで端末内に保持</td>
+          <td>確定</td>
+          <td>データ構造、容量、削除、バックアップを定義</td>
+        </tr>
+        <tr>
+          <td>オフライン</td>
+          <td>入力・閲覧・整理の基本操作をオフライン対応</td>
+          <td>【想定】</td>
+          <td>Service Workerとキャッシュ範囲を定義</td>
+        </tr>
+        <tr>
+          <td>タスク化</td>
+          <td>メモから候補を作り、本人が確認して確定</td>
+          <td>確定</td>
+          <td>状態遷移、編集、却下、再提案を定義</td>
+        </tr>
+        <tr>
+          <td>解析方式</td>
+          <td>ルールベースまたは中継API経由のAI解析</td>
+          <td>【要確認】</td>
+          <td>MVPの方式とプライバシー条件を決定</td>
+        </tr>
+        <tr>
+          <td>サジェスト</td>
+          <td>期限・未整理期間などに基づいて再提示</td>
+          <td>【想定】</td>
+          <td>優先順位、頻度、抑制条件を定義</td>
+        </tr>
+        <tr>
+          <td>通知</td>
+          <td>設定時刻・期限に端末通知</td>
+          <td>【想定】MVP後半</td>
+          <td>通知なしでも成立する代替導線を定義</td>
+        </tr>
+        <tr>
+          <td>音声入力</td>
+          <td>手が離せない場面の補助入力</td>
+          <td>【想定】後続</td>
+          <td>対応ブラウザ、誤認識時の確認を定義</td>
+        </tr>
+        <tr>
+          <td>アカウント</td>
+          <td>ユーザー認証と端末間同期</td>
+          <td>【想定】将来</td>
+          <td>認証方式、移行、同期競合を定義</td>
+        </tr>
+        <tr>
+          <td>クラウドDB</td>
+          <td>複数端末で共有する永続データ基盤</td>
+          <td>【想定】将来</td>
+          <td>データ分離、暗号化、バックアップを定義</td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>
