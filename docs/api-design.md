@@ -162,6 +162,8 @@ Response `200` または `201`:
 
 禁止フィールド `title`、`body`、`taskId`、`category` を受け取った場合は無視せず `INVALID_REQUEST` とする。これにより誤って本文を送る実装を契約テストで検出する。
 
+予約PUTの冪等性記録は端末ID・予約ID・`Idempotency-Key`・要求フィンガープリント・予約応答だけを不変に保存する。後続の予約更新は過去の冪等性応答を変更しない。
+
 ### 5.7 DELETE /v1/reminders/:reminderId
 
 予約を取消す。端末認証必須。クエリ文字列に所有端末を明示する `deviceId`（UUID）を必須で指定する。例: `DELETE /v1/reminders/:reminderId?deviceId=<deviceId>`。成功は `204`。すでに配送済みの場合も将来予約は残らないため `204` とする（【想定】）。他端末の予約IDは存在を漏らさず `404`。

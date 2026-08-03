@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PgReminderRepository } from "./reminder-repository.js";
+import { InMemoryReminderRepository, PgReminderRepository } from "./reminder-repository.js";
 
 const input = {
   id: "4ec4032e-5a92-45fe-b5a7-6e2015f028e0",
@@ -28,9 +28,16 @@ describe("PgReminderRepository upsert conflict handling", () => {
       },
       release: () => undefined,
     };
+    let operationLookups = 0;
     const pool = {
       connect: async () => client,
-      query: async (sql: string) => sql.includes("idempotency_key") ? { rows: [row()] } : { rows: [] },
+      query: async (sql: string) => {
+        if (sql.includes("reminder_idempotency_operations")) {
+          operationLookups += 1;
+          return operationLookups === 1 ? { rows: [{ request_fingerprint: JSON.stringify({ id: input.id, scheduledAt: input.scheduledAt, notificationType: input.notificationType }), response_body: JSON.stringify(row()) }] } : { rows: [] };
+        }
+        return sql.includes("idempotency_key") ? { rows: [row()] } : { rows: [] };
+      },
     };
     const result = await new PgReminderRepository(pool as never).upsert(input);
     expect(result).toMatchObject({ kind: "replay", record: { id: input.id } });
@@ -51,5 +58,18 @@ describe("PgReminderRepository upsert conflict handling", () => {
     const pool = { connect: async () => client, query: async () => ({ rows: [] }) };
     await expect(new PgReminderRepository(pool as never).upsert(input)).resolves.toEqual({ kind: "missing" });
     expect(queries.join("\n")).not.toContain("UPDATE reminder_jobs SET scheduled_at");
+  });
+});
+
+describe("reminder idempotency history", () => {
+  it("replays A/key-1 after B/key-2 without reverting the current reminder", async () => {
+    const repository = new InMemoryReminderRepository();
+    const first = await repository.upsert(input);
+    const second = await repository.upsert({ ...input, scheduledAt: "2026-08-07T09:00:00.000Z", idempotencyKey: "key-2", now: "2026-08-04T09:00:00.000Z" });
+    const replay = await repository.upsert(input);
+    expect(first).toMatchObject({ kind: "created" });
+    expect(second).toMatchObject({ kind: "updated" });
+    expect(replay).toMatchObject({ kind: "replay", record: { scheduledAt: input.scheduledAt, updatedAt: input.now } });
+    expect(repository.get(input.id)).toMatchObject({ scheduledAt: "2026-08-07T09:00:00.000Z", idempotencyKey: "key-2" });
   });
 });

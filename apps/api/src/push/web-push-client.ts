@@ -7,10 +7,15 @@ export class WebPushClient implements PushClient {
   }
 
   async send(input: Parameters<PushClient["send"]>[0]): Promise<{ statusCode: number }> {
-    const result = await webpush.sendNotification(
-      { endpoint: input.subscription.endpoint, keys: { p256dh: input.subscription.p256dh, auth: input.subscription.auth } },
-      JSON.stringify(input.payload),
-    );
-    return { statusCode: result.statusCode };
+    try {
+      const result = await webpush.sendNotification(
+        { endpoint: input.subscription.endpoint, keys: { p256dh: input.subscription.p256dh, auth: input.subscription.auth } },
+        JSON.stringify(input.payload),
+      );
+      return { statusCode: result.statusCode };
+    } catch (error) {
+      if (typeof error === "object" && error !== null && typeof (error as { statusCode?: unknown }).statusCode === "number") return { statusCode: (error as { statusCode: number }).statusCode };
+      throw error;
+    }
   }
 }

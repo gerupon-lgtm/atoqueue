@@ -33,6 +33,17 @@ ON reminder_jobs(status, scheduled_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reminder_jobs_idempotency
 ON reminder_jobs(device_id, idempotency_key);
 
+CREATE TABLE IF NOT EXISTS reminder_idempotency_operations (
+  device_id TEXT NOT NULL,
+  reminder_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  request_fingerprint TEXT NOT NULL,
+  response_body TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (device_id, reminder_id, idempotency_key),
+  FOREIGN KEY (device_id) REFERENCES device_subscriptions(device_id)
+);
+
 CREATE TABLE IF NOT EXISTS device_idempotency_operations (
   device_id TEXT NOT NULL,
   operation TEXT NOT NULL,

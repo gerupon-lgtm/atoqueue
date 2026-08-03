@@ -40,6 +40,7 @@ export interface ReminderRepository {
 
 export class InMemoryReminderRepository implements ReminderRepository {
   private readonly jobs = new Map<string, ReminderRecord>();
+  private readonly operations = new Map<string, { fingerprint: string; record: ReminderRecord }>();
   private readonly devices = new Map<string, { status: "active" | "disabled"; subscription: PushSubscriptionRecord }>();
 
   seedDevice(input: { deviceId: string; status: "active" | "disabled"; subscription: PushSubscriptionRecord }): void { this.devices.set(input.deviceId, { ...input }); }
@@ -50,6 +51,8 @@ export class InMemoryReminderRepository implements ReminderRepository {
   device(deviceId: string): { status: "active" | "disabled"; subscription: PushSubscriptionRecord } | undefined { const device = this.devices.get(deviceId); return device && { ...device, subscription: { ...device.subscription } }; }
 
   async upsert(input: Omit<ReminderRecord, "status" | "attemptCount" | "claimedAt" | "sentAt" | "lastErrorCode" | "createdAt" | "updatedAt"> & { now: string }): Promise<UpsertResult> {
+    const operation = this.operations.get(operationKey(input));
+    if (operation) return operation.fingerprint === fingerprint(input) ? { kind: "replay", record: { ...operation.record } } : { kind: "conflict" };
     for (const job of this.jobs.values()) {
       if (job.deviceId !== input.deviceId || job.idempotencyKey !== input.idempotencyKey) continue;
       if (job.id === input.id && job.scheduledAt === input.scheduledAt && job.notificationType === input.notificationType) return { kind: "replay", record: { ...job } };
@@ -63,6 +66,7 @@ export class InMemoryReminderRepository implements ReminderRepository {
       lastErrorCode: null, createdAt: previous?.createdAt ?? input.now, updatedAt: input.now,
     };
     this.jobs.set(record.id, record);
+    this.operations.set(operationKey(input), { fingerprint: fingerprint(input), record: { ...record } });
     return { kind: previous ? "updated" : "created", record: { ...record } };
   }
 
@@ -106,6 +110,9 @@ export class PgReminderRepository implements ReminderRepository {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      const priorOperation = await client.query<{ request_fingerprint: string; response_body: string }>("SELECT request_fingerprint, response_body FROM reminder_idempotency_operations WHERE device_id=$1 AND reminder_id=$2 AND idempotency_key=$3 FOR UPDATE", [input.deviceId, input.id, input.idempotencyKey]);
+      const prior = priorOperation.rows[0];
+      if (prior) { await client.query("COMMIT"); return prior.request_fingerprint === fingerprint(input) ? { kind: "replay", record: JSON.parse(prior.response_body) as ReminderRecord } : { kind: "conflict" }; }
       const existingKey = await client.query<Row>("SELECT * FROM reminder_jobs WHERE device_id = $1 AND idempotency_key = $2 FOR UPDATE", [input.deviceId, input.idempotencyKey]);
       const sameKey = existingKey.rows[0];
       if (sameKey) {
@@ -118,7 +125,7 @@ export class PgReminderRepository implements ReminderRepository {
          VALUES ($1,$2,$3,$4,'pending',$5,0,NULL,NULL,NULL,$6,$6)
          ON CONFLICT DO NOTHING RETURNING *`, [input.id, input.deviceId, input.scheduledAt, input.notificationType, input.idempotencyKey, input.now],
       );
-      if (inserted.rows[0]) { await client.query("COMMIT"); return { kind: "created", record: rowToRecord(inserted.rows[0]) }; }
+      if (inserted.rows[0]) { const record = rowToRecord(inserted.rows[0]); await this.recordOperation(client, input, record); await client.query("COMMIT"); return { kind: "created", record }; }
       const keyAfterConflict = await client.query<Row>("SELECT * FROM reminder_jobs WHERE device_id = $1 AND idempotency_key = $2 FOR UPDATE", [input.deviceId, input.idempotencyKey]);
       const replay = keyAfterConflict.rows[0];
       if (replay) { await client.query("COMMIT"); return matchesRequest(replay, input) ? { kind: "replay", record: rowToRecord(replay) } : { kind: "conflict" }; }
@@ -129,8 +136,10 @@ export class PgReminderRepository implements ReminderRepository {
         `UPDATE reminder_jobs SET scheduled_at=$1, notification_type=$2, status='pending', idempotency_key=$3, attempt_count=0, claimed_at=NULL, sent_at=NULL, last_error_code=NULL, updated_at=$4
          WHERE id=$5 AND device_id=$6 RETURNING *`, [input.scheduledAt, input.notificationType, input.idempotencyKey, input.now, input.id, input.deviceId],
       );
+      const record = rowToRecord(result.rows[0]!);
+      await this.recordOperation(client, input, record);
       await client.query("COMMIT");
-      return { kind: "updated", record: rowToRecord(result.rows[0]!) };
+      return { kind: "updated", record };
     } catch (error) {
       await client.query("ROLLBACK");
       if (isUniqueViolation(error)) return this.resolveUniqueConflict(input);
@@ -164,6 +173,9 @@ export class PgReminderRepository implements ReminderRepository {
   async recoverStaleClaims(before: string, now: string): Promise<void> { await this.pool.query("UPDATE reminder_jobs SET status='pending', claimed_at=NULL, updated_at=$1 WHERE status='claimed' AND claimed_at < $2", [now, before]); }
 
   private async resolveUniqueConflict(input: Parameters<ReminderRepository["upsert"]>[0]): Promise<UpsertResult> {
+    const operation = await this.pool.query<{ request_fingerprint: string; response_body: string }>("SELECT request_fingerprint, response_body FROM reminder_idempotency_operations WHERE device_id=$1 AND reminder_id=$2 AND idempotency_key=$3", [input.deviceId, input.id, input.idempotencyKey]);
+    const operationRow = operation.rows[0];
+    if (operationRow) return operationRow.request_fingerprint === fingerprint(input) ? { kind: "replay", record: JSON.parse(operationRow.response_body) as ReminderRecord } : { kind: "conflict" };
     const sameKey = await this.pool.query<Row>("SELECT * FROM reminder_jobs WHERE device_id=$1 AND idempotency_key=$2", [input.deviceId, input.idempotencyKey]);
     const keyRecord = sameKey.rows[0];
     if (keyRecord) return matchesRequest(keyRecord, input) ? { kind: "replay", record: rowToRecord(keyRecord) } : { kind: "conflict" };
@@ -171,6 +183,10 @@ export class PgReminderRepository implements ReminderRepository {
     const idRecord = sameId.rows[0];
     if (!idRecord || idRecord.device_id !== input.deviceId) return { kind: "missing" };
     return matchesRequest(idRecord, input) ? { kind: "replay", record: rowToRecord(idRecord) } : { kind: "conflict" };
+  }
+
+  private async recordOperation(client: { query(sql: string, values: unknown[]): Promise<unknown> }, input: Parameters<ReminderRepository["upsert"]>[0], record: ReminderRecord): Promise<void> {
+    await client.query("INSERT INTO reminder_idempotency_operations (device_id, reminder_id, idempotency_key, request_fingerprint, response_body, created_at) VALUES ($1,$2,$3,$4,$5,$6)", [input.deviceId, input.id, input.idempotencyKey, fingerprint(input), JSON.stringify(record), input.now]);
   }
 }
 
@@ -180,3 +196,5 @@ function rowToRecord(row: Row): ReminderRecord { return { id: row.id, deviceId: 
 function nowIso(): string { return new Date().toISOString(); }
 function matchesRequest(row: Row, input: Parameters<ReminderRepository["upsert"]>[0]): boolean { return row.id === input.id && row.scheduled_at === input.scheduledAt && row.notification_type === input.notificationType; }
 function isUniqueViolation(error: unknown): boolean { return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "23505"; }
+function fingerprint(input: Parameters<ReminderRepository["upsert"]>[0]): string { return JSON.stringify({ id: input.id, scheduledAt: input.scheduledAt, notificationType: input.notificationType }); }
+function operationKey(input: Parameters<ReminderRepository["upsert"]>[0]): string { return `${input.deviceId}:${input.id}:${input.idempotencyKey}`; }
