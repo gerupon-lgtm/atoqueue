@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import type { Pool } from "pg";
 import { loadConfig } from "./config.js";
+import { PWA_ORIGIN } from "./config.js";
 import { createDatabasePool } from "./db/connection.js";
 import { applyInitialMigration } from "./db/migrate.js";
 import { ApiError } from "./errors/api-error.js";
@@ -15,6 +16,7 @@ export interface BuildAppOptions {
   publicPushKey?: string;
   repository?: DeviceRepository;
   logger?: { write(line: string): void };
+  allowedOrigin?: string;
 }
 
 export interface ProductionApp {
@@ -22,10 +24,10 @@ export interface ProductionApp {
   pool: Pool;
 }
 
-export function buildApp({ version, publicPushKey = "test-public-key", repository = new InMemoryDeviceRepository(), logger }: BuildAppOptions) {
+export function buildApp({ version, publicPushKey = "test-public-key", repository = new InMemoryDeviceRepository(), logger, allowedOrigin = PWA_ORIGIN }: BuildAppOptions) {
   const app = Fastify({ bodyLimit: 16 * 1024, logger: false, trustProxy: ["127.0.0.1", "::1"] });
   installRequestContext(app);
-  installSecurity(app);
+  const deviceRateLimiter = installSecurity(app, allowedOrigin);
 
   app.addHook("onResponse", async (request, reply) => {
     logger?.write(JSON.stringify({ requestId: request.requestId, method: request.method, statusCode: reply.statusCode }));
@@ -39,6 +41,7 @@ export function buildApp({ version, publicPushKey = "test-public-key", repositor
         : (error as { code?: string }).code?.startsWith("FST_ERR_CTP_")
           ? new ApiError(400, "INVALID_REQUEST", "Request validation failed.")
         : new ApiError(500, "INTERNAL_ERROR", "Internal server error.");
+    if (apiError.retryAfter) reply.header("Retry-After", apiError.retryAfter);
     return reply.code(apiError.statusCode).send({
       error: { code: apiError.code, message: apiError.message, requestId: request.requestId, ...(apiError.details ? { details: apiError.details } : {}) },
     });
@@ -50,7 +53,7 @@ export function buildApp({ version, publicPushKey = "test-public-key", repositor
     time: new Date().toISOString(),
   }));
 
-  registerDeviceRoutes(app, { publicPushKey, deviceService: new DeviceService(repository) });
+  registerDeviceRoutes(app, { publicPushKey, deviceService: new DeviceService(repository, undefined, deviceRateLimiter) });
 
   return app;
 }
@@ -61,7 +64,7 @@ export async function buildProductionApp(input: { version: string; environment?:
   const pool = createDatabasePool(config);
   await applyInitialMigration(pool);
   return {
-    app: buildApp({ version: input.version, publicPushKey: config.vapidPublicKey, repository: new PgDeviceRepository(pool) }),
+    app: buildApp({ version: input.version, publicPushKey: config.vapidPublicKey, repository: new PgDeviceRepository(pool), allowedOrigin: config.allowedOrigin }),
     pool,
   };
 }

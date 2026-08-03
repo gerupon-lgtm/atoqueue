@@ -33,6 +33,24 @@ export interface IdempotencyOperation {
   createdAt: string;
 }
 
+export interface IdempotentOperationInput {
+  deviceId: string;
+  operation: DeviceOperation;
+  idempotencyKey: string;
+  requestFingerprint: string;
+  subscription?: SubscriptionRecord;
+  responseStatus: number;
+  responseBody: unknown | null;
+  createdAt: string;
+}
+
+export type IdempotentOperationResult =
+  | { kind: "applied"; responseBody: unknown | null }
+  | { kind: "replay"; responseBody: unknown | null }
+  | { kind: "conflict" }
+  | { kind: "inactive" }
+  | { kind: "missing" };
+
 export interface DeviceRepository {
   create(input: DeviceRecord): Promise<void>;
   findByDeviceId(deviceId: string): Promise<DeviceRecord | undefined>;
@@ -40,6 +58,7 @@ export interface DeviceRepository {
   deactivateAndCancelPending(deviceId: string, updatedAt: string): Promise<void>;
   findOperation(deviceId: string, operation: DeviceOperation, idempotencyKey: string): Promise<IdempotencyOperation | undefined>;
   createOperation(input: IdempotencyOperation): Promise<void>;
+  runIdempotentOperation(input: IdempotentOperationInput): Promise<IdempotentOperationResult>;
 }
 
 export class InMemoryDeviceRepository implements DeviceRepository {
@@ -82,6 +101,24 @@ export class InMemoryDeviceRepository implements DeviceRepository {
 
   async createOperation(input: IdempotencyOperation): Promise<void> {
     this.operations.set(`${input.deviceId}:${input.operation}:${input.idempotencyKey}`, { ...input });
+  }
+
+  async runIdempotentOperation(input: IdempotentOperationInput): Promise<IdempotentOperationResult> {
+    const record = this.devices.get(input.deviceId);
+    if (!record) return { kind: "missing" };
+    const existing = await this.findOperation(input.deviceId, input.operation, input.idempotencyKey);
+    if (existing) return existing.requestFingerprint === input.requestFingerprint
+      ? { kind: "replay", responseBody: existing.responseBody }
+      : { kind: "conflict" };
+    if (record.status !== "active") return { kind: "inactive" };
+    if (input.operation === "subscription_update") {
+      if (!input.subscription) throw new Error("subscription update requires a subscription");
+      await this.updateSubscription(input.deviceId, input.subscription, input.createdAt);
+    } else {
+      await this.deactivateAndCancelPending(input.deviceId, input.createdAt);
+    }
+    await this.createOperation({ ...input });
+    return { kind: "applied", responseBody: input.responseBody };
   }
 
   get(deviceId: string): DeviceRecord | undefined {
@@ -171,5 +208,60 @@ export class PgDeviceRepository implements DeviceRepository {
       [input.deviceId, input.operation, input.idempotencyKey, input.requestFingerprint, input.responseStatus,
         input.responseBody === null ? null : JSON.stringify(input.responseBody), input.createdAt],
     );
+  }
+
+  async runIdempotentOperation(input: IdempotentOperationInput): Promise<IdempotentOperationResult> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const device = await client.query<{
+        id: string; device_id: string; endpoint: string; p256dh: string; auth: string; secret_hash: string;
+        status: DeviceStatus; created_at: string; updated_at: string; last_error_code: string | null;
+      }>("SELECT * FROM device_subscriptions WHERE device_id = $1 FOR UPDATE", [input.deviceId]);
+      const record = device.rows[0];
+      if (!record) {
+        await client.query("COMMIT");
+        return { kind: "missing" };
+      }
+      const operation = await client.query<{ request_fingerprint: string; response_body: string | null }>(
+        "SELECT * FROM device_idempotency_operations WHERE device_id = $1 AND operation = $2 AND idempotency_key = $3",
+        [input.deviceId, input.operation, input.idempotencyKey],
+      );
+      const existing = operation.rows[0];
+      if (existing) {
+        await client.query("COMMIT");
+        return existing.request_fingerprint === input.requestFingerprint
+          ? { kind: "replay", responseBody: existing.response_body === null ? null : JSON.parse(existing.response_body) }
+          : { kind: "conflict" };
+      }
+      if (record.status !== "active") {
+        await client.query("COMMIT");
+        return { kind: "inactive" };
+      }
+      if (input.operation === "subscription_update") {
+        if (!input.subscription) throw new Error("subscription update requires a subscription");
+        await client.query(
+          "UPDATE device_subscriptions SET endpoint = $1, p256dh = $2, auth = $3, status = 'active', updated_at = $4 WHERE device_id = $5",
+          [input.subscription.endpoint, input.subscription.keys.p256dh, input.subscription.keys.auth, input.createdAt, input.deviceId],
+        );
+      } else {
+        await client.query("UPDATE device_subscriptions SET status = 'disabled', updated_at = $1 WHERE device_id = $2", [input.createdAt, input.deviceId]);
+        await client.query("UPDATE reminder_jobs SET status = 'cancelled', updated_at = $1 WHERE device_id = $2 AND status IN ('pending', 'claimed')", [input.createdAt, input.deviceId]);
+      }
+      await client.query(
+        `INSERT INTO device_idempotency_operations
+         (device_id, operation, idempotency_key, request_fingerprint, response_status, response_body, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [input.deviceId, input.operation, input.idempotencyKey, input.requestFingerprint, input.responseStatus,
+          input.responseBody === null ? null : JSON.stringify(input.responseBody), input.createdAt],
+      );
+      await client.query("COMMIT");
+      return { kind: "applied", responseBody: input.responseBody };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }

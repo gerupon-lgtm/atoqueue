@@ -16,6 +16,7 @@ export class ApiError extends Error {
     readonly code: ErrorCode,
     message: string,
     readonly details?: Array<{ path: string; reason: string }>,
+    readonly retryAfter?: number,
   ) {
     super(message);
   }

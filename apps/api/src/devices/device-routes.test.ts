@@ -188,6 +188,29 @@ describe("device registration routes", () => {
     await app.close();
   });
 
+  it("does not consume a device rate-limit slot until bearer authentication succeeds", async () => {
+    const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
+    const created = await app.inject({ method: "POST", url: "/v1/devices", payload: { subscription } });
+    const { deviceId, deviceSecret } = created.json();
+    for (let index = 0; index < 61; index += 1) {
+      const rejected = await app.inject({
+        method: "PUT",
+        url: `/v1/devices/${deviceId}/subscription`,
+        headers: { authorization: "Bearer invalid", "idempotency-key": `attacker-${index}` },
+        payload: { subscription },
+      });
+      expect(rejected.statusCode).toBe(401);
+    }
+    const valid = await app.inject({
+      method: "PUT",
+      url: `/v1/devices/${deviceId}/subscription`,
+      headers: { authorization: `Bearer ${deviceSecret}`, "idempotency-key": "valid-after-attack" },
+      payload: { subscription: { ...subscription, endpoint: "https://push.example/valid-after-attack" } },
+    });
+    expect(valid.statusCode).toBe(200);
+    await app.close();
+  }, 15_000);
+
   it("replays a lost delete response when the idempotency key is repeated", async () => {
     const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
     const created = await app.inject({ method: "POST", url: "/v1/devices", payload: { subscription } });
