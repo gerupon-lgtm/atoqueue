@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   confirmTask,
   createLocalCalendar,
+  generateTaskCandidate,
   markAsNote,
   resolveDueChoice,
   type AppRepository,
@@ -14,6 +15,7 @@ export interface TaskCandidatePageProps {
   captureId: string;
   now?: () => string;
   createId?: () => string;
+  confirmPastDate?: (date: string) => boolean;
   onReturn?: () => void;
   onCompleted?: () => void;
 }
@@ -23,10 +25,12 @@ export function TaskCandidatePage({
   captureId,
   now = () => new Date().toISOString(),
   createId = defaultCreateId,
+  confirmPastDate = defaultConfirmPastDate,
   onReturn,
   onCompleted,
 }: TaskCandidatePageProps) {
   const [title, setTitle] = useState("");
+  const [captureBody, setCaptureBody] = useState("");
   const [category, setCategory] = useState<Task["category"] | "">("");
   const [dueType, setDueType] = useState<DueChoice["type"]>("unset");
   const [customDate, setCustomDate] = useState("");
@@ -42,7 +46,13 @@ export function TaskCandidatePage({
         if (!capture || capture.classification !== "unclassified") {
           throw new Error("Capture is unavailable.");
         }
-        if (current) setTitle(capture.body);
+        const suggestion = generateTaskCandidate(capture.body);
+        if (current) {
+          setCaptureBody(capture.body);
+          setTitle(suggestion.title);
+          if (suggestion.dueChoice) setDueType(suggestion.dueChoice.type);
+          setCategory(suggestion.category ?? "");
+        }
       })
       .catch(() => {
         if (current) setError("この記録は整理できません。受信箱へ戻ってください。");
@@ -62,10 +72,19 @@ export function TaskCandidatePage({
       const snapshot = await repository.load();
       const dueChoice = choiceFromForm(dueType, customDate);
       const timestamp = now();
+      const calendar = createLocalCalendar(snapshot.settings.timeZone);
+      if (
+        dueChoice.type === "custom" &&
+        dueChoice.date < calendar.today(timestamp) &&
+        !confirmPastDate(dueChoice.date)
+      ) {
+        return;
+      }
       const due = resolveDueChoice({
         choice: dueChoice,
         now: timestamp,
-        calendar: createLocalCalendar(snapshot.settings.timeZone),
+        calendar,
+        weeklyReviewDay: snapshot.settings.weeklyReviewDay,
       });
       await repository.save(
         confirmTask({
@@ -102,12 +121,13 @@ export function TaskCandidatePage({
     }
   }
 
-  const categoryCandidate = suggestCategory(title);
+  const categoryCandidate = generateTaskCandidate(title).category;
 
   return (
     <section aria-labelledby="task-candidate-title">
       <h1 id="task-candidate-title">タスク候補を確認</h1>
       <form onSubmit={(event) => void submit(event)}>
+        <p>元の記録: {captureBody}</p>
         <label htmlFor="task-title">タスク名</label>
         <input
           id="task-title"
@@ -176,8 +196,10 @@ function defaultCreateId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `task-${Date.now()}`;
 }
 
-function suggestCategory(title: string): NonNullable<Task["category"]> | undefined {
-  return /(?:買う|購入|スーパー|牛乳)/u.test(title) ? "shopping" : undefined;
+function defaultConfirmPastDate(date: string): boolean {
+  return globalThis.confirm(
+    `${date} は過去の日付です。この期限でタスクを作成しますか？`,
+  );
 }
 
 function categoryLabel(category: NonNullable<Task["category"]>): string {

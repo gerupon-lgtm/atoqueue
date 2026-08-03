@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   markAsNote,
   markAsUnneeded,
   suggestClassification,
+  updateCaptureBody,
   type AppRepository,
   type Capture,
 } from "../../../../../packages/domain/src";
@@ -19,7 +20,11 @@ export function InboxPage({
   onTaskCandidate,
 }: InboxPageProps) {
   const [captures, setCaptures] = useState<Capture[]>([]);
+  const [bodyDrafts, setBodyDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string>();
+  const [isMutating, setIsMutating] = useState(false);
+  const mutationQueue = useRef<Promise<void>>(Promise.resolve());
+  const pendingMutations = useRef(0);
 
   async function reload(): Promise<void> {
     const snapshot = await repository.load();
@@ -34,9 +39,22 @@ export function InboxPage({
     void reload().catch(() => setError("受信箱を読み込めませんでした。もう一度お試しください。"));
   }, [repository]);
 
-  async function classify(captureId: string, type: "note" | "unneeded"): Promise<void> {
+  function enqueueMutation(operation: () => Promise<void>): void {
+    pendingMutations.current += 1;
+    setIsMutating(true);
+    const mutation = mutationQueue.current.then(operation);
+    mutationQueue.current = mutation.catch(() => undefined);
+    void mutation
+      .catch(() => setError("整理を保存できませんでした。もう一度お試しください。"))
+      .finally(() => {
+        pendingMutations.current -= 1;
+        if (pendingMutations.current === 0) setIsMutating(false);
+      });
+  }
+
+  function classify(captureId: string, type: "note" | "unneeded"): void {
     setError(undefined);
-    try {
+    enqueueMutation(async () => {
       const snapshot = await repository.load();
       const next =
         type === "note"
@@ -44,9 +62,20 @@ export function InboxPage({
           : markAsUnneeded({ snapshot, captureId, now: now() });
       await repository.save(next);
       await reload();
-    } catch {
-      setError("整理を保存できませんでした。もう一度お試しください。");
-    }
+    });
+  }
+
+  function saveBody(captureId: string, body: string): void {
+    setError(undefined);
+    enqueueMutation(async () => {
+      const next = updateCaptureBody(await repository.load(), captureId, body, now());
+      await repository.save(next);
+      setBodyDrafts((drafts) => {
+        const { [captureId]: _discarded, ...remaining } = drafts;
+        return remaining;
+      });
+      await reload();
+    });
   }
 
   return (
@@ -59,15 +88,32 @@ export function InboxPage({
           return (
             <li key={capture.id}>
               <p>{capture.body}</p>
+              <label htmlFor={`capture-body-${capture.id}`}>本文を編集</label>
+              <textarea
+                id={`capture-body-${capture.id}`}
+                onChange={(event) =>
+                  setBodyDrafts((drafts) => ({ ...drafts, [capture.id]: event.target.value }))
+                }
+                readOnly={isMutating}
+                value={bodyDrafts[capture.id] ?? capture.body}
+              />
+              <button
+                disabled={isMutating}
+                onClick={() => void saveBody(capture.id, bodyDrafts[capture.id] ?? capture.body)}
+                type="button"
+                aria-label={`${capture.body}の本文を保存`}
+              >
+                本文を保存
+              </button>
               {suggestion === "task" ? <p>タスク候補です</p> : null}
               <div aria-label={`${capture.body} の整理操作`}>
-                <button onClick={() => onTaskCandidate?.(capture.id)} type="button">
+                <button disabled={isMutating} onClick={() => onTaskCandidate?.(capture.id)} type="button">
                   タスクかも
                 </button>
-                <button onClick={() => void classify(capture.id, "note")} type="button">
+                <button disabled={isMutating} onClick={() => classify(capture.id, "note")} type="button">
                   メモ
                 </button>
-                <button onClick={() => void classify(capture.id, "unneeded")} type="button">
+                <button disabled={isMutating} onClick={() => classify(capture.id, "unneeded")} type="button">
                   不要
                 </button>
               </div>

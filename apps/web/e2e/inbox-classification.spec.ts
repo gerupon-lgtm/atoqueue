@@ -6,7 +6,7 @@ test("keeps a suggested capture unclassified until the user confirms タスク�
   await page.getByRole("button", { name: "保存して戻る" }).click();
 
   await page.goto("/inbox");
-  await expect(page.getByText("牛乳を買う")).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: "牛乳を買う" })).toBeVisible();
   await page.getByRole("button", { name: "タスクかも" }).click();
   await expect(page.getByRole("heading", { name: "タスク候補を確認" })).toBeVisible();
 

@@ -54,4 +54,34 @@ describe("InboxPage", () => {
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
     expect(screen.queryByText("新しい記録")).toBeNull();
   });
+
+  it("F-004 persists an inline edit through the repository without changing classification", async () => {
+    const repository = repositoryWithCaptures();
+    render(<InboxPage now={() => now} repository={repository} />);
+
+    const body = await screen.findByDisplayValue("新しい記録");
+    fireEvent.change(body, { target: { value: "編集した記録" } });
+    fireEvent.click(screen.getByRole("button", { name: "新しい記録の本文を保存" }));
+
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect((repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].captures).toContainEqual(
+      expect.objectContaining({ body: "編集した記録", classification: "unclassified" }),
+    );
+  });
+
+  it("F-004 disables the whole list during a classification to prevent a concurrent lost update", async () => {
+    const repository = repositoryWithCaptures();
+    render(<InboxPage now={() => now} repository={repository} />);
+
+    const memoButtons = await screen.findAllByRole("button", { name: "メモ" });
+    fireEvent.click(memoButtons[0]!);
+
+    expect(memoButtons[1]!.hasAttribute("disabled")).toBe(true);
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    const finalSnapshot = (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(finalSnapshot.captures.map((capture: { classification: string }) => capture.classification)).toEqual([
+      "unclassified",
+      "note",
+    ]);
+  });
 });

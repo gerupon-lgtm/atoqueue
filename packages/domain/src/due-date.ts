@@ -10,13 +10,16 @@ export interface LocalCalendar {
   today(instant: string): string;
   addDays(date: string, days: number): string;
   nextSunday(date: string): string;
+  nextWeekday(date: string, weekday: number): string;
   endOfDay(date: string): string;
+  atTime(date: string, hour: number, minute: number): string;
 }
 
 export interface ResolveDueChoiceInput {
   choice: DueChoice;
   now: string;
   calendar: LocalCalendar;
+  weeklyReviewDay?: number;
 }
 
 export interface DueResolution {
@@ -38,7 +41,14 @@ export function resolveDueChoice(input: ResolveDueChoiceInput): DueResolution {
     case "custom":
       return scheduled(input.calendar.endOfDay(input.choice.date));
     case "none":
-      return { dueMode: "none", nextReviewAt: input.now };
+      return {
+        dueMode: "none",
+        nextReviewAt: input.calendar.atTime(
+          input.calendar.nextWeekday(today, input.weeklyReviewDay ?? 0),
+          18,
+          0,
+        ),
+      };
     case "unset":
       return {
         dueMode: "unset",
@@ -58,23 +68,33 @@ export function createLocalCalendar(timeZone: string): LocalCalendar {
       return toDateString(result.getUTCFullYear(), result.getUTCMonth() + 1, result.getUTCDate());
     },
     nextSunday(date) {
+      return this.nextWeekday(date, 0);
+    },
+    nextWeekday(date, weekday) {
       const [year, month, day] = parseDate(date);
       const weekDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-      return this.addDays(date, (7 - weekDay) % 7);
+      return this.addDays(date, (weekday - weekDay + 7) % 7);
     },
     endOfDay(date) {
-      const [year, month, day] = parseDate(date);
-      const desiredUtc = Date.UTC(year, month - 1, day, 23, 59, 0, 0);
-      let candidate = desiredUtc;
-
-      // Resolve the local wall time after the IANA offset at that instant has settled.
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        candidate = desiredUtc - offsetAt(new Date(candidate), timeZone);
-      }
-
-      return new Date(candidate).toISOString();
+      return localTimeToIso(date, 23, 59, timeZone);
+    },
+    atTime(date, hour, minute) {
+      return localTimeToIso(date, hour, minute, timeZone);
     },
   };
+}
+
+function localTimeToIso(date: string, hour: number, minute: number, timeZone: string): string {
+  const [year, month, day] = parseDate(date);
+  const desiredUtc = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  let candidate = desiredUtc;
+
+  // Resolve the local wall time after the IANA offset at that instant has settled.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    candidate = desiredUtc - offsetAt(new Date(candidate), timeZone);
+  }
+
+  return new Date(candidate).toISOString();
 }
 
 function scheduled(dueAt: string): DueResolution {

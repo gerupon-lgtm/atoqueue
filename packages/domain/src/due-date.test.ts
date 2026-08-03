@@ -19,6 +19,17 @@ const calendar: LocalCalendar = {
     expect(date).toBe("2026-03-28");
     return "2026-04-05";
   },
+  nextWeekday: (date, weekday) => {
+    expect(date).toBe("2026-03-28");
+    expect(weekday).toBe(0);
+    return "2026-04-05";
+  },
+  atTime: (date, hour, minute) => {
+    expect(date).toBe("2026-04-05");
+    expect(hour).toBe(18);
+    expect(minute).toBe(0);
+    return "2026-04-05T09:00:00.000Z";
+  },
   today: (instant) => {
     expect(instant).toBe(now);
     return "2026-03-28";
@@ -39,10 +50,10 @@ describe("resolveDueChoice", () => {
     });
   });
 
-  it("F-007 represents an explicit no-due choice", () => {
+  it("F-007 stops due prompting but schedules the normal weekly review for an explicit no-due choice", () => {
     expect(resolveDueChoice({ choice: { type: "none" }, now, calendar })).toEqual({
       dueMode: "none",
-      nextReviewAt: now,
+      nextReviewAt: "2026-04-05T09:00:00.000Z",
     });
   });
 
