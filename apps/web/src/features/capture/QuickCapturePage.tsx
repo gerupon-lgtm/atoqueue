@@ -23,6 +23,7 @@ export function QuickCapturePage({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lastPersistedDraft = useRef<string | undefined>(undefined);
   const draftGeneration = useRef(0);
+  const draftWriteQueue = useRef<Promise<void>>(Promise.resolve());
   const pendingDraftClear = useRef(false);
   const [body, setBody] = useState("");
   const [unclassifiedCount, setUnclassifiedCount] = useState(0);
@@ -38,12 +39,36 @@ export function QuickCapturePage({
   useEffect(() => {
     let isCurrent = true;
 
-    void repository
-      .loadDraft()
-      .then((draft) => {
+    void Promise.all([repository.load(), repository.loadDraft()])
+      .then(async ([snapshot, draft]) => {
         if (!isCurrent) return;
+        setUnclassifiedCount(
+          snapshot.captures.filter(
+            (capture) => capture.classification === "unclassified",
+          ).length,
+        );
+
+        if (!draft) {
+          lastPersistedDraft.current = "";
+          setBody("");
+          return;
+        }
+
         lastPersistedDraft.current = draft;
         setBody((current) => current || draft);
+
+        if (!isResolvedDraft(snapshot, draft)) return;
+
+        pendingDraftClear.current = true;
+        try {
+          await repository.clearDraft();
+          if (!isCurrent) return;
+          pendingDraftClear.current = false;
+          lastPersistedDraft.current = "";
+          setBody("");
+        } catch {
+          if (isCurrent) setError(FAILURE_MESSAGE);
+        }
       })
       .catch(() => {
         if (isCurrent) setError(FAILURE_MESSAGE);
@@ -58,45 +83,27 @@ export function QuickCapturePage({
   }, [repository]);
 
   useEffect(() => {
-    let isCurrent = true;
+    if (!isDraftLoaded || lastPersistedDraft.current === body) return;
 
-    void repository
-      .load()
-      .then((snapshot) => {
-        if (!isCurrent) return;
-        setUnclassifiedCount(
-          snapshot.captures.filter(
-            (capture) => capture.classification === "unclassified",
-          ).length,
-        );
-      })
-      .catch(() => {
+    let isCurrent = true;
+    const generation = draftGeneration.current;
+    const timer = window.setTimeout(() => {
+      const write = draftWriteQueue.current.then(async () => {
+        if (generation !== draftGeneration.current) return;
+        await repository.saveDraft(body);
+        if (generation === draftGeneration.current) {
+          lastPersistedDraft.current = body;
+        }
+      });
+      draftWriteQueue.current = write.catch(() => {
         if (isCurrent) setError(FAILURE_MESSAGE);
       });
+    }, 300);
 
     return () => {
       isCurrent = false;
+      window.clearTimeout(timer);
     };
-  }, [repository]);
-
-  useEffect(() => {
-    if (!isDraftLoaded || lastPersistedDraft.current === body) return;
-
-    const generation = draftGeneration.current;
-    const timer = window.setTimeout(() => {
-      void repository
-        .saveDraft(body)
-        .then(async () => {
-          if (generation !== draftGeneration.current) {
-            await repository.clearDraft();
-            return;
-          }
-          lastPersistedDraft.current = body;
-        })
-        .catch(() => setError(FAILURE_MESSAGE));
-    }, 300);
-
-    return () => window.clearTimeout(timer);
   }, [body, isDraftLoaded, repository]);
 
   async function saveCapture(): Promise<void> {
@@ -117,6 +124,7 @@ export function QuickCapturePage({
       }
 
       draftGeneration.current += 1;
+      await draftWriteQueue.current;
       const next = createCapture(await repository.load(), body, now(), createId());
       await repository.save(next);
       pendingDraftClear.current = true;
@@ -182,4 +190,15 @@ export function QuickCapturePage({
 
 function defaultCreateId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `capture-${Date.now()}`;
+}
+
+function isResolvedDraft(snapshot: Awaited<ReturnType<AppRepository["load"]>>, draft: string): boolean {
+  const body = draft.trim();
+  return snapshot.captures.some(
+    (capture) =>
+      capture.body === body &&
+      capture.classification === "unclassified" &&
+      capture.createdAt === snapshot.savedAt &&
+      capture.updatedAt === snapshot.savedAt,
+  );
 }

@@ -27,6 +27,14 @@ function createRepository(overrides: Partial<AppRepository> = {}): AppRepository
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 describe("QuickCapturePage", () => {
   afterEach(() => {
     cleanup();
@@ -167,5 +175,85 @@ describe("QuickCapturePage", () => {
 
     await waitFor(() => expect(repository.clearDraft).toHaveBeenCalledTimes(2));
     expect(repository.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not create a duplicate after reload when draft clearing failed", async () => {
+    let storedSnapshot = createEmptySnapshot({
+      appVersion: "0.1.0",
+      localDeviceId: "device-1",
+      timeZone: "Asia/Tokyo",
+      now,
+    });
+    let storedDraft = "牛乳を買う";
+    let clearAllowed = false;
+    const repository: AppRepository = {
+      load: vi.fn().mockImplementation(async () => storedSnapshot),
+      save: vi.fn().mockImplementation(async (next) => {
+        storedSnapshot = next;
+      }),
+      loadDraft: vi.fn().mockImplementation(async () => storedDraft),
+      saveDraft: vi.fn().mockResolvedValue(undefined),
+      clearDraft: vi.fn().mockImplementation(async () => {
+        if (!clearAllowed) throw new Error("quota exceeded");
+        storedDraft = "";
+      }),
+    };
+    const user = userEvent.setup();
+    const first = render(
+      <QuickCapturePage createId={() => "capture-1"} now={() => now} repository={repository} />,
+    );
+    const firstInput = await screen.findByRole("textbox", { name: "思いついたこと" });
+
+    await user.click(screen.getByRole("button", { name: "保存して戻る" }));
+    await screen.findByRole("alert");
+    expect(storedSnapshot.captures).toHaveLength(1);
+    first.unmount();
+
+    render(
+      <QuickCapturePage createId={() => "capture-2"} now={() => now} repository={repository} />,
+    );
+    const reloadedInput = await screen.findByRole("textbox", { name: "思いついたこと" });
+    expect((reloadedInput as HTMLTextAreaElement).value).toBe("牛乳を買う");
+    clearAllowed = true;
+    await user.click(screen.getByRole("button", { name: "保存して戻る" }));
+
+    await waitFor(() => expect(storedDraft).toBe(""));
+    expect(repository.save).toHaveBeenCalledTimes(1);
+    expect(storedSnapshot.captures).toHaveLength(1);
+    expect(firstInput).not.toBe(reloadedInput);
+  });
+
+  it("keeps the newest draft when asynchronous draft writes complete out of order", async () => {
+    vi.useFakeTimers();
+    const oldWrite = createDeferred<void>();
+    const newWrite = createDeferred<void>();
+    let storedDraft = "";
+    const repository = createRepository({
+      saveDraft: vi.fn((value: string) => {
+        const write = value === "古い下書き" ? oldWrite : newWrite;
+        return write.promise.then(() => {
+          storedDraft = value;
+        });
+      }),
+    });
+    render(<QuickCapturePage repository={repository} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const input = screen.getByRole("textbox", { name: "思いついたこと" });
+
+    fireEvent.change(input, { target: { value: "古い下書き" } });
+    await vi.advanceTimersByTimeAsync(300);
+    fireEvent.change(input, { target: { value: "新しい下書き" } });
+    await vi.advanceTimersByTimeAsync(300);
+    newWrite.resolve();
+    oldWrite.resolve();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(repository.clearDraft).not.toHaveBeenCalled();
+    expect(storedDraft).toBe("新しい下書き");
   });
 });
