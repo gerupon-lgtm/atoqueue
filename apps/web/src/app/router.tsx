@@ -1,4 +1,6 @@
 import { createBrowserRouter } from "react-router-dom";
+import { LocalStorageRepository } from "../infrastructure/local-storage/local-storage-repository";
+import { QuickCapturePage } from "../features/capture/QuickCapturePage";
 import { AppShell } from "./AppShell";
 
 type PageDefinition = {
@@ -15,13 +17,19 @@ const pages: PageDefinition[] = [
   { path: "settings", label: "設定" },
 ];
 
+const applicationRepository = new LocalStorageRepository(window.localStorage);
+
 export const router = createBrowserRouter([
   {
     path: "/",
     element: <AppShell />,
     children: pages.map((page) => ({
       ...(page.index ? { index: true } : { path: page.path }),
-      element: <Page title={page.label} />,
+      element: page.index ? (
+        <QuickCapturePage repository={applicationRepository} />
+      ) : (
+        <Page title={page.label} />
+      ),
     })),
   },
 ]);

@@ -1,0 +1,22 @@
+.quick-capture {
+  display: grid;
+  gap: 1rem;
+  max-width: 640px;
+}
+
+.quick-capture__form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.quick-capture textarea {
+  min-height: 7rem;
+  padding: 0.75rem;
+  resize: vertical;
+}
+
+.quick-capture button {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0.625rem 1rem;
+}
