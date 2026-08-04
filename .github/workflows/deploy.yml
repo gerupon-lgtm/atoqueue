@@ -103,10 +103,23 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' '${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+      - name: Sign release manifest
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.sha }}
+          DEPLOY_ARTIFACT_SIGNING_PRIVATE_KEY: ${{ secrets.DEPLOY_ARTIFACT_SIGNING_PRIVATE_KEY }}
+        run: |
+          signing_key="$RUNNER_TEMP/atoqueue-artifact-signing-key"
+          manifest="atoqueue-api-release-${RELEASE_ID}.manifest"
+          printf '%s' "$DEPLOY_ARTIFACT_SIGNING_PRIVATE_KEY" > "$signing_key"
+          chmod 600 "$signing_key"
+          printf 'release_id=%s\narchive_sha256=%s\n' "$RELEASE_ID" "$(sha256sum atoqueue-api-release.tar.gz | cut -d ' ' -f 1)" > "$manifest"
+          ssh-keygen -Y sign -f "$signing_key" -n atoqueue-deploy "$manifest"
+          rm -f "$signing_key"
       - name: Upload and activate release
         env:
           RELEASE_ID: ${{ steps.release.outputs.sha }}
         run: |
-          scp -i ~/.ssh/id_ed25519 atoqueue-api-release.tar.gz atoqueue-deploy@${{ secrets.DEPLOY_HOST }}:/tmp/atoqueue-api-release-${RELEASE_ID}.tar.gz
-          scp -i ~/.ssh/id_ed25519 deploy/scripts/deploy-release.sh atoqueue-deploy@${{ secrets.DEPLOY_HOST }}:/tmp/atoqueue-deploy-release-${RELEASE_ID}.sh
-          ssh -i ~/.ssh/id_ed25519 atoqueue-deploy@${{ secrets.DEPLOY_HOST }} "chmod 700 /tmp/atoqueue-deploy-release-${RELEASE_ID}.sh && /tmp/atoqueue-deploy-release-${RELEASE_ID}.sh /tmp/atoqueue-api-release-${RELEASE_ID}.tar.gz ${RELEASE_ID}"
+          scp -i ~/.ssh/id_ed25519 atoqueue-api-release.tar.gz atoqueue-deploy@${{ secrets.DEPLOY_HOST }}:/var/lib/atoqueue-deploy/incoming/atoqueue-api-release-${RELEASE_ID}.tar.gz
+          scp -i ~/.ssh/id_ed25519 atoqueue-api-release-${RELEASE_ID}.manifest atoqueue-deploy@${{ secrets.DEPLOY_HOST }}:/var/lib/atoqueue-deploy/incoming/atoqueue-api-release-${RELEASE_ID}.manifest
+          scp -i ~/.ssh/id_ed25519 atoqueue-api-release-${RELEASE_ID}.manifest.sig atoqueue-deploy@${{ secrets.DEPLOY_HOST }}:/var/lib/atoqueue-deploy/incoming/atoqueue-api-release-${RELEASE_ID}.manifest.sig
+          ssh -i ~/.ssh/id_ed25519 atoqueue-deploy@${{ secrets.DEPLOY_HOST }} "sudo /usr/local/libexec/atoqueue-deploy-release /var/lib/atoqueue-deploy/incoming/atoqueue-api-release-${RELEASE_ID}.tar.gz /var/lib/atoqueue-deploy/incoming/atoqueue-api-release-${RELEASE_ID}.manifest /var/lib/atoqueue-deploy/incoming/atoqueue-api-release-${RELEASE_ID}.manifest.sig ${RELEASE_ID}"

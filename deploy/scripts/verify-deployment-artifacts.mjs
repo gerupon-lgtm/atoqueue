@@ -14,6 +14,11 @@ const requiredFragments = {
     "atoqueue-deploy@",
     "DEPLOY_SSH_PRIVATE_KEY",
     "DEPLOY_SSH_KNOWN_HOSTS",
+    "DEPLOY_ARTIFACT_SIGNING_PRIVATE_KEY",
+    "ssh-keygen -Y sign",
+    ".manifest.sig",
+    "/var/lib/atoqueue-deploy/incoming/atoqueue-api-release-",
+    "sudo /usr/local/libexec/atoqueue-deploy-release",
     "pnpm --filter @atoqueue/web build",
     "pnpm --filter @atoqueue/api build",
   ],
@@ -34,6 +39,17 @@ const requiredFragments = {
     'systemctl restart "$service"',
     "http://127.0.0.1:3030/healthz",
     "rollback",
+    "runuser -u atoqueue-deploy --",
+    "chown -R root:root",
+    "chmod -R go-w",
+    'rm -f -- "$source_archive"',
+    "runuser -u atoqueue-deploy -- tar --extract --gzip --file -",
+    "chmod -R a-s",
+    "/etc/atoqueue/deployment-allowed-signers",
+    "ssh-keygen -Y verify",
+    "sha256sum",
+    "/var/lib/atoqueue-deploy/quarantine",
+    "install -m 0600 /dev/null",
   ],
   "apps/api/src/start.ts": ['host: "127.0.0.1"'],
   "docs/operations/deployment.md": [
@@ -41,6 +57,13 @@ const requiredFragments = {
     "atoqueue_notify_app",
     "DEPLOY_SSH_KNOWN_HOSTS",
     "/usr/sbin/nologin",
+    "sudo systemctl reload caddy",
+    "80/tcp",
+    "443/tcp",
+    "visudo",
+    "/usr/local/libexec/atoqueue-deploy-release",
+    "DEPLOY_ARTIFACT_SIGNING_PRIVATE_KEY",
+    "/etc/atoqueue/deployment-allowed-signers",
   ],
 };
 
@@ -87,6 +110,26 @@ for (const relativePath of [
       `${relativePath}: must not contain a VAPID private key value`,
     );
   }
+}
+
+const workflow = await readFile(
+  new URL(".github/workflows/deploy.yml", repositoryRoot),
+  "utf8",
+);
+if (workflow.includes("/tmp/atoqueue-")) {
+  failures.push(
+    ".github/workflows/deploy.yml: must not upload deploy artifacts through /tmp",
+  );
+}
+
+const service = await readFile(
+  new URL("deploy/systemd/atoqueue-notification-api.service", repositoryRoot),
+  "utf8",
+);
+if (service.includes("ReadWritePaths=")) {
+  failures.push(
+    "deploy/systemd/atoqueue-notification-api.service: runtime service must not have a writable release tree",
+  );
 }
 
 if (failures.length > 0) {

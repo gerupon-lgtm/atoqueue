@@ -7,8 +7,8 @@
 以下は本リポジトリでは実行しない、環境管理者が一度だけ行う作業である。
 
 1. Cloudflare で `atoqueue.sikumilab.com` を GitHub Pages、`api.atoqueue.sikumilab.com` を OCI VPS の A/AAAA レコードへ向け、両方を **DNS only** にする。GitHub Pages の Custom domain を `atoqueue.sikumilab.com` に設定し、HTTPS 強制を有効にする。
-2. GitHub の `production` environment を作り、required reviewers を設定する。Repository secrets に `DEPLOY_HOST`、専用鍵の `DEPLOY_SSH_PRIVATE_KEY`、検証済みホスト鍵だけを含む `DEPLOY_SSH_KNOWN_HOSTS` を登録する。鍵は `atoqueue-deploy` 専用で、他用途と共有しない。
-3. VPS に Node.js 24、Corepack、pnpm 10、PostgreSQL client、Caddy を導入する。`atoqueue` をログイン不可の実行ユーザー、`atoqueue-deploy` を配置専用ユーザーとして作成する。
+2. GitHub の `production` environment を作り、required reviewers を設定する。Repository secrets に `DEPLOY_HOST`、専用鍵の `DEPLOY_SSH_PRIVATE_KEY`、検証済みホスト鍵だけを含む `DEPLOY_SSH_KNOWN_HOSTS`、release manifest 専用の `DEPLOY_ARTIFACT_SIGNING_PRIVATE_KEY` を登録する。署名鍵は SSH 配置鍵とは別ペアにし、Actions 以外から読めない。いずれの秘密鍵も他用途と共有しない。
+3. VPS に Node.js 24、Corepack、pnpm 10、PostgreSQL client、Caddy を導入する。`atoqueue` をログイン不可の実行ユーザー、`atoqueue-deploy` を配置専用ユーザーとして作成する。OCI の Security List または Network Security Group と VPS の host firewall では、インターネットからの TCP `80/tcp` と `443/tcp` を Caddy 用に許可し、`3030/tcp` は許可しない。DNS only の A/AAAA レコードが VPS の到達可能なアドレスだけを指すことも、この時点で確認する。
 
 ```bash
 sudo useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin --user-group atoqueue
@@ -42,10 +42,47 @@ sudo install -D -o root -g root -m 0644 deploy/caddy/atoqueue-api.caddyfile /etc
 sudo install -D -o root -g root -m 0644 deploy/systemd/atoqueue-notification-api.service /etc/systemd/system/atoqueue-notification-api.service
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl daemon-reload
-sudo systemctl enable caddy atoqueue-notification-api.service
+sudo systemctl enable --now caddy
+sudo systemctl reload caddy
+sudo systemctl enable atoqueue-notification-api.service
+sudo ss -ltnp '( sport = :80 or sport = :443 )'
 ```
 
-`atoqueue-deploy` には、`deploy/scripts/deploy-release.sh` が使う `/opt/atoqueue/releases` の symlink 切替、`atoqueue-notification-api.service` の restart/stop、リリースディレクトリの所有権変更、環境ファイルを読む `atoqueue` ユーザーの transient migration unit だけを sudo 許可する。任意コマンドの sudo を許可しない。実際の sudoers ルールは VPS の OS パスに合わせて管理者がレビューする。
+OCI の Security List / Network Security Group と host firewall の設定内容に TCP `80/tcp` / `443/tcp` 許可、`3030/tcp` 非許可を記録する。VPS 外の管理端末から次を実行し、`80` と `443` が timeout ではなく Caddy の HTTP 応答を返し、`3030` は接続できないことを確認する（初回で API 未配置なら HTTPS は `502` でもよい）。
+
+```bash
+curl --head --connect-timeout 10 http://api.atoqueue.sikumilab.com
+curl --head --connect-timeout 10 https://api.atoqueue.sikumilab.com
+nc -zvw 5 api.atoqueue.sikumilab.com 3030 && exit 1 || true
+```
+
+6. 配置用の受信ディレクトリ、root 専用 quarantine、root 所有の activation wrapper を作る。受信ディレクトリは `atoqueue-deploy` だけが読書きでき、wrapper と quarantine は配置ユーザーが変更できない。Actions は wrapper をアップロードも実行もせず、incoming へ release archive、署名済み manifest、署名だけを置く。wrapper は3ファイルを root 専用 quarantine へ一度だけコピーし、その固定コピーだけを署名検証・展開し、成功・失敗のどちらでも incoming を削除する。
+
+```bash
+sudo install -d -o atoqueue-deploy -g atoqueue-deploy -m 0700 /var/lib/atoqueue-deploy/incoming
+sudo install -d -o root -g root -m 0700 /var/lib/atoqueue-deploy/quarantine
+sudo install -D -o root -g root -m 0750 deploy/scripts/deploy-release.sh /usr/local/libexec/atoqueue-deploy-release
+sudo install -D -o root -g root -m 0644 /dev/null /etc/atoqueue/deployment-allowed-signers
+sudoedit /etc/atoqueue/deployment-allowed-signers
+sudo visudo -f /etc/sudoers.d/atoqueue-deploy
+```
+
+安全な管理端末で manifest 専用の Ed25519 鍵ペアを作り、private key だけを `DEPLOY_ARTIFACT_SIGNING_PRIVATE_KEY` として登録する。公開鍵は root 所有の `/etc/atoqueue/deployment-allowed-signers` へ次の形式で保存する。private key、archive、manifest、署名の値をリポジトリやログへ置かない。
+
+```bash
+ssh-keygen -t ed25519 -f atoqueue-artifact-signing -C github-actions
+# /etc/atoqueue/deployment-allowed-signers に次の1行を保存する
+github-actions ssh-ed25519 PUBLIC_KEY_MATERIAL
+```
+
+`/etc/sudoers.d/atoqueue-deploy` には次だけを記載する。wrapper は archive の完全なパスと40文字の小文字 SHAを再検証し、Actions の別署名鍵による manifest（release ID と archive SHA-256）を `ssh-keygen -Y verify` で検証してから、root での展開・symlink切替・systemd再起動と、`atoqueue` 権限の migration を行う。`systemctl`、`systemd-run`、`chown`、任意 shell の sudo 権限を `atoqueue-deploy` へ直接与えない。
+
+```sudoers
+Cmnd_Alias ATOQUEUE_ACTIVATE = /usr/local/libexec/atoqueue-deploy-release /var/lib/atoqueue-deploy/incoming/atoqueue-api-release-*.tar.gz *
+atoqueue-deploy ALL=(root) NOPASSWD: ATOQUEUE_ACTIVATE
+```
+
+保存後に必ず `sudo visudo -cf /etc/sudoers.d/atoqueue-deploy` を実行する。`deploy-release.sh` を変更したリリースは、別途 root 管理者が内容と mode `0750` / owner `root:root`、allowed signers file の owner `root:root` / mode `0644` をレビューして wrapper を再配置する。runtime の `atoqueue` は release tree を読取り・実行するだけで、書込み権限を持たない。
 
 ## リリース前の確認
 
@@ -69,7 +106,7 @@ DB スキーマを変更するリリースでは、先に [通知 DB 復旧手�
 1. `Deploy` workflow を `Run workflow` から実行し、対象のコミット SHA または `main` を入力する。
 2. `production` environment の承認者が承認する。承認されるまで PWA と API は配置されない。
 3. `Test and build` が Node 24 で lint、型検査、テスト、Web/API build、配置成果物の静的検査を完了することを確認する。
-4. `Publish PWA to GitHub Pages` は `apps/web/dist` に CNAME を含めて公開する。`Deploy notification API to OCI VPS` は専用 SSH 鍵で `atoqueue-deploy` に接続し、アーカイブを `/tmp` に送る。
+4. `Publish PWA to GitHub Pages` は `apps/web/dist` に CNAME を含めて公開する。`Deploy notification API to OCI VPS` は専用 SSH 鍵で `atoqueue-deploy` に接続し、private incoming directory へ archive、release ID と SHA-256 を含む manifest、その署名を送る。root wrapper は別の Actions 署名鍵で manifest を検証するため、SSH 配置鍵だけでは任意コードを migration として実行できない。
 
 VPS 上の `deploy-release.sh` は、リリース用ディレクトリへ依存関係を production mode で入れる。migration は `systemd-run` の一時 unit として `atoqueue` ユーザーで実行し、systemd だけが root 所有の環境ファイルを読むため、配置ユーザーは DB 接続情報・VAPID 鍵を読めない。続いて `current` symlink を切替え、systemd を再起動し、loopback の `/healthz` が 200 になることを確認する。migration、再起動、health check のいずれかが失敗すると、前リリースを `current` に戻して再起動する。
 
