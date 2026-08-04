@@ -1,0 +1,22 @@
+[Unit]
+Description=Atoqueue notification API
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=atoqueue
+Group=atoqueue
+EnvironmentFile=/etc/atoqueue/notification-api.env
+WorkingDirectory=/opt/atoqueue/releases/current/apps/api
+ExecStart=/usr/bin/node ./dist/start.js
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/atoqueue/releases
+
+[Install]
+WantedBy=multi-user.target

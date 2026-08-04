@@ -1,0 +1,112 @@
+name: Deploy
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit SHA or branch to release
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: atoqueue-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Test and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --check .
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter @atoqueue/web build
+      - run: pnpm --filter @atoqueue/api build
+      - run: node deploy/scripts/verify-deployment-artifacts.mjs
+
+  deploy-pwa:
+    name: Publish PWA to GitHub Pages
+    if: github.event_name == 'workflow_dispatch'
+    needs: quality
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @atoqueue/web build
+      - run: printf '%s\n' 'atoqueue.sikumilab.com' > apps/web/dist/CNAME
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  deploy-api:
+    name: Deploy notification API to OCI VPS
+    if: github.event_name == 'workflow_dispatch'
+    needs: quality
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @atoqueue/api build
+      - id: release
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Package production API release
+        run: tar --create --gzip --file atoqueue-api-release.tar.gz apps/api/dist apps/api/package.json packages/contracts/dist packages/contracts/package.json package.json pnpm-lock.yaml pnpm-workspace.yaml deploy/scripts/deploy-release.sh
+      - name: Configure dedicated deployment key
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s' '${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' '${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Upload and activate release
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.sha }}
+        run: |
+          scp -i ~/.ssh/id_ed25519 atoqueue-api-release.tar.gz atoqueue-deploy@${{ secrets.DEPLOY_HOST }}:/tmp/atoqueue-api-release-${RELEASE_ID}.tar.gz
+          scp -i ~/.ssh/id_ed25519 deploy/scripts/deploy-release.sh atoqueue-deploy@${{ secrets.DEPLOY_HOST }}:/tmp/atoqueue-deploy-release-${RELEASE_ID}.sh
+          ssh -i ~/.ssh/id_ed25519 atoqueue-deploy@${{ secrets.DEPLOY_HOST }} "chmod 700 /tmp/atoqueue-deploy-release-${RELEASE_ID}.sh && /tmp/atoqueue-deploy-release-${RELEASE_ID}.sh /tmp/atoqueue-api-release-${RELEASE_ID}.tar.gz ${RELEASE_ID}"
