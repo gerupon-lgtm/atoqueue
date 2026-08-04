@@ -35,6 +35,7 @@ describe("F-013 privacy regression", () => {
 
     const pushes: unknown[] = [];
     await new ReminderDispatcher(reminders, { send: async (input) => { pushes.push(input); return { statusCode: 201 }; } }, () => new Date("2026-08-04T09:00:00.000Z")).dispatchDue();
+    await capture({ method: "DELETE", url: `/v1/devices/${deviceId}`, headers: { authorization: `Bearer ${deviceSecret}`, "idempotency-key": "delete" } });
     const serialized = [captures.join("\n"), JSON.stringify(reminders), JSON.stringify(devices), JSON.stringify(pushes), logs.join("\n")].join("\n");
     expect(serialized).not.toContain(canary);
     expect(pushes).toEqual([expect.objectContaining({ payload: { type: "review_due", reminderId, url: `/today?reminder=${reminderId}` } })]);

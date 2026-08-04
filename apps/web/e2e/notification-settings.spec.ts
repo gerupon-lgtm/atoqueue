@@ -31,3 +31,16 @@ test("a user-triggered denied permission shows browser-settings guidance", async
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.locator("button[type=button]")).toBeDisabled();
 });
+
+test("a persisted unavailable notification state keeps the Today Review fallback visible", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("atoqueue:data:v1", JSON.stringify({
+    schemaVersion: 2,
+    appVersion: "0.1.0",
+    device: { localDeviceId: "device", pushSubscriptionStatus: "unavailable" },
+    settings: { locale: "ja-JP", timeZone: "Asia/Tokyo", notificationEnabled: false, weeklyReviewDay: 0 },
+    captures: [], tasks: [], reviewSessions: [], actionHistory: [], notificationOutbox: [], reminderMap: [], savedAt: "2026-08-04T09:00:00.000Z",
+  })));
+  await page.goto("/settings");
+
+  await expect(page.getByRole("alert")).toBeVisible();
+});

@@ -22,4 +22,21 @@ test.describe("NF-006 recovery paths", () => {
     await expect(page.getByRole("heading", { name: "今日の確認" })).toBeVisible();
     await expect(page.getByRole("alert")).toHaveCount(0);
   });
+
+  test("keeps the capture form when local storage rejects a quota-exhausted save", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      const original = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key: string, value: string): void {
+        if (key === "atoqueue:data:v1") throw new DOMException("quota exceeded", "QuotaExceededError");
+        original.call(this, key, value);
+      };
+    });
+    const capture = page.getByRole("textbox");
+    await capture.fill("quota failure must not discard this capture");
+    await page.locator("button[type=submit]").click();
+
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(capture).toHaveValue("quota failure must not discard this capture");
+  });
 });
