@@ -31,7 +31,7 @@ export function AppShell() {
             <span aria-hidden="true" className="app-shell__nav-icon">
               {icon}
             </span>
-            <span>{label}</span>
+            <span className="app-shell__nav-label">{label}</span>
           </NavLink>
         ))}
       </nav>

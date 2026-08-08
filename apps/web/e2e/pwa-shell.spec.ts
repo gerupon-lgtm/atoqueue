@@ -63,6 +63,18 @@ test.describe("PWA shell", () => {
     await expect(nav).toHaveCSS("flex-direction", "column");
   });
 
+  test("keeps the mobile navigation as a compact bottom row", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    const nav = page.getByRole("navigation", { name: "荳ｻ隕√リ繝薙ご繝ｼ繧ｷ繝ｧ繝ｳ" });
+    const box = await nav.boundingBox();
+
+    expect(box).not.toBeNull();
+    expect(box?.height).toBeLessThanOrEqual(80);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeGreaterThanOrEqual(840);
+  });
+
   test("reloads the visited shell while offline", async ({ context, page }) => {
     await page.goto("/");
     await expect
