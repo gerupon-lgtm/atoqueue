@@ -1,12 +1,20 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
+import {
+  completeOnboarding,
   createCapture,
   type AppRepository,
 } from "../../../../../packages/domain/src";
 import "./QuickCapturePage.css";
 
 const SUCCESS_MESSAGE = "保存しました。いまの作業に戻って大丈夫です";
-const FAILURE_MESSAGE = "端末に保存できませんでした。空き容量を確認して再試行してください";
+const FAILURE_MESSAGE =
+  "端末に保存できませんでした。空き容量を確認して再試行してください";
 const LENGTH_MESSAGE = "280文字以内で入力してください";
 
 export interface QuickCapturePageProps {
@@ -31,6 +39,7 @@ export function QuickCapturePage({
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -47,6 +56,7 @@ export function QuickCapturePage({
             (capture) => capture.classification === "unclassified",
           ).length,
         );
+        setShowOnboarding(!snapshot.settings.onboardingCompletedAt);
 
         if (!draft) {
           lastPersistedDraft.current = "";
@@ -107,7 +117,8 @@ export function QuickCapturePage({
   }, [body, isDraftLoaded, repository]);
 
   async function saveCapture(): Promise<void> {
-    if (body.trim().length === 0 || body.trim().length > 280 || isSaving) return;
+    if (body.trim().length === 0 || body.trim().length > 280 || isSaving)
+      return;
 
     setIsSaving(true);
     setMessage(undefined);
@@ -127,7 +138,12 @@ export function QuickCapturePage({
 
       draftGeneration.current += 1;
       await draftWriteQueue.current;
-      const next = createCapture(await repository.load(), body, now(), createId());
+      const next = createCapture(
+        await repository.load(),
+        body,
+        now(),
+        createId(),
+      );
       await repository.save(next);
       pendingDraftClear.current = body;
       await repository.clearDraft();
@@ -156,9 +172,34 @@ export function QuickCapturePage({
     }
   }
 
+  async function dismissOnboarding(): Promise<void> {
+    try {
+      await repository.save(completeOnboarding(await repository.load(), now()));
+      setShowOnboarding(false);
+    } catch {
+      setError(FAILURE_MESSAGE);
+    }
+  }
+
   return (
     <section className="quick-capture" aria-labelledby="quick-capture-title">
       <h1 id="quick-capture-title">あとで思い出したいことは？</h1>
+      {showOnboarding ? (
+        <section
+          className="quick-capture__onboarding"
+          aria-labelledby="onboarding-title"
+        >
+          <h2 id="onboarding-title">はじめに</h2>
+          <ol>
+            <li>通知のタイミングは設定で変えられます。</li>
+            <li>端末の通知は、設定画面の「通知を設定する」から許可します。</li>
+            <li>記録は受信箱でタスクにできます。</li>
+          </ol>
+          <button onClick={() => void dismissOnboarding()} type="button">
+            はじめる
+          </button>
+        </section>
+      ) : null}
       <p>受信箱の未整理: {unclassifiedCount}件</p>
       <form className="quick-capture__form" onSubmit={handleSubmit}>
         <label htmlFor="quick-capture-body">思いついたこと</label>
@@ -194,7 +235,10 @@ function defaultCreateId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `capture-${Date.now()}`;
 }
 
-function isResolvedDraft(snapshot: Awaited<ReturnType<AppRepository["load"]>>, draft: string): boolean {
+function isResolvedDraft(
+  snapshot: Awaited<ReturnType<AppRepository["load"]>>,
+  draft: string,
+): boolean {
   const body = draft.trim();
   return snapshot.captures.some(
     (capture) =>

@@ -36,6 +36,7 @@ export function TaskCandidatePage({
   const [category, setCategory] = useState<Task["category"] | "">("");
   const [dueType, setDueType] = useState<DueChoice["type"]>("unset");
   const [customDate, setCustomDate] = useState("");
+  const [dueTime, setDueTime] = useState("");
   const [error, setError] = useState<string>();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -44,7 +45,9 @@ export function TaskCandidatePage({
     void repository
       .load()
       .then((snapshot) => {
-        const capture = snapshot.captures.find((candidate) => candidate.id === captureId);
+        const capture = snapshot.captures.find(
+          (candidate) => candidate.id === captureId,
+        );
         if (!capture || capture.classification !== "unclassified") {
           throw new Error("Capture is unavailable.");
         }
@@ -57,7 +60,8 @@ export function TaskCandidatePage({
         }
       })
       .catch(() => {
-        if (current) setError("この記録は整理できません。受信箱へ戻ってください。");
+        if (current)
+          setError("この記録は整理できません。受信箱へ戻ってください。");
       });
     return () => {
       current = false;
@@ -72,7 +76,7 @@ export function TaskCandidatePage({
     setError(undefined);
     try {
       const snapshot = await repository.load();
-      const dueChoice = choiceFromForm(dueType, customDate);
+      const dueChoice = choiceFromForm(dueType, customDate, dueTime);
       const timestamp = now();
       const calendar = createLocalCalendar(snapshot.settings.timeZone);
       if (
@@ -138,11 +142,15 @@ export function TaskCandidatePage({
           readOnly={isSaving}
           value={title}
         />
-        {categoryCandidate ? <p>カテゴリ候補: {categoryLabel(categoryCandidate)}</p> : null}
+        {categoryCandidate ? (
+          <p>カテゴリ候補: {categoryLabel(categoryCandidate)}</p>
+        ) : null}
         <label htmlFor="task-category">カテゴリ</label>
         <select
           id="task-category"
-          onChange={(event) => setCategory(event.target.value as Task["category"] | "")}
+          onChange={(event) =>
+            setCategory(event.target.value as Task["category"] | "")
+          }
           value={category}
         >
           <option value="">選択しない</option>
@@ -153,11 +161,13 @@ export function TaskCandidatePage({
         </select>
         <label htmlFor="task-due">期限</label>
         <p className="task-candidate__due-help">
-          期限はタスクにする時に選べます。日付を選ぶとカレンダーで指定できます。
+          期限はタスクにする時に選べます。日付と時刻を指定でき、時刻を空欄にすると23:59を期限にします。
         </p>
         <select
           id="task-due"
-          onChange={(event) => setDueType(event.target.value as DueChoice["type"])}
+          onChange={(event) =>
+            setDueType(event.target.value as DueChoice["type"])
+          }
           value={dueType}
         >
           <option value="today">今日</option>
@@ -179,13 +189,32 @@ export function TaskCandidatePage({
             />
           </>
         ) : null}
+        {isScheduledDueType(dueType) ? (
+          <>
+            <label htmlFor="task-due-time">期限時刻</label>
+            <input
+              id="task-due-time"
+              onChange={(event) => setDueTime(event.target.value)}
+              type="time"
+              value={dueTime}
+            />
+          </>
+        ) : null}
         <button disabled={isSaving || !title.trim()} type="submit">
           タスクにする
         </button>
-        <button disabled={isSaving} onClick={() => void saveAsNote()} type="button">
+        <button
+          disabled={isSaving}
+          onClick={() => void saveAsNote()}
+          type="button"
+        >
           メモにする
         </button>
-        <button disabled={isSaving} onClick={() => (onReturn ?? onCompleted)?.()} type="button">
+        <button
+          disabled={isSaving}
+          onClick={() => (onReturn ?? onCompleted)?.()}
+          type="button"
+        >
           受信箱へ戻る
         </button>
       </form>
@@ -194,8 +223,28 @@ export function TaskCandidatePage({
   );
 }
 
-function choiceFromForm(type: DueChoice["type"], customDate: string): DueChoice {
-  return type === "custom" ? { type, date: customDate } : { type };
+function choiceFromForm(
+  type: DueChoice["type"],
+  customDate: string,
+  dueTime: string,
+): DueChoice {
+  const time = dueTime || undefined;
+  return type === "custom"
+    ? { type, date: customDate, time }
+    : isScheduledDueType(type)
+      ? { type, time }
+      : { type };
+}
+
+function isScheduledDueType(
+  type: DueChoice["type"],
+): type is "today" | "tomorrow" | "this_sunday" | "custom" {
+  return (
+    type === "today" ||
+    type === "tomorrow" ||
+    type === "this_sunday" ||
+    type === "custom"
+  );
 }
 
 function defaultCreateId(): string {
@@ -209,5 +258,7 @@ function defaultConfirmPastDate(date: string): boolean {
 }
 
 function categoryLabel(category: NonNullable<Task["category"]>): string {
-  return { work: "仕事", home: "家", shopping: "買い物", other: "その他" }[category];
+  return { work: "仕事", home: "家", shopping: "買い物", other: "その他" }[
+    category
+  ];
 }

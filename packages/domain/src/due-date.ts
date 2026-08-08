@@ -1,8 +1,8 @@
 export type DueChoice =
-  | { type: "today" }
-  | { type: "tomorrow" }
-  | { type: "this_sunday" }
-  | { type: "custom"; date: string }
+  | { type: "today"; time?: string }
+  | { type: "tomorrow"; time?: string }
+  | { type: "this_sunday"; time?: string }
+  | { type: "custom"; date: string; time?: string }
   | { type: "none" }
   | { type: "unset" };
 
@@ -13,7 +13,12 @@ export interface LocalCalendar {
   nextWeekday(date: string, weekday: number): string;
   endOfDay(date: string): string;
   atTime(date: string, hour: number, minute: number): string;
-  isAtOrAfter(instant: string, date: string, hour: number, minute: number): boolean;
+  isAtOrAfter(
+    instant: string,
+    date: string,
+    hour: number,
+    minute: number,
+  ): boolean;
 }
 
 export interface ResolveDueChoiceInput {
@@ -34,36 +39,39 @@ export function resolveDueChoice(input: ResolveDueChoiceInput): DueResolution {
 
   switch (input.choice.type) {
     case "today":
-      return scheduled(input.calendar.endOfDay(today));
+      return scheduledOn(input.calendar, today, input.choice.time);
     case "tomorrow":
-      return scheduled(input.calendar.endOfDay(input.calendar.addDays(today, 1)));
+      return scheduledOn(
+        input.calendar,
+        input.calendar.addDays(today, 1),
+        input.choice.time,
+      );
     case "this_sunday":
-      return scheduled(input.calendar.endOfDay(input.calendar.nextSunday(today)));
+      return scheduledOn(
+        input.calendar,
+        input.calendar.nextSunday(today),
+        input.choice.time,
+      );
     case "custom":
-      return scheduled(input.calendar.endOfDay(input.choice.date));
-    case "none":
-      {
-        const weeklyReviewDate = input.calendar.nextWeekday(
-          today,
-          input.weeklyReviewDay ?? 0,
-        );
-        const nextReviewDate = input.calendar.isAtOrAfter(
-          input.now,
-          weeklyReviewDate,
-          18,
-          0,
-        )
-          ? input.calendar.addDays(weeklyReviewDate, 7)
-          : weeklyReviewDate;
+      return scheduledOn(input.calendar, input.choice.date, input.choice.time);
+    case "none": {
+      const weeklyReviewDate = input.calendar.nextWeekday(
+        today,
+        input.weeklyReviewDay ?? 0,
+      );
+      const nextReviewDate = input.calendar.isAtOrAfter(
+        input.now,
+        weeklyReviewDate,
+        18,
+        0,
+      )
+        ? input.calendar.addDays(weeklyReviewDate, 7)
+        : weeklyReviewDate;
       return {
         dueMode: "none",
-        nextReviewAt: input.calendar.atTime(
-          nextReviewDate,
-          18,
-          0,
-        ),
+        nextReviewAt: input.calendar.atTime(nextReviewDate, 18, 0),
       };
-      }
+    }
     case "unset":
       return {
         dueMode: "unset",
@@ -80,7 +88,11 @@ export function createLocalCalendar(timeZone: string): LocalCalendar {
     addDays(date, days) {
       const [year, month, day] = parseDate(date);
       const result = new Date(Date.UTC(year, month - 1, day + days));
-      return toDateString(result.getUTCFullYear(), result.getUTCMonth() + 1, result.getUTCDate());
+      return toDateString(
+        result.getUTCFullYear(),
+        result.getUTCMonth() + 1,
+        result.getUTCDate(),
+      );
     },
     nextSunday(date) {
       return this.nextWeekday(date, 0);
@@ -102,7 +114,12 @@ export function createLocalCalendar(timeZone: string): LocalCalendar {
   };
 }
 
-function localTimeToIso(date: string, hour: number, minute: number, timeZone: string): string {
+function localTimeToIso(
+  date: string,
+  hour: number,
+  minute: number,
+  timeZone: string,
+): string {
   const [year, month, day] = parseDate(date);
   const desiredUtc = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
   let candidate = desiredUtc;
@@ -117,6 +134,26 @@ function localTimeToIso(date: string, hour: number, minute: number, timeZone: st
 
 function scheduled(dueAt: string): DueResolution {
   return { dueMode: "scheduled", dueAt, nextReviewAt: dueAt };
+}
+
+function scheduledOn(
+  calendar: LocalCalendar,
+  date: string,
+  time: string | undefined,
+): DueResolution {
+  if (!time) return scheduled(calendar.endOfDay(date));
+  const [hour, minute] = parseTime(time);
+  return scheduled(calendar.atTime(date, hour, minute));
+}
+
+function parseTime(value: string): [number, number] {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) throw new Error("A deadline time must use HH:MM.");
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59)
+    throw new Error("A deadline time must be a real clock time.");
+  return [hour, minute];
 }
 
 function parseDate(value: string): [number, number, number] {
@@ -137,7 +174,10 @@ function parseDate(value: string): [number, number, number] {
   return [year, month, day];
 }
 
-function formatDateParts(instant: Date, timeZone: string): {
+function formatDateParts(
+  instant: Date,
+  timeZone: string,
+): {
   date: string;
   year: number;
   month: number;
@@ -156,19 +196,37 @@ function formatDateParts(instant: Date, timeZone: string): {
     second: "2-digit",
     hourCycle: "h23",
   }).formatToParts(instant);
-  const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
   const year = value("year");
   const month = value("month");
   const day = value("day");
   const hour = value("hour");
   const minute = value("minute");
   const second = value("second");
-  return { date: toDateString(year, month, day), year, month, day, hour, minute, second };
+  return {
+    date: toDateString(year, month, day),
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+  };
 }
 
 function offsetAt(instant: Date, timeZone: string): number {
   const parts = formatDateParts(instant, timeZone);
-  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - instant.getTime();
+  return (
+    Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+      parts.second,
+    ) - instant.getTime()
+  );
 }
 
 function toDateString(year: number, month: number, day: number): string {

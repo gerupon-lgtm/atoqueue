@@ -1,5 +1,5 @@
 export interface AppSnapshot {
-  schemaVersion: 3;
+  schemaVersion: 4;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -17,10 +17,7 @@ export interface DeviceState {
   pushDeviceId?: string;
   pushDeviceSecret?: string;
   pushSubscriptionStatus:
-    | "not_requested"
-    | "granted"
-    | "denied"
-    | "unavailable";
+    "not_requested" | "granted" | "denied" | "unavailable";
   registeredAt?: string;
 }
 
@@ -32,6 +29,8 @@ export interface Settings {
   initialReminderDelayMinutes?: number;
   /** Minutes before a scheduled deadline. The user currently prefers 60 minutes. */
   deadlineReminderLeadMinutes?: number;
+  /** Local dismissal marker for the first-use guide. */
+  onboardingCompletedAt?: string;
   quietHours?: { start: string; end: string };
   weeklyReviewDay: 0;
 }

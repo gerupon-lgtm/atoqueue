@@ -40,7 +40,7 @@
 
 ```ts
 export interface AppSnapshot {
-  schemaVersion: 3;
+  schemaVersion: 4;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -72,12 +72,16 @@ export interface Settings {
   notificationEnabled: boolean;
   initialReminderDelayMinutes: number;
   deadlineReminderLeadMinutes: number;
+  /** 初回チュートリアルを閉じた端末内日時。未設定なら新規利用者へ表示する。 */
+  onboardingCompletedAt?: string;
   quietHours?: { start: string; end: string };
   weeklyReviewDay: 0;
 }
 ```
 
 `pushDeviceSecret` は端末内だけに保存し、JSONバックアップには含めない。`weeklyReviewDay: 0` は日曜日を表す。【想定】`quietHours` は初期値なしとし、MVPでは設定画面に公開しない。
+
+`dueAt` は利用者が選んだ端末ローカルの日付・任意時刻をUTCへ変換して保存する。時刻を選ばなかった場合はその日の23:59を使う。表示と日付境界の判定は `settings.timeZone` を使う。
 
 ### 3.3 Capture
 
@@ -353,6 +357,7 @@ export interface BackupEnvelopeV1 {
 1. `schemaVersion` が既知なら純粋関数で段階移行する。
    - v1 → v2: 各 `ReviewSession` に空の `actionEventIds` を追加する。既存の操作履歴を推測で再帰属しない。
    - v2: `answeredTaskIds` は `orderedTaskIds` の部分集合、`actionEventIds` は実在する一意なタスク操作履歴であり、当該セッションの処理済みタスクを参照することを検証する。
+   - v3 → v4: 既存端末には `onboardingCompletedAt` として保存日時を設定し、既存利用者へ初回チュートリアルを再表示しない。v4の新規端末は未設定のまま開始し、案内を閉じた時だけ設定する。
 2. 新しい未知バージョンは上書きせず、読み取り停止とJSON退避を案内する。
 3. JSON解析失敗時は破損値を別キー `atoqueue:corrupt:<timestamp>` へ退避して初期化可否を確認する。
 4. 破損復旧や復元では元データを直ちに削除しない。

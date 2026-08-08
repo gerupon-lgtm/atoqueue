@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DOMAIN_SCHEMA_VERSION } from "./index";
 
 describe("domain package", () => {
-  it("starts at schema version 3", () => {
-    expect(DOMAIN_SCHEMA_VERSION).toBe(3);
+  it("starts at schema version 4", () => {
+    expect(DOMAIN_SCHEMA_VERSION).toBe(4);
   });
 });

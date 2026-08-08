@@ -1,15 +1,27 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppRepository } from "../../../../../packages/domain/src";
-import { createCapture, createEmptySnapshot } from "../../../../../packages/domain/src";
+import {
+  createCapture,
+  createEmptySnapshot,
+} from "../../../../../packages/domain/src";
 import { QuickCapturePage } from "./QuickCapturePage";
 
 const now = "2026-08-03T00:00:00.000Z";
 
-function createRepository(overrides: Partial<AppRepository> = {}): AppRepository {
+function createRepository(
+  overrides: Partial<AppRepository> = {},
+): AppRepository {
   return {
     load: vi.fn().mockResolvedValue(
       createEmptySnapshot({
@@ -45,14 +57,43 @@ describe("QuickCapturePage", () => {
     const repository = createRepository();
     render(<QuickCapturePage repository={repository} />);
 
-    const input = await screen.findByRole("textbox", { name: "思いついたこと" });
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
     expect(screen.getAllByRole("textbox")).toHaveLength(1);
-    expect(screen.getByRole("heading").textContent).toBe("あとで思い出したいことは？");
+    expect(
+      screen.getByRole("heading", { name: "あとで思い出したいことは？" })
+        .textContent,
+    ).toBe("あとで思い出したいことは？");
     expect(screen.queryByLabelText(/期限|カテゴリ/)).toBeNull();
     expect(input).toBe(document.activeElement);
     expect(
-      screen.getByRole("button", { name: "保存して戻る" }).hasAttribute("disabled"),
+      screen
+        .getByRole("button", { name: "保存して戻る" })
+        .hasAttribute("disabled"),
     ).toBe(true);
+  });
+
+  it("shows a first-use guide and stores its dismissal locally", async () => {
+    const repository = createRepository();
+    render(<QuickCapturePage now={() => now} repository={repository} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "はじめに" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("通知のタイミングは設定で変えられます。"),
+    ).toBeTruthy();
+    expect(screen.getByText("記録は受信箱でタスクにできます。")).toBeTruthy();
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "はじめる" }));
+
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect(
+      (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]?.[0],
+    ).toMatchObject({ settings: { onboardingCompletedAt: now } });
   });
 
   it("saves a draft after 300ms through the repository", async () => {
@@ -75,14 +116,20 @@ describe("QuickCapturePage", () => {
   it("prevents more than 280 characters before attempting persistence", async () => {
     const repository = createRepository();
     render(<QuickCapturePage repository={repository} />);
-    const input = await screen.findByRole("textbox", { name: "思いついたこと" });
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
 
     fireEvent.change(input, { target: { value: "あ".repeat(281) } });
 
     expect(
-      screen.getByRole("button", { name: "保存して戻る" }).hasAttribute("disabled"),
+      screen
+        .getByRole("button", { name: "保存して戻る" })
+        .hasAttribute("disabled"),
     ).toBe(true);
-    expect(screen.getByRole("alert").textContent).toBe("280文字以内で入力してください");
+    expect(screen.getByRole("alert").textContent).toBe(
+      "280文字以内で入力してください",
+    );
   });
 
   it("saves with Ctrl+Enter, clears the draft, and announces completion", async () => {
@@ -95,7 +142,9 @@ describe("QuickCapturePage", () => {
         repository={repository}
       />,
     );
-    const input = await screen.findByRole("textbox", { name: "思いついたこと" });
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
 
     await user.type(input, "  牛乳を買う  ");
     await user.keyboard("{Control>}{Enter}{/Control}");
@@ -106,7 +155,9 @@ describe("QuickCapturePage", () => {
     expect(screen.getByRole("status").textContent).toBe(
       "保存しました。いまの作業に戻って大丈夫です",
     );
-    expect((repository.save as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toMatchObject({
+    expect(
+      (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]?.[0],
+    ).toMatchObject({
       captures: [expect.objectContaining({ body: "牛乳を買う" })],
     });
   });
@@ -115,7 +166,9 @@ describe("QuickCapturePage", () => {
     const repository = createRepository();
     const user = userEvent.setup();
     render(<QuickCapturePage repository={repository} />);
-    const input = await screen.findByRole("textbox", { name: "思いついたこと" });
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
 
     await user.type(input, "買い物");
     await user.keyboard("{Shift>}{Enter}{/Shift}");
@@ -130,7 +183,9 @@ describe("QuickCapturePage", () => {
     const repository = createRepository();
     const user = userEvent.setup();
     render(<QuickCapturePage repository={repository} />);
-    const input = await screen.findByRole("textbox", { name: "思いついたこと" });
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
 
     await user.type(input, "牛乳を買う");
     await user.keyboard("{Meta>}{Enter}{/Meta}");
@@ -144,7 +199,9 @@ describe("QuickCapturePage", () => {
     });
     const user = userEvent.setup();
     render(<QuickCapturePage repository={repository} />);
-    const input = await screen.findByRole("textbox", { name: "思いついたこと" });
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
 
     await user.type(input, "牛乳を買う");
     await user.click(screen.getByRole("button", { name: "保存して戻る" }));
@@ -166,7 +223,9 @@ describe("QuickCapturePage", () => {
     });
     const user = userEvent.setup();
     render(<QuickCapturePage repository={repository} />);
-    const input = await screen.findByRole("textbox", { name: "思いついたこと" });
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
 
     await user.type(input, "牛乳を買う");
     await user.click(screen.getByRole("button", { name: "保存して戻る" }));
@@ -200,9 +259,15 @@ describe("QuickCapturePage", () => {
     };
     const user = userEvent.setup();
     const first = render(
-      <QuickCapturePage createId={() => "capture-1"} now={() => now} repository={repository} />,
+      <QuickCapturePage
+        createId={() => "capture-1"}
+        now={() => now}
+        repository={repository}
+      />,
     );
-    const firstInput = await screen.findByRole("textbox", { name: "思いついたこと" });
+    const firstInput = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
 
     await user.click(screen.getByRole("button", { name: "保存して戻る" }));
     await screen.findByRole("alert");
@@ -210,9 +275,15 @@ describe("QuickCapturePage", () => {
     first.unmount();
 
     render(
-      <QuickCapturePage createId={() => "capture-2"} now={() => now} repository={repository} />,
+      <QuickCapturePage
+        createId={() => "capture-2"}
+        now={() => now}
+        repository={repository}
+      />,
     );
-    const reloadedInput = await screen.findByRole("textbox", { name: "思いついたこと" });
+    const reloadedInput = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
     expect((reloadedInput as HTMLTextAreaElement).value).toBe("牛乳を買う");
     clearAllowed = true;
     await user.click(screen.getByRole("button", { name: "保存して戻る" }));
@@ -251,9 +322,15 @@ describe("QuickCapturePage", () => {
     };
     const user = userEvent.setup();
     render(
-      <QuickCapturePage createId={() => "capture-new"} now={() => now} repository={repository} />,
+      <QuickCapturePage
+        createId={() => "capture-new"}
+        now={() => now}
+        repository={repository}
+      />,
     );
-    const input = await screen.findByRole("textbox", { name: "思いついたこと" });
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
     await screen.findByRole("alert");
 
     await user.clear(input);

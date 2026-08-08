@@ -9,6 +9,27 @@
   gap: 0.75rem;
 }
 
+.quick-capture__onboarding {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #c6d0c8;
+  border-radius: 0.75rem;
+  background: #fffdf8;
+  box-shadow: 0 0.5rem 1.25rem rgb(23 59 51 / 8%);
+}
+
+.quick-capture__onboarding h2,
+.quick-capture__onboarding ol {
+  margin: 0;
+}
+
+.quick-capture__onboarding ol {
+  display: grid;
+  gap: 0.5rem;
+  padding-left: 1.25rem;
+}
+
 .quick-capture textarea {
   min-height: 7rem;
   padding: 0.75rem;

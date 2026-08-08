@@ -1332,3 +1332,11 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 **Implementation steps:** Add a versioned local model migration, plan anonymous schedules in the domain package, rebuild reservation outbox after settings or task changes, preserve schedule kinds during error recovery, and cover the API prefetch window with fake-clock tests. No task title, task ID, deadline meaning, or history may cross the API boundary.
 
 **Open assumption:** Whether same-timestamp generic notifications should be coalesced is retained as 【想定】 until pilot feedback confirms the preferred behavior.
+
+## Follow-up: mobile UI, deadline time, and first-use guidance（2026-08-08）
+
+**Requirements:** F-002, F-006, F-007, F-013, F-018, NF-008, NF-010, NF-012
+
+**Confirmed design:** The quick-capture screen keeps deadline entry out of the initial action. At task conversion and task editing, a user may add an optional `HH:MM` time to today, tomorrow, this Sunday, or a custom date. A blank time remains 23:59. The local IANA time zone converts that selection to UTC for persistence, and dates are rendered back in the device time zone. New v4 snapshots show a local-only guide covering notification timing, explicit browser notification setup, and inbox task conversion. Existing v3 data migrates as already guided.
+
+**Implementation steps:** Add time-aware due-choice tests before extending the domain calendar call; render an accessible time input in candidate and detail screens; add schema v4 migration tests; format local dates, time zones, and offsets at the presentation boundary; use Kosugi and a consistent settings-style card/form system across screens; replace fragile text icons with `2.5`-stroke SVG navigation icons. Explain the five-minute dispatcher poll and Android/PWA notification checks in Settings. No new task data may cross the notification boundary.

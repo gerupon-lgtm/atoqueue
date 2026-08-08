@@ -1,8 +1,18 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createCapture, createEmptySnapshot, type AppRepository } from "../../../../../packages/domain/src";
+import {
+  createCapture,
+  createEmptySnapshot,
+  type AppRepository,
+} from "../../../../../packages/domain/src";
 import { TaskCandidatePage } from "./TaskCandidatePage";
 
 const now = "2026-08-03T09:00:00.000Z";
@@ -48,7 +58,9 @@ describe("TaskCandidatePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "タスクにする" }));
 
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
-    expect((repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].tasks).toEqual([
+    expect(
+      (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].tasks,
+    ).toEqual([
       expect.objectContaining({ id: "task-1", sourceCaptureId: "capture-1" }),
     ]);
   });
@@ -76,12 +88,20 @@ describe("TaskCandidatePage", () => {
 
     expect(
       await screen.findByText(
-        (_, element) => element?.tagName === "P" && element.textContent === "元の記録: 明日 牛乳を買う",
+        (_, element) =>
+          element?.tagName === "P" &&
+          element.textContent === "元の記録: 明日 牛乳を買う",
       ),
     ).toBeTruthy();
-    expect((screen.getByLabelText("タスク名") as HTMLInputElement).value).toBe("牛乳を買う");
-    expect((screen.getByLabelText("期限") as HTMLSelectElement).value).toBe("tomorrow");
-    expect((screen.getByLabelText("カテゴリ") as HTMLSelectElement).value).toBe("shopping");
+    expect((screen.getByLabelText("タスク名") as HTMLInputElement).value).toBe(
+      "牛乳を買う",
+    );
+    expect((screen.getByLabelText("期限") as HTMLSelectElement).value).toBe(
+      "tomorrow",
+    );
+    expect((screen.getByLabelText("カテゴリ") as HTMLSelectElement).value).toBe(
+      "shopping",
+    );
     expect(repository.save).not.toHaveBeenCalled();
   });
 
@@ -97,11 +117,15 @@ describe("TaskCandidatePage", () => {
     );
 
     await screen.findByDisplayValue("牛乳を買う");
-    fireEvent.change(screen.getByLabelText("カテゴリ"), { target: { value: "shopping" } });
+    fireEvent.change(screen.getByLabelText("カテゴリ"), {
+      target: { value: "shopping" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "タスクにする" }));
 
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
-    expect((repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].tasks[0]).toMatchObject({
+    expect(
+      (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].tasks[0],
+    ).toMatchObject({
       category: "shopping",
     });
   });
@@ -122,7 +146,10 @@ describe("TaskCandidatePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "メモにする" }));
 
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
-    expect((repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].captures[0]).toMatchObject({
+    expect(
+      (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0]
+        .captures[0],
+    ).toMatchObject({
       classification: "note",
     });
     expect(onReturn).toHaveBeenCalledOnce();
@@ -131,7 +158,13 @@ describe("TaskCandidatePage", () => {
   it("F-004 returns to the inbox without classifying when 受信箱へ戻る is pressed", async () => {
     const repository = repositoryWithCapture();
     const onReturn = vi.fn();
-    render(<TaskCandidatePage captureId="capture-1" onReturn={onReturn} repository={repository} />);
+    render(
+      <TaskCandidatePage
+        captureId="capture-1"
+        onReturn={onReturn}
+        repository={repository}
+      />,
+    );
 
     await screen.findByDisplayValue("牛乳を買う");
     fireEvent.click(screen.getByRole("button", { name: "受信箱へ戻る" }));
@@ -153,15 +186,25 @@ describe("TaskCandidatePage", () => {
     );
 
     await screen.findByDisplayValue("牛乳を買う");
-    fireEvent.change(screen.getByLabelText("期限"), { target: { value: "custom" } });
-    fireEvent.change(screen.getByLabelText("日付"), { target: { value: "2026-08-02" } });
-    fireEvent.change(screen.getByLabelText("タスク名"), { target: { value: "牛乳を買い足す" } });
+    fireEvent.change(screen.getByLabelText("期限"), {
+      target: { value: "custom" },
+    });
+    fireEvent.change(screen.getByLabelText("日付"), {
+      target: { value: "2026-08-02" },
+    });
+    fireEvent.change(screen.getByLabelText("タスク名"), {
+      target: { value: "牛乳を買い足す" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "タスクにする" }));
 
     await waitFor(() => expect(confirmPastDate).toHaveBeenCalledOnce());
     expect(repository.save).not.toHaveBeenCalled();
-    expect((screen.getByLabelText("タスク名") as HTMLInputElement).value).toBe("牛乳を買い足す");
-    expect((screen.getByLabelText("日付") as HTMLInputElement).value).toBe("2026-08-02");
+    expect((screen.getByLabelText("タスク名") as HTMLInputElement).value).toBe(
+      "牛乳を買い足す",
+    );
+    expect((screen.getByLabelText("日付") as HTMLInputElement).value).toBe(
+      "2026-08-02",
+    );
   });
 
   it("F-007 explains that a deadline is chosen while turning an inbox item into a task", async () => {
@@ -169,10 +212,44 @@ describe("TaskCandidatePage", () => {
     render(<TaskCandidatePage captureId="capture-1" repository={repository} />);
 
     await screen.findByDisplayValue("牛乳を買う");
-    expect(screen.getByText("期限はタスクにする時に選べます。日付を選ぶとカレンダーで指定できます。"))
-      .toBeTruthy();
+    expect(
+      screen.getByText(
+        "期限はタスクにする時に選べます。日付と時刻を指定でき、時刻を空欄にすると23:59を期限にします。",
+      ),
+    ).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("期限"), { target: { value: "custom" } });
+    fireEvent.change(screen.getByLabelText("期限"), {
+      target: { value: "custom" },
+    });
     expect(screen.getByLabelText("日付")).toHaveProperty("type", "date");
+  });
+
+  it("F-007 lets the user choose a deadline time while turning a capture into a task", async () => {
+    const repository = repositoryWithCapture();
+    render(
+      <TaskCandidatePage
+        captureId="capture-1"
+        createId={() => "task-1"}
+        now={() => now}
+        repository={repository}
+      />,
+    );
+
+    await screen.findByDisplayValue("牛乳を買う");
+    fireEvent.change(screen.getByLabelText("期限"), {
+      target: { value: "custom" },
+    });
+    fireEvent.change(screen.getByLabelText("日付"), {
+      target: { value: "2026-08-05" },
+    });
+    fireEvent.change(screen.getByLabelText("期限時刻"), {
+      target: { value: "09:30" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "タスクにする" }));
+
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect(
+      (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].tasks[0],
+    ).toMatchObject({ dueAt: "2026-08-05T00:30:00.000Z" });
   });
 });

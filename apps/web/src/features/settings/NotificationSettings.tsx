@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { rebuildActiveTaskNotifications, type AppRepository } from "../../../../../packages/domain/src";
+import {
+  rebuildActiveTaskNotifications,
+  type AppRepository,
+} from "../../../../../packages/domain/src";
 import { NotificationApi } from "../../infrastructure/notifications/notification-api";
 import {
   createBrowserPushAdapter,
@@ -9,6 +12,7 @@ import {
 } from "../../infrastructure/notifications/push-subscription";
 import "./NotificationSettings.css";
 import { formatLocalDateTime } from "../../presentation/format-local-date-time";
+import { formatTimeZone } from "../../presentation/format-time-zone";
 
 export interface NotificationSettingsProps {
   repository: AppRepository;
@@ -50,12 +54,18 @@ export function NotificationSettings({
           : snapshot.device.pushSubscriptionStatus,
       );
       setHasRegisteredDevice(
-        Boolean(snapshot.device.pushDeviceId && snapshot.device.pushDeviceSecret),
+        Boolean(
+          snapshot.device.pushDeviceId && snapshot.device.pushDeviceSecret,
+        ),
       );
       setRegisteredAt(snapshot.device.registeredAt);
       setTimeZone(snapshot.settings.timeZone);
-      setInitialDelay(String(snapshot.settings.initialReminderDelayMinutes ?? 60));
-      setDeadlineLead(String(snapshot.settings.deadlineReminderLeadMinutes ?? 60));
+      setInitialDelay(
+        String(snapshot.settings.initialReminderDelayMinutes ?? 60),
+      );
+      setDeadlineLead(
+        String(snapshot.settings.deadlineReminderLeadMinutes ?? 60),
+      );
     });
     return () => {
       active = false;
@@ -98,7 +108,10 @@ export function NotificationSettings({
   async function saveTiming(): Promise<void> {
     const initialReminderDelayMinutes = Number(initialDelay);
     const deadlineReminderLeadMinutes = Number(deadlineLead);
-    if (!isReminderMinutes(initialReminderDelayMinutes) || !isReminderMinutes(deadlineReminderLeadMinutes)) {
+    if (
+      !isReminderMinutes(initialReminderDelayMinutes) ||
+      !isReminderMinutes(deadlineReminderLeadMinutes)
+    ) {
       setState("error");
       return;
     }
@@ -107,10 +120,17 @@ export function NotificationSettings({
       const snapshot = await repository.load();
       const updated = {
         ...snapshot,
-        settings: { ...snapshot.settings, initialReminderDelayMinutes, deadlineReminderLeadMinutes },
+        settings: {
+          ...snapshot.settings,
+          initialReminderDelayMinutes,
+          deadlineReminderLeadMinutes,
+        },
       };
       const savedAt = new Date().toISOString();
-      const delivery = rebuildActiveTaskNotifications({ snapshot: updated, now: savedAt });
+      const delivery = rebuildActiveTaskNotifications({
+        snapshot: updated,
+        now: savedAt,
+      });
       await repository.save({ ...updated, ...delivery, savedAt });
       void flushNotifications?.();
     } catch {
@@ -121,15 +141,31 @@ export function NotificationSettings({
   }
 
   return (
-    <section className="notification-settings" aria-labelledby="notification-settings-title">
+    <section
+      className="notification-settings"
+      aria-labelledby="notification-settings-title"
+    >
       <h1 id="notification-settings-title">通知</h1>
       <p>
         通知を使うと、アプリを開いて今日の確認に戻るきっかけを受け取れます。
       </p>
       <p>タスク本文は通知サーバーへ送信しません。</p>
-      <section className="notification-settings__timing" aria-labelledby="notification-timing-title">
+      {timeZone ? (
+        <p
+          aria-label="利用中のタイムゾーン"
+          className="notification-settings__time-zone"
+        >
+          期限と通知時刻の基準: {formatTimeZone(timeZone)}
+        </p>
+      ) : null}
+      <section
+        className="notification-settings__timing"
+        aria-labelledby="notification-timing-title"
+      >
         <h2 id="notification-timing-title">通知タイミング</h2>
-        <p>初回通知はタスク登録から、期限前通知は期限より前の指定分で予約します。</p>
+        <p>
+          初回通知はタスク登録から、期限前通知は期限より前の指定分で予約します。通知サーバーは最大5分ごとに配送対象を確認します。OSや省電力設定により、表示時刻は前後することがあります。
+        </p>
         <div className="notification-settings__timing-row">
           <label htmlFor="initial-reminder-delay">初回通知まで（分）</label>
           <div className="notification-settings__number-field">
@@ -158,7 +194,9 @@ export function NotificationSettings({
             <span aria-hidden="true">分前</span>
           </div>
         </div>
-        <button disabled={busy} onClick={() => void saveTiming()} type="button">通知タイミングを保存</button>
+        <button disabled={busy} onClick={() => void saveTiming()} type="button">
+          通知タイミングを保存
+        </button>
       </section>
       <button
         disabled={busy || state === "denied"}
@@ -170,9 +208,14 @@ export function NotificationSettings({
       {state === "granted" ? <p role="status">通知を設定しました。</p> : null}
       {state === "granted" && hasRegisteredDevice ? (
         <>
-          <p className="notification-settings__device-status">この端末は通知サービスに登録済みです。</p>
+          <p className="notification-settings__device-status">
+            この端末は通知サービスに登録済みです。
+          </p>
           {registeredAt && timeZone ? (
-            <p aria-label="通知の端末登録日時" className="notification-settings__device-status">
+            <p
+              aria-label="通知の端末登録日時"
+              className="notification-settings__device-status"
+            >
               通知の端末登録日時: {formatLocalDateTime(registeredAt, timeZone)}
             </p>
           ) : null}
@@ -197,6 +240,23 @@ export function NotificationSettings({
       {state === "diagnostic_error" ? (
         <p role="alert">{errorMessage(errorReason)}</p>
       ) : null}
+      <section
+        className="notification-settings__device-check"
+        aria-labelledby="device-check-title"
+      >
+        <h2 id="device-check-title">スマホで通知が来ないとき</h2>
+        <ol>
+          <li>
+            この画面で「通知を設定する」を押し、端末登録の表示と日時を確認します。
+          </li>
+          <li>
+            端末の設定で、Chromeまたはホーム画面に追加したあとキューの通知を許可します。
+          </li>
+          <li>
+            省電力モードや集中モードを解除してから、期限付きタスクで確認します。
+          </li>
+        </ol>
+      </section>
     </section>
   );
 }

@@ -44,6 +44,33 @@
   color: #22543d;
 }
 
+.notification-settings__time-zone {
+  margin: 0;
+  padding: 0.625rem 0.75rem;
+  border-left: 3px solid #568a77;
+  background: #eef5ef;
+}
+
+.notification-settings__device-check {
+  display: grid;
+  gap: 0.625rem;
+  padding: 1rem;
+  border: 1px solid #c6d0c8;
+  border-radius: 0.75rem;
+  background: #f4f8f4;
+}
+
+.notification-settings__device-check h2,
+.notification-settings__device-check ol {
+  margin: 0;
+}
+
+.notification-settings__device-check ol {
+  display: grid;
+  gap: 0.5rem;
+  padding-left: 1.25rem;
+}
+
 @media (max-width: 359px) {
   .notification-settings__timing-row {
     grid-template-columns: 1fr;

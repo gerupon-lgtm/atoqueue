@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppRepository, AppSnapshot } from "../../../../../packages/domain/src/index";
+import type {
+  AppRepository,
+  AppSnapshot,
+} from "../../../../../packages/domain/src/index";
 import {
   CorruptDataError,
   PersistenceError,
@@ -32,7 +35,7 @@ function repositoryContract(
       const snapshot = await createRepository().load();
 
       expect(snapshot).toMatchObject({
-        schemaVersion: 3,
+        schemaVersion: 4,
         captures: [],
         tasks: [],
         actionHistory: [],
@@ -86,13 +89,15 @@ function repositoryContract(
         CorruptDataError,
       );
 
-      expect(window.localStorage.getItem("atoqueue:corrupt:2026-08-03T00:00:00.000Z")).toBe(
-        "{not-json",
-      );
+      expect(
+        window.localStorage.getItem(
+          "atoqueue:corrupt:2026-08-03T00:00:00.000Z",
+        ),
+      ).toBe("{not-json");
     });
 
     it("rejects a future schema version without overwriting it", async () => {
-      const stored = JSON.stringify({ schemaVersion: 4 });
+      const stored = JSON.stringify({ schemaVersion: 5 });
       window.localStorage.setItem(DATA_KEY, stored);
 
       await expect(createRepository().load()).rejects.toBeInstanceOf(
@@ -104,8 +109,9 @@ function repositoryContract(
   });
 }
 
-repositoryContract("localStorage repository", () =>
-  new LocalStorageRepository(window.localStorage),
+repositoryContract(
+  "localStorage repository",
+  () => new LocalStorageRepository(window.localStorage),
 );
 
 describe("LocalStorageRepository persistence failures", () => {
@@ -138,13 +144,13 @@ describe("LocalStorageRepository persistence failures", () => {
     ).rejects.toBeInstanceOf(CorruptDataError);
 
     expect(window.localStorage.getItem(DATA_KEY)).toBe(existing);
-    expect(window.localStorage.getItem("atoqueue:corrupt:2026-08-03T00:00:00.000Z")).toBe(
-      existing,
-    );
+    expect(
+      window.localStorage.getItem("atoqueue:corrupt:2026-08-03T00:00:00.000Z"),
+    ).toBe(existing);
   });
 
   it("preserves an unknown existing schema version when save is attempted", async () => {
-    const existing = JSON.stringify({ schemaVersion: 4 });
+    const existing = JSON.stringify({ schemaVersion: 5 });
     window.localStorage.setItem(DATA_KEY, existing);
 
     await expect(
@@ -184,7 +190,9 @@ describe("LocalStorageRepository persistence failures", () => {
 
     await repository.save(await repository.load());
 
-    const persisted = JSON.parse(window.localStorage.getItem(DATA_KEY) ?? "") as {
+    const persisted = JSON.parse(
+      window.localStorage.getItem(DATA_KEY) ?? "",
+    ) as {
       overdue?: unknown;
       unrecognizedRootValue?: unknown;
       tasks: Array<{ neglectLevel?: unknown; unrecognizedTaskValue?: unknown }>;
@@ -215,7 +223,9 @@ describe("LocalStorageRepository persistence failures", () => {
 
     await repository.save(await repository.load());
 
-    const persisted = JSON.parse(window.localStorage.getItem(DATA_KEY) ?? "") as {
+    const persisted = JSON.parse(
+      window.localStorage.getItem(DATA_KEY) ?? "",
+    ) as {
       actionHistory: Array<{
         before?: { overdue?: unknown; title?: unknown };
         after?: { neglectLevel?: unknown; title?: unknown };
@@ -230,7 +240,7 @@ describe("LocalStorageRepository persistence failures", () => {
 
 function sampleSnapshot(): AppSnapshot {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     appVersion: "0.1.0",
     device: {
       localDeviceId: "device-1",
