@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AppRepository, AppSnapshot } from "../../../../../packages/domain/src";
+import type { AppRepository } from "../../../../../packages/domain/src";
 import { createCapture, createEmptySnapshot } from "../../../../../packages/domain/src";
 import { QuickCapturePage } from "./QuickCapturePage";
 

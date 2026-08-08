@@ -23,7 +23,7 @@ export function installSecurity(app: FastifyInstance, allowedOrigin: string): De
       throw new ApiError(429, "RATE_LIMITED", "Rate limit exceeded.", undefined, Math.max(1, Math.ceil((windowMs - (now - state.windowStartedAt)) / 1000)));
     }
   };
-  app.addHook("preHandler", async (request, reply) => {
+  app.addHook("preHandler", async (request) => {
     const route = request.routeOptions.url;
     if (request.method === "POST" && route === "/v1/devices") {
       consume(`registration-ip:${request.ip}`, 10, 60 * 60 * 1000);

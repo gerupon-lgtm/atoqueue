@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createBackup, createEmptySnapshot, type AppRepository, type AppSnapshot } from "../../../../../packages/domain/src";
+import { createBackup, createEmptySnapshot, type AppRepository } from "../../../../../packages/domain/src";
 import { SettingsPage } from "./SettingsPage";
 
 afterEach(cleanup);

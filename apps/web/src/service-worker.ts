@@ -55,8 +55,23 @@ function sameOriginPath(clientUrl: string, target: string): boolean {
   } catch { return false; }
 }
 
-const worker = globalThis as unknown as { addEventListener?: (type: string, listener: (event: any) => void) => void; registration?: { showNotification(title: string, options: NotificationOptions): Promise<void> }; clients?: WorkerClients };
+interface ServiceWorkerEvent {
+  waitUntil(promise: Promise<unknown>): void;
+  data?: { text(): string };
+  notification?: { close(): void; data?: unknown };
+}
+
+const worker = globalThis as unknown as {
+  addEventListener?: (type: string, listener: (event: ServiceWorkerEvent) => void) => void;
+  registration?: { showNotification(title: string, options: NotificationOptions): Promise<void> };
+  clients?: WorkerClients;
+};
 if (worker.registration && worker.clients && worker.addEventListener) {
   worker.addEventListener("push", (event) => event.waitUntil(handlePush(event.data?.text() ?? "", (title, options) => worker.registration!.showNotification(title, options))));
-  worker.addEventListener("notificationclick", (event) => { event.notification.close(); event.waitUntil(handleNotificationClick(event.notification.data ?? {}, worker.clients!)); });
+  worker.addEventListener("notificationclick", (event) => {
+    const notification = event.notification;
+    if (!notification) return;
+    notification.close();
+    event.waitUntil(handleNotificationClick(notification.data ?? {}, worker.clients!));
+  });
 }
