@@ -11,6 +11,12 @@
 
 これは手元の実機ブラウザでのみ実行する確認手順である。通常利用では不要であり、定期運用には使わない。
 
+## 設定画面への直接アクセス
+
+GitHub Pages は静的サイトのため、`/settings` のような直接URLには通常のサーバールートがない。Webビルドは `index.html` と同一内容の `404.html` を同梱し、GitHub Pages が返すフォールバック画面から React Router が `https://atoqueue.sikumilab.com/settings` を表示する。
+
+このため、ブラウザ上で設定画面が表示されることを確認する。HTTPステータス自体は GitHub Pages の仕様により `404` でもよく、既定のGitHub 404画面ではなくPWAの設定画面が描画されることを合格条件とする。
+
 ## 事前条件
 
 1. 通知を受信したい実機の Chrome または Edge で PWA を開く。

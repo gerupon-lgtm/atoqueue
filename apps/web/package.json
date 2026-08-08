@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "pnpm --dir ../.. exec vitest --run --workspace vitest.workspace.ts --project web",
     "test:e2e": "playwright test",
-    "build": "tsc --noEmit && vite build"
+    "build": "tsc --noEmit && vite build && node ../../deploy/scripts/write-pages-spa-fallback.mjs && node ../../deploy/scripts/verify-pages-spa-fallback.mjs"
   },
   "dependencies": {
     "react": "^19.2.8",
