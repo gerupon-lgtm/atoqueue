@@ -8,6 +8,7 @@ const repositoryRoot = new URL("../..", import.meta.url);
 const requiredFragments = {
   ".github/workflows/ci.yml": [
     "pnpm exec prettier --check .github deploy/scripts/*.mjs docs/operations/deployment-health-startup.md",
+    "pnpm --filter @atoqueue/contracts build",
   ],
   ".github/workflows/deploy.yml": [
     "push:",
