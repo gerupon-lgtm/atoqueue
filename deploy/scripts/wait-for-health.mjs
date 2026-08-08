@@ -9,7 +9,13 @@ function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-export async function waitForHealth({ url, maxAttempts, intervalMilliseconds, fetchImpl = fetch, sleepImpl = sleep }) {
+export async function waitForHealth({
+  url,
+  maxAttempts,
+  intervalMilliseconds,
+  fetchImpl = fetch,
+  sleepImpl = sleep,
+}) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       const response = await fetchImpl(url, {
@@ -23,7 +29,9 @@ export async function waitForHealth({ url, maxAttempts, intervalMilliseconds, fe
     if (attempt < maxAttempts) await sleepImpl(intervalMilliseconds);
   }
 
-  throw new Error(`The notification API did not become healthy after ${maxAttempts} attempts.`);
+  throw new Error(
+    `The notification API did not become healthy after ${maxAttempts} attempts.`,
+  );
 }
 
 function parsePositiveInteger(value, name, minimum) {
@@ -34,14 +42,20 @@ function parsePositiveInteger(value, name, minimum) {
   return parsed;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
   const [, , url, attempts, intervalSeconds] = process.argv;
   if (!url || attempts === undefined || intervalSeconds === undefined) {
-    throw new Error("Usage: atoqueue-wait-for-health URL MAX_ATTEMPTS INTERVAL_SECONDS");
+    throw new Error(
+      "Usage: atoqueue-wait-for-health URL MAX_ATTEMPTS INTERVAL_SECONDS",
+    );
   }
   await waitForHealth({
     url,
     maxAttempts: parsePositiveInteger(attempts, "MAX_ATTEMPTS", 1),
-    intervalMilliseconds: parsePositiveInteger(intervalSeconds, "INTERVAL_SECONDS", 0) * 1_000,
+    intervalMilliseconds:
+      parsePositiveInteger(intervalSeconds, "INTERVAL_SECONDS", 0) * 1_000,
   });
 }

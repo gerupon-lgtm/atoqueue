@@ -6,6 +6,9 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = new URL("../..", import.meta.url);
 
 const requiredFragments = {
+  ".github/workflows/ci.yml": [
+    "pnpm exec prettier --check .github deploy/scripts/*.mjs docs/operations/deployment-health-startup.md",
+  ],
   ".github/workflows/deploy.yml": [
     "push:",
     "workflow_dispatch:",

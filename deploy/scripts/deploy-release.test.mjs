@@ -7,7 +7,9 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { waitForHealth } from "./wait-for-health.mjs";
 
-const healthWaiter = fileURLToPath(new URL("./wait-for-health.mjs", import.meta.url));
+const healthWaiter = fileURLToPath(
+  new URL("./wait-for-health.mjs", import.meta.url),
+);
 
 test("wait-for-health retries a starting API until healthz succeeds", async () => {
   let requests = 0;
@@ -25,7 +27,9 @@ test("wait-for-health retries a starting API until healthz succeeds", async () =
     maxAttempts: 3,
     intervalMilliseconds: 0,
   });
-  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  await new Promise((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
 
   assert.equal(requests, 3);
 });
@@ -42,11 +46,18 @@ test("health waiter command retries a starting API until healthz succeeds", asyn
   assert.ok(address && typeof address !== "string");
 
   const result = await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [healthWaiter, `http://127.0.0.1:${address.port}/healthz`, "3", "0"]);
+    const child = spawn(process.execPath, [
+      healthWaiter,
+      `http://127.0.0.1:${address.port}/healthz`,
+      "3",
+      "0",
+    ]);
     child.on("error", reject);
     child.on("close", (code) => resolve(code));
   });
-  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  await new Promise((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
 
   assert.equal(result, 0);
   assert.equal(requests, 3);

@@ -20,7 +20,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec prettier --check .
+      - run: pnpm exec prettier --check .github deploy/scripts/*.mjs docs/operations/deployment-health-startup.md
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
