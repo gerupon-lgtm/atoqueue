@@ -22,8 +22,13 @@ allowed_signers=/etc/atoqueue/deployment-allowed-signers
 node_runtime=/opt/atoqueue/runtime/node/bin/node
 corepack_runtime=/opt/atoqueue/runtime/node/bin/corepack
 runtime_bin=$(dirname "$node_runtime")
+health_waiter=/usr/local/libexec/atoqueue-wait-for-health.mjs
 
-if [[ ! -x "$node_runtime" || ! -x "$corepack_runtime" ]]; then
+wait_for_health() {
+  "$node_runtime" "$health_waiter" "$1" "$2" "$3"
+}
+
+if [[ ! -x "$node_runtime" || ! -x "$corepack_runtime" || ! -r "$health_waiter" ]]; then
   echo "The dedicated Atoqueue Node.js runtime is unavailable." >&2
   exit 69
 fi
@@ -102,7 +107,7 @@ rollback() {
   echo "Rolling back to $(basename "$previous_release")." >&2
   ln -sfn "$previous_release" "$current_link"
   systemctl restart "$service"
-  curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3030/healthz >/dev/null
+  wait_for_health http://127.0.0.1:3030/healthz 60 2
 }
 
 # Archive extraction and dependency lifecycle scripts execute without root
@@ -142,7 +147,7 @@ if ! systemd-run --wait --collect --quiet \
   exit 1
 fi
 
-if ! ln -sfn "$release_dir" "$current_link" || ! systemctl restart "$service" || ! curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3030/healthz >/dev/null; then
+if ! ln -sfn "$release_dir" "$current_link" || ! systemctl restart "$service" || ! wait_for_health http://127.0.0.1:3030/healthz 60 2; then
   rollback
   exit 1
 fi

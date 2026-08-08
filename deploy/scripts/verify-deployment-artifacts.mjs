@@ -52,7 +52,13 @@ const requiredFragments = {
     "install -m 0600 /dev/null",
     "/opt/atoqueue/runtime/node/bin/node",
     "/opt/atoqueue/runtime/node/bin/corepack",
+    "/usr/local/libexec/atoqueue-wait-for-health.mjs",
     'PATH="$2:/usr/bin:/bin"',
+  ],
+  "deploy/scripts/wait-for-health.mjs": [
+    "waitForHealth",
+    "AbortSignal.timeout",
+    "MAX_ATTEMPTS",
   ],
   "deploy/scripts/install-atoqueue-node-runtime.sh": [
     "node_version=24.18.0",
