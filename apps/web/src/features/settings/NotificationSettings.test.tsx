@@ -77,13 +77,21 @@ describe("NotificationSettings", () => {
     ).not.toBeNull();
   });
 
-  it("explains whether browser subscription or API rate limiting blocked notification setup", async () => {
+  it("explains whether public-key loading, browser subscription, or API rate limiting blocked notification setup", async () => {
     const user = userEvent.setup();
     const setup = vi
       .fn()
+      .mockResolvedValueOnce({ state: "error", reason: "public_key" })
       .mockResolvedValueOnce({ state: "error", reason: "subscription" })
       .mockResolvedValueOnce({ state: "error", reason: "rate_limited" });
     render(<NotificationSettings repository={memory()} setup={setup} />);
+
+    await user.click(screen.getByRole("button", { name: "通知を設定する" }));
+    expect(
+      await screen.findByText(
+        "通知サービスの公開鍵を取得できませんでした。通信状態を確認してから、もう一度お試しください。",
+      ),
+    ).not.toBeNull();
 
     await user.click(screen.getByRole("button", { name: "通知を設定する" }));
     expect(

@@ -110,6 +110,10 @@ function errorMessage(
   reason: NotificationSetupErrorReason | undefined,
 ): string {
   switch (reason) {
+    case "permission":
+      return "通知許可の確認に失敗しました。ブラウザのサイト設定を確認してから、もう一度お試しください。";
+    case "public_key":
+      return "通知サービスの公開鍵を取得できませんでした。通信状態を確認してから、もう一度お試しください。";
     case "subscription":
       return "ブラウザで通知購読を作成できませんでした。ブラウザのサイト設定を確認してから、もう一度お試しください。";
     case "rate_limited":

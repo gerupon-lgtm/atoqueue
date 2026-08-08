@@ -76,6 +76,29 @@ describe("enableNotifications", () => {
     expect((await repository.load()).settings.notificationEnabled).toBe(false);
   });
 
+  it("distinguishes a public-key request failure from a browser subscription failure", async () => {
+    const repository = memory();
+    const subscribe = vi.fn();
+    const result = await enableNotifications({
+      repository,
+      api: {
+        publicKey: async () => {
+          throw new Error("public key failed");
+        },
+        register: async () => ({
+          deviceId: "11111111-1111-4111-8111-111111111111",
+          deviceSecret: "secret",
+          createdAt: "2026-08-04T08:00:00.000Z",
+        }),
+        updateSubscription: async () => undefined,
+      },
+      browser: { ...grantedBrowser(), subscribe },
+    });
+
+    expect(result).toEqual({ state: "error", reason: "public_key" });
+    expect(subscribe).not.toHaveBeenCalled();
+  });
+
   it("reports a rate-limited API registration without exposing its response body", async () => {
     const repository = memory();
     const result = await enableNotifications({

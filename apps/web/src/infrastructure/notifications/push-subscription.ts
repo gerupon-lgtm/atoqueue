@@ -19,7 +19,12 @@ export interface PushRegistrationApi {
   ): Promise<void>;
 }
 export type NotificationSetupErrorReason =
-  "subscription" | "registration" | "rate_limited" | "storage";
+  | "permission"
+  | "public_key"
+  | "subscription"
+  | "registration"
+  | "rate_limited"
+  | "storage";
 
 export type NotificationSetupResult =
   | { state: "granted" | "denied" | "unavailable" }
@@ -45,13 +50,20 @@ export async function enableNotifications(input: {
   try {
     permission = await browser.requestPermission();
   } catch {
-    return saveSetupFailure(repository, "subscription");
+    return saveSetupFailure(repository, "permission");
   }
   if (permission !== "granted") return saveState(repository, "denied");
 
+  let applicationServerKey: string;
+  try {
+    applicationServerKey = await api.publicKey();
+  } catch {
+    return saveSetupFailure(repository, "public_key");
+  }
+
   let subscription: PushSubscription;
   try {
-    subscription = await browser.subscribe(await api.publicKey());
+    subscription = await browser.subscribe(applicationServerKey);
   } catch {
     return saveSetupFailure(repository, "subscription");
   }
