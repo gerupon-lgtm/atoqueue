@@ -31,6 +31,15 @@ body {
   padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
 }
 
+.app-shell__wordmark {
+  margin: 0 0 0.375rem;
+  color: #70877d;
+  font-size: 0.625rem;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+}
+
 .app-shell__content > section {
   width: min(100%, 46rem);
   display: grid;
@@ -95,6 +104,40 @@ body {
   margin: 0;
 }
 
+.inbox-item__classification-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.app-shell__content .inbox-item__classification-actions button {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 0.375rem;
+  font-size: 0.875rem;
+  letter-spacing: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.task-candidate__save {
+  width: 100%;
+  text-align: center;
+}
+
+.task-candidate__secondary-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.app-shell__content .task-candidate__secondary-actions button {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 0.5rem;
+  text-align: center;
+}
+
 .task-detail__section {
   display: grid;
   gap: 0.625rem;
@@ -125,7 +168,7 @@ body {
 }
 
 .app-shell__content .task-detail__return {
-  min-height: 40px;
+  min-height: 44px;
   justify-self: start;
   padding: 0.375rem 0.625rem;
   border-color: #b8c8bc;
@@ -421,6 +464,14 @@ body {
 }
 
 @media (max-width: 359px) {
+  .inbox-item__classification-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inbox-item__classification-actions button:last-child {
+    grid-column: 1 / -1;
+  }
+
   .task-detail__status-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

@@ -30,3 +30,37 @@
 .settings-page__app-information small {
   color: #476158;
 }
+
+.backup-settings__delete-confirmation {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.backup-settings__delete-confirmation p {
+  margin: 0;
+}
+
+.backup-settings__delete-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.app-shell__content .backup-settings__delete-actions button {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 0.5rem;
+  text-align: center;
+}
+
+.app-shell__content .backup-settings__delete-confirm {
+  border-color: #9b514c;
+  background: #f0d9d6;
+  color: #703832;
+}
+
+.app-shell__content .backup-settings__delete-cancel {
+  border-color: #68746b;
+  background: #e4e8e3;
+  color: #46554d;
+}

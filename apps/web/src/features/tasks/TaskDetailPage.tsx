@@ -140,6 +140,7 @@ export function TaskDetailPage({
           <button
             className="task-detail__return"
             onClick={onReturn}
+            style={touchTarget}
             type="button"
           >
             ← タスク一覧に戻る

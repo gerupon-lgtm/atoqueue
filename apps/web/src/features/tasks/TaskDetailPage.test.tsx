@@ -112,6 +112,23 @@ describe("TaskDetailPage", () => {
     expect(onReturn).toHaveBeenCalledTimes(1);
   });
 
+  it("gives the in-context return action the same 44px touch target as other actions", async () => {
+    const { repository } = repositoryWithTask();
+    render(
+      <TaskDetailPage
+        now={() => now}
+        onReturn={() => undefined}
+        repository={repository}
+        taskId="task-1"
+      />,
+    );
+
+    const control = await screen.findByRole("button", {
+      name: /タスク一覧に戻る/,
+    });
+    expect(getComputedStyle(control).minHeight).toBe("44px");
+  });
+
   it("F-015 shows source, current/due/review state, derived neglect reason, and chronological history", async () => {
     const { repository } = repositoryWithTask();
     render(

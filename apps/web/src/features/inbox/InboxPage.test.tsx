@@ -1,8 +1,18 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createCapture, createEmptySnapshot, type AppRepository } from "../../../../../packages/domain/src";
+import {
+  createCapture,
+  createEmptySnapshot,
+  type AppRepository,
+} from "../../../../../packages/domain/src";
 import { InboxPage } from "./InboxPage";
 
 const now = "2026-08-03T09:00:00.000Z";
@@ -14,8 +24,18 @@ function repositoryWithCaptures(): AppRepository {
     timeZone: "Asia/Tokyo",
     now,
   });
-  snapshot = createCapture(snapshot, "古い記録", "2026-08-01T09:00:00.000Z", "capture-old");
-  snapshot = createCapture(snapshot, "新しい記録", "2026-08-02T09:00:00.000Z", "capture-new");
+  snapshot = createCapture(
+    snapshot,
+    "古い記録",
+    "2026-08-01T09:00:00.000Z",
+    "capture-old",
+  );
+  snapshot = createCapture(
+    snapshot,
+    "新しい記録",
+    "2026-08-02T09:00:00.000Z",
+    "capture-new",
+  );
 
   return {
     load: vi.fn().mockImplementation(async () => snapshot),
@@ -39,17 +59,27 @@ describe("InboxPage", () => {
       expect.stringContaining("新しい記録"),
       expect.stringContaining("古い記録"),
     ]);
-    expect(screen.getAllByRole("button", { name: "タスクかも" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "タスクかも" })).toHaveLength(
+      2,
+    );
     expect(screen.getAllByRole("button", { name: "メモ" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "不要" })).toHaveLength(2);
+  });
+
+  it("keeps each capture classification choice in one evenly arranged action group", async () => {
+    render(<InboxPage repository={repositoryWithCaptures()} />);
+
+    const actions = (
+      await screen.findAllByRole("button", { name: "タスクかも" })
+    )[0]!;
+    const group = actions.closest(".inbox-item__classification-actions");
+    expect(group).not.toBeNull();
   });
 
   it("F-004 shows each inbox capture's local registration date and time", async () => {
     render(<InboxPage repository={repositoryWithCaptures()} />);
 
-    expect(
-      await screen.findByText("登録: 2026/8/2 18:00"),
-    ).toBeTruthy();
+    expect(await screen.findByText("登録: 2026/8/2 18:00")).toBeTruthy();
   });
 
   it("F-006 saves a memo classification locally", async () => {
@@ -69,11 +99,18 @@ describe("InboxPage", () => {
 
     const body = await screen.findByDisplayValue("新しい記録");
     fireEvent.change(body, { target: { value: "編集した記録" } });
-    fireEvent.click(screen.getByRole("button", { name: "新しい記録の本文を保存" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "新しい記録の本文を保存" }),
+    );
 
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
-    expect((repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].captures).toContainEqual(
-      expect.objectContaining({ body: "編集した記録", classification: "unclassified" }),
+    expect(
+      (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].captures,
+    ).toContainEqual(
+      expect.objectContaining({
+        body: "編集した記録",
+        classification: "unclassified",
+      }),
     );
   });
 
@@ -86,10 +123,12 @@ describe("InboxPage", () => {
 
     expect(memoButtons[1]!.hasAttribute("disabled")).toBe(true);
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
-    const finalSnapshot = (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0];
-    expect(finalSnapshot.captures.map((capture: { classification: string }) => capture.classification)).toEqual([
-      "unclassified",
-      "note",
-    ]);
+    const finalSnapshot = (repository.save as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0];
+    expect(
+      finalSnapshot.captures.map(
+        (capture: { classification: string }) => capture.classification,
+      ),
+    ).toEqual(["unclassified", "note"]);
   });
 });

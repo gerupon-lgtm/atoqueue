@@ -38,7 +38,9 @@ export function InboxPage({
   }
 
   useEffect(() => {
-    void reload().catch(() => setError("受信箱を読み込めませんでした。もう一度お試しください。"));
+    void reload().catch(() =>
+      setError("受信箱を読み込めませんでした。もう一度お試しください。"),
+    );
   }, [repository]);
 
   function enqueueMutation(operation: () => Promise<void>): void {
@@ -47,7 +49,9 @@ export function InboxPage({
     const mutation = mutationQueue.current.then(operation);
     mutationQueue.current = mutation.catch(() => undefined);
     void mutation
-      .catch(() => setError("整理を保存できませんでした。もう一度お試しください。"))
+      .catch(() =>
+        setError("整理を保存できませんでした。もう一度お試しください。"),
+      )
       .finally(() => {
         pendingMutations.current -= 1;
         if (pendingMutations.current === 0) setIsMutating(false);
@@ -70,7 +74,12 @@ export function InboxPage({
   function saveBody(captureId: string, body: string): void {
     setError(undefined);
     enqueueMutation(async () => {
-      const next = updateCaptureBody(await repository.load(), captureId, body, now());
+      const next = updateCaptureBody(
+        await repository.load(),
+        captureId,
+        body,
+        now(),
+      );
       await repository.save(next);
       setBodyDrafts((drafts) => {
         const remaining = { ...drafts };
@@ -98,28 +107,51 @@ export function InboxPage({
               <textarea
                 id={`capture-body-${capture.id}`}
                 onChange={(event) =>
-                  setBodyDrafts((drafts) => ({ ...drafts, [capture.id]: event.target.value }))
+                  setBodyDrafts((drafts) => ({
+                    ...drafts,
+                    [capture.id]: event.target.value,
+                  }))
                 }
                 readOnly={isMutating}
                 value={bodyDrafts[capture.id] ?? capture.body}
               />
               <button
                 disabled={isMutating}
-                onClick={() => void saveBody(capture.id, bodyDrafts[capture.id] ?? capture.body)}
+                onClick={() =>
+                  void saveBody(
+                    capture.id,
+                    bodyDrafts[capture.id] ?? capture.body,
+                  )
+                }
                 type="button"
                 aria-label={`${capture.body}の本文を保存`}
               >
                 本文を保存
               </button>
               {suggestion === "task" ? <p>タスク候補です</p> : null}
-              <div className="inbox-item__actions" aria-label={`${capture.body} の整理操作`}>
-                <button disabled={isMutating} onClick={() => onTaskCandidate?.(capture.id)} type="button">
+              <div
+                className="inbox-item__actions inbox-item__classification-actions"
+                aria-label={`${capture.body} の整理操作`}
+              >
+                <button
+                  disabled={isMutating}
+                  onClick={() => onTaskCandidate?.(capture.id)}
+                  type="button"
+                >
                   タスクかも
                 </button>
-                <button disabled={isMutating} onClick={() => classify(capture.id, "note")} type="button">
+                <button
+                  disabled={isMutating}
+                  onClick={() => classify(capture.id, "note")}
+                  type="button"
+                >
                   メモ
                 </button>
-                <button disabled={isMutating} onClick={() => classify(capture.id, "unneeded")} type="button">
+                <button
+                  disabled={isMutating}
+                  onClick={() => classify(capture.id, "unneeded")}
+                  type="button"
+                >
                   不要
                 </button>
               </div>

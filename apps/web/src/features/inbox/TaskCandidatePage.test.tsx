@@ -257,4 +257,28 @@ describe("TaskCandidatePage", () => {
       (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].tasks[0],
     ).toMatchObject({ dueAt: "2026-08-05T00:30:00.000Z" });
   });
+
+  it("keeps the primary task action distinct from the two equally arranged alternatives", async () => {
+    render(
+      <TaskCandidatePage
+        captureId="capture-1"
+        repository={repositoryWithCapture()}
+      />,
+    );
+
+    const taskAction = await screen.findByRole("button", {
+      name: "タスクにする",
+    });
+    expect(taskAction.classList).toContain("task-candidate__save");
+    expect(
+      screen
+        .getByRole("button", { name: "メモにする" })
+        .closest(".task-candidate__secondary-actions"),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "受信箱へ戻る" })
+        .closest(".task-candidate__secondary-actions"),
+    ).not.toBeNull();
+  });
 });

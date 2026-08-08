@@ -303,11 +303,8 @@ export function NotificationSettings({
           <p role="alert">{errorMessage(errorReason)}</p>
         ) : null}
       </div>
-      <section
-        className="notification-settings__device-check"
-        aria-labelledby="device-check-title"
-      >
-        <h2 id="device-check-title">スマホで通知が来ないとき</h2>
+      <details className="notification-settings__device-check">
+        <summary>スマホで通知が来ないとき</summary>
         <ol>
           <li>
             この画面で「通知を設定する」を押し、端末登録の表示と日時を確認します。
@@ -322,7 +319,7 @@ export function NotificationSettings({
             省電力モードや集中モードを解除してから、期限付きタスクで確認します。
           </li>
         </ol>
-      </section>
+      </details>
     </section>
   );
 }

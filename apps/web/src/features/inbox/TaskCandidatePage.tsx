@@ -68,7 +68,9 @@ export function TaskCandidatePage({
           setTitle(suggestion.title);
           if (suggestion.dueChoice) setDueType(suggestion.dueChoice.type);
           setCategory(suggestion.category ?? "");
-          setDefaultDeadlineTime(snapshot.settings.defaultDeadlineTime ?? "23:59");
+          setDefaultDeadlineTime(
+            snapshot.settings.defaultDeadlineTime ?? "23:59",
+          );
         }
       })
       .catch(() => {
@@ -88,7 +90,12 @@ export function TaskCandidatePage({
     setError(undefined);
     try {
       const snapshot = await repository.load();
-      const dueChoice = choiceFromForm(dueType, customDate, dueTime, dueTimeEnabled);
+      const dueChoice = choiceFromForm(
+        dueType,
+        customDate,
+        dueTime,
+        dueTimeEnabled,
+      );
       const timestamp = now();
       const calendar = createLocalCalendar(snapshot.settings.timeZone);
       if (
@@ -211,23 +218,29 @@ export function TaskCandidatePage({
             timeEnabled={dueTimeEnabled}
           />
         ) : null}
-        <button disabled={isSaving || !title.trim()} type="submit">
+        <button
+          className="task-candidate__save"
+          disabled={isSaving || !title.trim()}
+          type="submit"
+        >
           タスクにする
         </button>
-        <button
-          disabled={isSaving}
-          onClick={() => void saveAsNote()}
-          type="button"
-        >
-          メモにする
-        </button>
-        <button
-          disabled={isSaving}
-          onClick={() => (onReturn ?? onCompleted)?.()}
-          type="button"
-        >
-          受信箱へ戻る
-        </button>
+        <div className="task-candidate__secondary-actions">
+          <button
+            disabled={isSaving}
+            onClick={() => void saveAsNote()}
+            type="button"
+          >
+            メモにする
+          </button>
+          <button
+            disabled={isSaving}
+            onClick={() => (onReturn ?? onCompleted)?.()}
+            type="button"
+          >
+            受信箱へ戻る
+          </button>
+        </div>
       </form>
       {error ? <p role="alert">{error}</p> : null}
     </section>
@@ -241,7 +254,8 @@ function choiceFromForm(
   dueTimeEnabled: boolean,
 ): DueChoice {
   const time = dueTimeEnabled ? timeFromDigits(dueTime) : undefined;
-  if (dueTimeEnabled && !time) throw new Error("期限時刻を4桁で入力してください。");
+  if (dueTimeEnabled && !time)
+    throw new Error("期限時刻を4桁で入力してください。");
   return type === "custom"
     ? customDate && dateFromDigits(customDate)
       ? { type, date: dateFromDigits(customDate)!, time }

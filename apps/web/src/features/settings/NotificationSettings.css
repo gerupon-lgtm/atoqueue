@@ -141,23 +141,29 @@
 }
 
 .notification-settings__device-check {
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.875rem;
+  padding: 0;
   border: 1px solid #c6d0c8;
   border-radius: 0.75rem;
   background: #f4f8f4;
 }
 
-.notification-settings__device-check h2,
-.notification-settings__device-check ol {
-  margin: 0;
+.notification-settings__device-check summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0.625rem 0.875rem;
+  color: #123d34;
+  cursor: pointer;
+  font-size: 1.0625rem;
+  font-weight: 700;
 }
 
 .notification-settings__device-check ol {
   display: grid;
   gap: 0.5rem;
-  padding-left: 1.25rem;
+  margin: 0;
+  padding: 0.75rem 0.875rem 0.875rem 2.125rem;
+  border-top: 1px solid #d4e2d8;
 }
 
 @media (max-width: 359px) {

@@ -58,4 +58,15 @@ describe("AppShell", () => {
       expect(document.activeElement?.getAttribute("aria-label")).toBe(label);
     }
   });
+
+  it("shows a quiet app wordmark without changing the page navigation", () => {
+    render(
+      <MemoryRouter>
+        <AppShell />
+      </MemoryRouter>,
+    );
+
+    const wordmark = screen.getByText("あとキュー");
+    expect(wordmark.classList).toContain("app-shell__wordmark");
+  });
 });

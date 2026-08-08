@@ -36,6 +36,7 @@ export function AppShell() {
         ))}
       </nav>
       <main className="app-shell__content">
+        <p className="app-shell__wordmark">あとキュー</p>
         <Outlet />
       </main>
     </div>

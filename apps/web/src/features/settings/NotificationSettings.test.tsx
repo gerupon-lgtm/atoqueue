@@ -244,6 +244,15 @@ describe("NotificationSettings", () => {
       saveTiming.closest(".notification-settings__device-setup"),
     ).toBeNull();
   });
+
+  it("keeps smartphone troubleshooting available without adding scroll before it is needed", async () => {
+    render(<NotificationSettings repository={memory()} />);
+
+    const summary = await screen.findByText("スマホで通知が来ないとき");
+    const details = summary.closest("details");
+    expect(details).not.toBeNull();
+    expect((details as HTMLDetailsElement).open).toBe(false);
+  });
 });
 
 function memory(
