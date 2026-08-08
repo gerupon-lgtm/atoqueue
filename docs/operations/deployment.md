@@ -53,7 +53,13 @@ sudo install -o root -g root -m 0600 /dev/null /etc/atoqueue/notification-api.en
 sudoedit /etc/atoqueue/notification-api.env
 ```
 
-5. Caddy と systemd の成果物を配置し、Caddy 設定の構文検査を通す。Caddy の主設定から `/etc/caddy/conf.d/*.caddyfile` を import することを確認する。
+5. Caddy と systemd の成果物を配置し、Caddy 設定の構文検査を通す。Caddy の主設定から `/etc/caddy/conf.d/*.caddyfile` を import することを確認する。import がなければ、既存のサイトブロックを置換せず、root 管理者が主設定の末尾に次の1行を追加してから個別設定を配置する。
+
+```caddyfile
+import /etc/caddy/conf.d/*.caddyfile
+```
+
+初期構築済みのOCI VPSでは既存サイトが単一の `/etc/caddy/Caddyfile` にあるため、先にバックアップを作成し、`sudoedit /etc/caddy/Caddyfile` でこの import だけを追加する。DNSレコードが準備できるまでは Caddy の reload を行わない。
 
 ```bash
 sudo install -D -o root -g root -m 0644 deploy/caddy/atoqueue-api.caddyfile /etc/caddy/conf.d/atoqueue-api.caddyfile

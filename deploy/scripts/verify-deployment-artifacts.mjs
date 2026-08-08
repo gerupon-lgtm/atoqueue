@@ -76,6 +76,7 @@ const requiredFragments = {
     "/etc/atoqueue/deployment-allowed-signers",
     "/opt/atoqueue/runtime/node/bin/node",
     "Node.js 20",
+    "import /etc/caddy/conf.d/*.caddyfile",
   ],
 };
 
