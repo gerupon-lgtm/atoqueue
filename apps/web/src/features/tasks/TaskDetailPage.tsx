@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { calculateNeglectLevel, createLocalCalendar, modifyTask, resolveDueChoice, type AppRepository, type AppSnapshot, type DirectTaskChange, type Task } from "../../../../../packages/domain/src";
 import { createReviewCalendar } from "../../infrastructure/review-calendar/review-calendar";
 import { ActionHistoryList } from "./ActionHistoryList";
+import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 
 export interface TaskDetailPageProps { repository: AppRepository; taskId: string; now?: () => string; sync?: (snapshot: AppSnapshot) => Promise<void>; }
 
@@ -40,7 +41,7 @@ export function TaskDetailPage({ repository, taskId, now = () => new Date().toIS
   };
   return <section aria-labelledby="task-detail-title">
     <h1 id="task-detail-title">タスクを修正</h1>
-    <p aria-label="元の記録">元の記録: {source?.body ?? "見つかりません"}</p><p aria-label="現在の状態">状態: {statusLabel(task.status)}</p><p aria-label="期限の状態">期限: {dueLabel(task, timestamp, createLocalCalendar(snapshot.settings.timeZone))}</p><p aria-label="次の確認">次の確認: {task.nextReviewAt}</p><p aria-label="放置理由">放置理由: {neglectReason(level)}</p>
+    <p aria-label="元の記録">元の記録: {source?.body ?? "見つかりません"}</p><p aria-label="現在の状態">状態: {statusLabel(task.status)}</p><p aria-label="登録日時">登録日時: {formatLocalDateTime(task.createdAt, snapshot.settings.timeZone)}</p><p aria-label="期限の状態">期限: {dueLabel(task, timestamp, createLocalCalendar(snapshot.settings.timeZone))}</p><p aria-label="次の確認">次の確認: {task.nextReviewAt}</p><p aria-label="放置理由">放置理由: {neglectReason(level)}</p>
     <label>タイトル<input style={touchTarget} value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>カテゴリ<select style={touchTarget} value={category} onChange={(event) => setCategory(event.target.value as Task["category"] | "")}><option value="">なし</option><option value="work">仕事</option><option value="home">家</option><option value="shopping">買い物</option><option value="other">その他</option></select></label><label>新しい期限<input style={touchTarget} type="date" value={selectedDueDate} onChange={(event) => setSelectedDueDate(event.target.value)} /></label><button style={touchTarget} type="button" onClick={() => void change({ type: "edit", title, category: category || null })}>編集を保存</button>
     {task.status === "active" ? <><button style={touchTarget} type="button" onClick={() => void change({ type: "complete" })}>完了</button><button style={touchTarget} type="button" onClick={() => void applyDue("reschedule")}>期限を変更</button><button style={touchTarget} type="button" onClick={() => void applyDue("no_due")}>期限なし</button><button style={touchTarget} type="button" onClick={() => void change({ type: "dismiss" })}>後回し</button><button style={touchTarget} type="button" onClick={() => void change({ type: "archive" })}>アーカイブ</button></> : <button style={touchTarget} type="button" onClick={() => void change({ type: "reopen" })}>再開</button>}
     <h2>操作履歴</h2><ActionHistoryList events={snapshot.actionHistory.filter((event) => event.entityType === "task" && event.entityId === taskId)} />

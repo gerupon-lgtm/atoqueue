@@ -36,6 +36,7 @@ describe("TaskListPage", () => {
     expect(screen.getByLabelText("なしの期限状態").textContent).toBe("期限なし");
     expect(screen.getByLabelText("明日の期限状態").textContent).toBe("期限あり");
     expect(screen.getByRole("link", { name: "期限切れ" }).getAttribute("href")).toBe("/tasks/期限切れ");
+    expect(screen.getByLabelText("期限切れの登録日時").textContent).toBe("登録: 2026/8/3 09:00");
   });
 
   it("NF-006 gives every primary list control a 44px minimum touch target", async () => {

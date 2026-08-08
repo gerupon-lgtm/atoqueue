@@ -163,4 +163,16 @@ describe("TaskCandidatePage", () => {
     expect((screen.getByLabelText("タスク名") as HTMLInputElement).value).toBe("牛乳を買い足す");
     expect((screen.getByLabelText("日付") as HTMLInputElement).value).toBe("2026-08-02");
   });
+
+  it("F-007 explains that a deadline is chosen while turning an inbox item into a task", async () => {
+    const repository = repositoryWithCapture();
+    render(<TaskCandidatePage captureId="capture-1" repository={repository} />);
+
+    await screen.findByDisplayValue("牛乳を買う");
+    expect(screen.getByText("期限はタスクにする時に選べます。日付を選ぶとカレンダーで指定できます。"))
+      .toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("期限"), { target: { value: "custom" } });
+    expect(screen.getByLabelText("日付")).toHaveProperty("type", "date");
+  });
 });

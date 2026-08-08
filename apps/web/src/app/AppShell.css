@@ -1,7 +1,9 @@
+@import "@fontsource/kiwi-maru/400.css";
+
 :root {
   color: #173b33;
   background: #f7f5ee;
-  font-family: system-ui, sans-serif;
+  font-family: "Kiwi Maru", system-ui, sans-serif;
   --app-content-padding: 1.5rem;
   --app-navigation-width: 0px;
 }
@@ -26,18 +28,26 @@ body {
   grid-row: 1;
   min-width: 0;
   padding: var(--app-content-padding);
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
 }
 
 .app-shell__navigation {
   grid-column: 1;
   grid-row: 2;
+  position: fixed;
+  z-index: 10;
+  right: 0.5rem;
+  bottom: max(0.5rem, env(safe-area-inset-bottom));
+  left: 0.5rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.125rem;
-  padding: 0.5rem;
-  border-top: 1px solid #c6d0c8;
-  background: #ffffff;
+  padding: 0.375rem;
+  border: 1px solid #c6d0c8;
+  border-radius: 1rem;
+  background: color-mix(in srgb, #ffffff 94%, transparent);
+  box-shadow: 0 0.5rem 1.5rem rgb(23 59 51 / 16%);
 }
 
 .app-shell__nav-link {
@@ -51,7 +61,7 @@ body {
   padding: 0.25rem 0.125rem;
   border-radius: 0.5rem;
   color: #173b33;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   text-align: center;
   text-decoration: none;
   white-space: nowrap;
@@ -60,10 +70,12 @@ body {
 .app-shell__nav-icon {
   width: 1.25rem;
   text-align: center;
+  font-weight: 500;
+  text-shadow: 0 0 currentColor;
 }
 
 .app-shell__nav-label {
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.01em;
 }
 
@@ -87,15 +99,19 @@ body {
   .app-shell__navigation {
     grid-column: 1;
     grid-row: 1;
+    position: static;
     flex-direction: column;
     justify-content: flex-start;
     border-top: 0;
     border-right: 1px solid #c6d0c8;
+    border-radius: 0;
+    box-shadow: none;
   }
 
   .app-shell__content {
     grid-column: 2;
     grid-row: 1;
+    padding-bottom: var(--app-content-padding);
   }
 
   .app-shell__nav-link {

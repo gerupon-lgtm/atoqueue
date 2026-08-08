@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { createLocalCalendar, listTasks, type AppRepository, type AppSnapshot, type DueFilter, type Task, type TaskTab } from "../../../../../packages/domain/src";
+import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 
 export interface TaskListPageProps { repository: AppRepository; now?: () => string; }
 
@@ -26,7 +27,7 @@ export function TaskListPage({ repository, now = () => new Date().toISOString() 
     <label>期限<select style={touchTarget} value={due} onChange={(event) => setDue(event.target.value as DueFilter | "")}><option value="">すべて</option><option value="overdue">期限超過</option><option value="today">今日</option><option value="unset">未設定</option><option value="none">なし</option></select></label>
     <label>カテゴリ<select style={touchTarget} value={category} onChange={(event) => setCategory(event.target.value as Task["category"] | "")}><option value="">すべて</option><option value="work">仕事</option><option value="home">家</option><option value="shopping">買い物</option><option value="other">その他</option></select></label>
     <label>検索<input style={touchTarget} value={search} onChange={(event) => setSearch(event.target.value)} /></label>
-    {tasks.length === 0 ? <p>該当するタスクはありません。</p> : <ul>{tasks.map((task) => <li key={task.id}><Link aria-label={task.title} style={touchTarget} to={`/tasks/${task.id}`}>{task.title}</Link> <span aria-label={`${task.title}の期限状態`}>{dueState(task, now(), createLocalCalendar(snapshot.settings.timeZone))}</span></li>)}</ul>}
+    {tasks.length === 0 ? <p>該当するタスクはありません。</p> : <ul>{tasks.map((task) => <li key={task.id}><Link aria-label={task.title} style={touchTarget} to={`/tasks/${task.id}`}>{task.title}</Link> <span aria-label={`${task.title}の期限状態`}>{dueState(task, now(), createLocalCalendar(snapshot.settings.timeZone))}</span> <span aria-label={`${task.title}の登録日時`}>登録: {formatLocalDateTime(task.createdAt, snapshot.settings.timeZone)}</span></li>)}</ul>}
   </section>;
 }
 

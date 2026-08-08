@@ -32,6 +32,7 @@ describe("TaskDetailPage", () => {
     expect(screen.getByLabelText("期限の状態").textContent).toBe("期限: 期限超過");
     expect(screen.getByLabelText("次の確認").textContent).toContain("次の確認");
     expect(screen.getByLabelText("放置理由").textContent).toContain("放置理由");
+    expect(screen.getByLabelText("登録日時").textContent).toBe("登録日時: 2026/8/1 00:00");
     expect(screen.getByText("後回し")).toBeTruthy();
   });
 

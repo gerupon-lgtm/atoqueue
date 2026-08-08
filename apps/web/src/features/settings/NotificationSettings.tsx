@@ -7,6 +7,8 @@ import {
   type NotificationSetupErrorReason,
   type NotificationSetupResult,
 } from "../../infrastructure/notifications/push-subscription";
+import "./NotificationSettings.css";
+import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 
 export interface NotificationSettingsProps {
   repository: AppRepository;
@@ -28,6 +30,9 @@ export function NotificationSettings({
   const [busy, setBusy] = useState(false);
   const [initialDelay, setInitialDelay] = useState("60");
   const [deadlineLead, setDeadlineLead] = useState("60");
+  const [hasRegisteredDevice, setHasRegisteredDevice] = useState(false);
+  const [registeredAt, setRegisteredAt] = useState<string>();
+  const [timeZone, setTimeZone] = useState<string>();
   useEffect(() => {
     let active = true;
     void repository.load().then((snapshot) => {
@@ -44,6 +49,11 @@ export function NotificationSettings({
           ? undefined
           : snapshot.device.pushSubscriptionStatus,
       );
+      setHasRegisteredDevice(
+        Boolean(snapshot.device.pushDeviceId && snapshot.device.pushDeviceSecret),
+      );
+      setRegisteredAt(snapshot.device.registeredAt);
+      setTimeZone(snapshot.settings.timeZone);
       setInitialDelay(String(snapshot.settings.initialReminderDelayMinutes ?? 60));
       setDeadlineLead(String(snapshot.settings.deadlineReminderLeadMinutes ?? 60));
     });
@@ -66,7 +76,17 @@ export function NotificationSettings({
       )();
       setState(result.state === "error" ? "diagnostic_error" : result.state);
       setErrorReason(result.state === "error" ? result.reason : undefined);
-      if (result.state === "granted") void flushNotifications?.();
+      if (result.state === "granted") {
+        const refreshed = await repository.load();
+        setHasRegisteredDevice(
+          Boolean(
+            refreshed.device.pushDeviceId && refreshed.device.pushDeviceSecret,
+          ),
+        );
+        setRegisteredAt(refreshed.device.registeredAt);
+        setTimeZone(refreshed.settings.timeZone);
+        void flushNotifications?.();
+      }
     } catch {
       setState("error");
       setErrorReason(undefined);
@@ -101,33 +121,43 @@ export function NotificationSettings({
   }
 
   return (
-    <section aria-labelledby="notification-settings-title">
+    <section className="notification-settings" aria-labelledby="notification-settings-title">
       <h1 id="notification-settings-title">通知</h1>
       <p>
         通知を使うと、アプリを開いて今日の確認に戻るきっかけを受け取れます。
       </p>
       <p>タスク本文は通知サーバーへ送信しません。</p>
-      <section aria-labelledby="notification-timing-title">
+      <section className="notification-settings__timing" aria-labelledby="notification-timing-title">
         <h2 id="notification-timing-title">通知タイミング</h2>
         <p>初回通知はタスク登録から、期限前通知は期限より前の指定分で予約します。</p>
-        <label htmlFor="initial-reminder-delay">初回通知まで（分）</label>
-        <input
-          id="initial-reminder-delay"
-          min="0"
-          onChange={(event) => setInitialDelay(event.target.value)}
-          step="1"
-          type="number"
-          value={initialDelay}
-        />
-        <label htmlFor="deadline-reminder-lead">期限前通知（分）</label>
-        <input
-          id="deadline-reminder-lead"
-          min="0"
-          onChange={(event) => setDeadlineLead(event.target.value)}
-          step="1"
-          type="number"
-          value={deadlineLead}
-        />
+        <div className="notification-settings__timing-row">
+          <label htmlFor="initial-reminder-delay">初回通知まで（分）</label>
+          <div className="notification-settings__number-field">
+            <input
+              id="initial-reminder-delay"
+              min="0"
+              onChange={(event) => setInitialDelay(event.target.value)}
+              step="1"
+              type="number"
+              value={initialDelay}
+            />
+            <span aria-hidden="true">分後</span>
+          </div>
+        </div>
+        <div className="notification-settings__timing-row">
+          <label htmlFor="deadline-reminder-lead">期限前通知（分）</label>
+          <div className="notification-settings__number-field">
+            <input
+              id="deadline-reminder-lead"
+              min="0"
+              onChange={(event) => setDeadlineLead(event.target.value)}
+              step="1"
+              type="number"
+              value={deadlineLead}
+            />
+            <span aria-hidden="true">分前</span>
+          </div>
+        </div>
         <button disabled={busy} onClick={() => void saveTiming()} type="button">通知タイミングを保存</button>
       </section>
       <button
@@ -138,6 +168,16 @@ export function NotificationSettings({
         通知を設定する
       </button>
       {state === "granted" ? <p role="status">通知を設定しました。</p> : null}
+      {state === "granted" && hasRegisteredDevice ? (
+        <>
+          <p className="notification-settings__device-status">この端末は通知サービスに登録済みです。</p>
+          {registeredAt && timeZone ? (
+            <p aria-label="通知の端末登録日時" className="notification-settings__device-status">
+              通知の端末登録日時: {formatLocalDateTime(registeredAt, timeZone)}
+            </p>
+          ) : null}
+        </>
+      ) : null}
       {state === "denied" ? (
         <p role="alert">ブラウザの設定から通知を許可してください。</p>
       ) : null}

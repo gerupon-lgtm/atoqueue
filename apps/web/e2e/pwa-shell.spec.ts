@@ -72,7 +72,8 @@ test.describe("PWA shell", () => {
 
     expect(box).not.toBeNull();
     expect(box?.height).toBeLessThanOrEqual(80);
-    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeGreaterThanOrEqual(840);
+    expect(844 - ((box?.y ?? 0) + (box?.height ?? 0))).toBeLessThanOrEqual(24);
+    await expect(nav).toHaveCSS("position", "fixed");
   });
 
   test("reloads the visited shell while offline", async ({ context, page }) => {

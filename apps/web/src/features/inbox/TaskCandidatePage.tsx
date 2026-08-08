@@ -152,6 +152,9 @@ export function TaskCandidatePage({
           <option value="other">その他</option>
         </select>
         <label htmlFor="task-due">期限</label>
+        <p className="task-candidate__due-help">
+          期限はタスクにする時に選べます。日付を選ぶとカレンダーで指定できます。
+        </p>
         <select
           id="task-due"
           onChange={(event) => setDueType(event.target.value as DueChoice["type"])}

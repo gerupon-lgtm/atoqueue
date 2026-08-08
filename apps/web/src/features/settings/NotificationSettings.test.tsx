@@ -132,6 +132,32 @@ describe("NotificationSettings", () => {
       settings: expect.objectContaining({ initialReminderDelayMinutes: 90, deadlineReminderLeadMinutes: 45 }),
     })));
   });
+
+  it("groups each timing label, minute input, and unit into a compact setting row", async () => {
+    render(<NotificationSettings repository={memory()} />);
+
+    const initial = await screen.findByLabelText("初回通知まで（分）");
+    const deadline = screen.getByLabelText("期限前通知（分）");
+    expect(initial.closest(".notification-settings__timing-row")).not.toBeNull();
+    expect(deadline.closest(".notification-settings__timing-row")).not.toBeNull();
+    expect(initial.parentElement?.textContent).toContain("分後");
+    expect(deadline.parentElement?.textContent).toContain("分前");
+  });
+
+  it("shows whether this browser still has a locally registered notification device", async () => {
+    const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now: "2026-08-04T08:00:00.000Z" });
+    snapshot.device.pushDeviceId = "device-id";
+    snapshot.device.pushDeviceSecret = "secret";
+    snapshot.device.registeredAt = "2026-08-04T08:00:00.000Z";
+    snapshot.device.pushSubscriptionStatus = "granted";
+    snapshot.settings.notificationEnabled = true;
+    render(<NotificationSettings repository={memory(snapshot)} />);
+
+    expect(await screen.findByText("この端末は通知サービスに登録済みです。"))
+      .toBeTruthy();
+    expect(screen.getByLabelText("通知の端末登録日時").textContent)
+      .toBe("通知の端末登録日時: 2026/8/4 17:00");
+  });
 });
 
 function memory(

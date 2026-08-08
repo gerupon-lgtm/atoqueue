@@ -69,6 +69,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@fontsource/kiwi-maru':
+        specifier: 5.2.5
+        version: 5.2.5
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -936,6 +939,9 @@ packages:
 
   '@fastify/rate-limit@11.2.0':
     resolution: {integrity: sha512-X7osJd4XSvMoejYrnJkSZYYjY1eNYoBqhjlzf1RakC2204qExFqZFTKj5+T7VuzA/iUI9Z3UoSqQRkB2HpG0oQ==}
+
+  '@fontsource/kiwi-maru@5.2.5':
+    resolution: {integrity: sha512-ZosG5JFSSdF6kVAj0YcGy9CKGSomHVsaSCJnMvt6tdfIbrg43rp6bAzM45r33KzfJIdRndhz6uMo5yI5ZxHB0g==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -4307,6 +4313,8 @@ snapshots:
       fastify-plugin: 6.0.0
       ip-address: 10.4.0
       toad-cache: 3.7.4
+
+  '@fontsource/kiwi-maru@5.2.5': {}
 
   '@humanfs/core@0.19.2':
     dependencies:
