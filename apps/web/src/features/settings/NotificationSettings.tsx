@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   rebuildActiveTaskNotifications,
   type AppRepository,
@@ -13,7 +13,11 @@ import {
 import "./NotificationSettings.css";
 import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 import { formatTimeZone } from "../../presentation/format-time-zone";
-import { digits, timeFromDigits } from "../tasks/DeadlineInputFields";
+import {
+  digits,
+  formatTimeDigits,
+  timeFromDigits,
+} from "../tasks/DeadlineInputFields";
 
 export interface NotificationSettingsProps {
   repository: AppRepository;
@@ -36,6 +40,7 @@ export function NotificationSettings({
   const [initialDelay, setInitialDelay] = useState("60");
   const [deadlineLead, setDeadlineLead] = useState("60");
   const [defaultDeadlineTime, setDefaultDeadlineTime] = useState("2359");
+  const defaultDeadlineTimePicker = useRef<HTMLInputElement>(null);
   const [hasRegisteredDevice, setHasRegisteredDevice] = useState(false);
   const [registeredAt, setRegisteredAt] = useState<string>();
   const [timeZone, setTimeZone] = useState<string>();
@@ -154,10 +159,9 @@ export function NotificationSettings({
       aria-labelledby="notification-settings-title"
     >
       <h1 id="notification-settings-title">通知</h1>
-      <p>
-        通知を使うと、アプリを開いて今日の確認に戻るきっかけを受け取れます。
+      <p className="notification-settings__intro">
+        通知を使うと、アプリを開いて今日の確認に戻るきっかけを受け取れます。タスク本文は通知サーバーへ送信しません。
       </p>
-      <p>タスク本文は通知サーバーへ送信しません。</p>
       {timeZone ? (
         <p
           aria-label="利用中のタイムゾーン"
@@ -175,7 +179,7 @@ export function NotificationSettings({
           初回通知はタスク登録から、期限前通知は期限より前の指定分で予約します。通知サーバーは最大5分ごとに配送対象を確認します。OSや省電力設定により、表示時刻は前後することがあります。
         </p>
         <p>
-          この端末でタスクにした項目だけが通知対象です。記録を保存しただけでは通知されず、端末間でデータも同期しません。
+          この端末で保存した記録と、タスクにした項目が通知対象です。端末間でデータは同期しません。
         </p>
         <div className="notification-settings__timing-row">
           <label htmlFor="initial-reminder-delay">初回通知まで（分）</label>
@@ -184,6 +188,7 @@ export function NotificationSettings({
               id="initial-reminder-delay"
               min="0"
               onChange={(event) => setInitialDelay(event.target.value)}
+              onFocus={(event) => event.currentTarget.select()}
               step="1"
               type="number"
               value={initialDelay}
@@ -192,22 +197,39 @@ export function NotificationSettings({
           </div>
         </div>
         <div className="notification-settings__timing-row">
-          <label htmlFor="default-deadline-time">日付だけの期限の時刻（4桁）</label>
-          <div className="notification-settings__number-field">
+          <label htmlFor="default-deadline-time">
+            日付だけの期限に使う時刻（4桁）
+          </label>
+          <div className="notification-settings__time-input">
             <input
               autoComplete="off"
               id="default-deadline-time"
               inputMode="numeric"
-              maxLength={4}
-              onChange={(event) => setDefaultDeadlineTime(digits(event.target.value, 4))}
+              maxLength={5}
+              onChange={(event) =>
+                setDefaultDeadlineTime(digits(event.target.value, 4))
+              }
               onFocus={(event) => event.currentTarget.select()}
-              pattern="[0-9]*"
-              placeholder="例: 2359"
-              value={defaultDeadlineTime}
+              pattern="[0-9:]*"
+              placeholder="例: 23:59"
+              value={formatTimeDigits(defaultDeadlineTime)}
             />
+            <button
+              aria-label="時計で日付だけの期限に使う時刻を選ぶ"
+              className="notification-settings__picker-button"
+              onClick={() => openPicker(defaultDeadlineTimePicker.current)}
+              type="button"
+            >
+              <ClockIcon />
+            </button>
             <input
-              aria-label="日付だけの期限の時刻を時計から選ぶ"
-              onChange={(event) => setDefaultDeadlineTime(event.target.value.replace(":", ""))}
+              aria-hidden="true"
+              className="notification-settings__native-time-picker"
+              onChange={(event) =>
+                setDefaultDeadlineTime(event.target.value.replace(":", ""))
+              }
+              ref={defaultDeadlineTimePicker}
+              tabIndex={-1}
               type="time"
               value={timeFromDigits(defaultDeadlineTime) ?? ""}
             />
@@ -221,6 +243,7 @@ export function NotificationSettings({
               id="deadline-reminder-lead"
               min="0"
               onChange={(event) => setDeadlineLead(event.target.value)}
+              onFocus={(event) => event.currentTarget.select()}
               step="1"
               type="number"
               value={deadlineLead}
@@ -322,4 +345,26 @@ function errorMessage(
 
 function isReminderMinutes(value: number): boolean {
   return Number.isInteger(value) && value >= 0 && value <= 10_080;
+}
+
+function openPicker(input: HTMLInputElement | null): void {
+  if (!input) return;
+  if (typeof input.showPicker === "function") {
+    try {
+      input.showPicker();
+      return;
+    } catch {
+      // Some browsers require a direct user gesture before opening a picker.
+    }
+  }
+  input.click();
+}
+
+function ClockIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
 }

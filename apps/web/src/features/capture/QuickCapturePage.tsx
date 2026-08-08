@@ -10,6 +10,7 @@ import {
   createCapture,
   type AppRepository,
 } from "../../../../../packages/domain/src";
+import type { NotificationSetupResult } from "../../infrastructure/notifications/push-subscription";
 import "./QuickCapturePage.css";
 
 const SUCCESS_MESSAGE = "保存しました。いまの作業に戻って大丈夫です";
@@ -22,6 +23,7 @@ export interface QuickCapturePageProps {
   now?: () => string;
   createId?: () => string;
   onNotificationChanged?: () => Promise<unknown>;
+  setupNotifications?: () => Promise<NotificationSetupResult>;
 }
 
 export function QuickCapturePage({
@@ -29,6 +31,7 @@ export function QuickCapturePage({
   now = () => new Date().toISOString(),
   createId = defaultCreateId,
   onNotificationChanged,
+  setupNotifications,
 }: QuickCapturePageProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lastPersistedDraft = useRef<string | undefined>(undefined);
@@ -42,6 +45,9 @@ export function QuickCapturePage({
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showNotificationSetup, setShowNotificationSetup] = useState(false);
+  const [isConfiguringNotifications, setIsConfiguringNotifications] =
+    useState(false);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -59,6 +65,12 @@ export function QuickCapturePage({
           ).length,
         );
         setShowOnboarding(!snapshot.settings.onboardingCompletedAt);
+        setShowNotificationSetup(
+          Boolean(
+            setupNotifications &&
+            snapshot.device.pushSubscriptionStatus === "not_requested",
+          ),
+        );
 
         if (!draft) {
           lastPersistedDraft.current = "";
@@ -184,6 +196,35 @@ export function QuickCapturePage({
     }
   }
 
+  async function configureNotifications(): Promise<void> {
+    if (!setupNotifications || isConfiguringNotifications) return;
+
+    setIsConfiguringNotifications(true);
+    setError(undefined);
+    setMessage(undefined);
+    try {
+      const result = await setupNotifications();
+      setShowNotificationSetup(false);
+      if (result.state === "granted") {
+        void onNotificationChanged?.();
+        setMessage("通知を設定しました。");
+      } else if (result.state === "denied") {
+        setError("ブラウザの設定から通知を許可してください。");
+      } else if (result.state === "unavailable") {
+        setError("このブラウザでは通知を利用できません。");
+      } else {
+        setError(
+          "通知を設定できませんでした。設定からもう一度お試しください。",
+        );
+      }
+    } catch {
+      setShowNotificationSetup(false);
+      setError("通知を設定できませんでした。設定からもう一度お試しください。");
+    } finally {
+      setIsConfiguringNotifications(false);
+    }
+  }
+
   return (
     <section className="quick-capture" aria-labelledby="quick-capture-title">
       <h1 id="quick-capture-title">あとで思い出したいことは？</h1>
@@ -200,6 +241,22 @@ export function QuickCapturePage({
           </ol>
           <button onClick={() => void dismissOnboarding()} type="button">
             はじめる
+          </button>
+        </section>
+      ) : null}
+      {showNotificationSetup ? (
+        <section
+          className="quick-capture__notification-setup"
+          aria-labelledby="capture-notification-setup-title"
+        >
+          <h2 id="capture-notification-setup-title">通知を設定する</h2>
+          <p>記録したことを後で思い出すために、この端末の通知を設定します。</p>
+          <button
+            disabled={isConfiguringNotifications}
+            onClick={() => void configureNotifications()}
+            type="button"
+          >
+            通知を設定する
           </button>
         </section>
       ) : null}

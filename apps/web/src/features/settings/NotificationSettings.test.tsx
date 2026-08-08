@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -16,7 +22,7 @@ describe("NotificationSettings", () => {
 
     expect(setup).not.toHaveBeenCalled();
     expect(
-      screen.getByText("タスク本文は通知サーバーへ送信しません。"),
+      screen.getByText(/タスク本文は通知サーバーへ送信しません/),
     ).not.toBeNull();
     await userEvent
       .setup()
@@ -131,7 +137,8 @@ describe("NotificationSettings", () => {
     await user.type(initial, "90");
     await user.clear(deadline);
     await user.type(deadline, "45");
-    const defaultDeadlineTime = screen.getByLabelText("日付だけの期限の時刻（4桁）");
+    const defaultDeadlineTime =
+      screen.getByLabelText("日付だけの期限に使う時刻（4桁）");
     await user.clear(defaultDeadlineTime);
     await user.type(defaultDeadlineTime, "1830");
     await user.click(
@@ -149,6 +156,23 @@ describe("NotificationSettings", () => {
         }),
       ),
     );
+  });
+
+  it("formats the default deadline time and selects all text when the user taps it", async () => {
+    render(<NotificationSettings repository={memory()} />);
+
+    const time = (await screen.findByLabelText(
+      "日付だけの期限に使う時刻（4桁）",
+    )) as HTMLInputElement;
+    expect(time.value).toBe("23:59");
+    fireEvent.focus(time);
+    expect(time.selectionStart).toBe(0);
+    expect(time.selectionEnd).toBe(5);
+    expect(
+      screen.getByRole("button", {
+        name: "時計で日付だけの期限に使う時刻を選ぶ",
+      }),
+    ).toBeTruthy();
   });
 
   it("groups each timing label, minute input, and unit into a compact setting row", async () => {
@@ -199,7 +223,7 @@ describe("NotificationSettings", () => {
     ).toBeTruthy();
     expect(
       screen.getByText(
-        "この端末でタスクにした項目だけが通知対象です。記録を保存しただけでは通知されず、端末間でデータも同期しません。",
+        "この端末で保存した記録と、タスクにした項目が通知対象です。端末間でデータは同期しません。",
       ),
     ).toBeTruthy();
   });

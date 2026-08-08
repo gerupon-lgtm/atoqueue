@@ -96,6 +96,44 @@ describe("QuickCapturePage", () => {
     ).toMatchObject({ settings: { onboardingCompletedAt: now } });
   });
 
+  it("offers notification setup from capture only until the user has acted on it", async () => {
+    const repository = createRepository();
+    const setupNotifications = vi.fn().mockResolvedValue({ state: "granted" });
+    render(
+      <QuickCapturePage
+        repository={repository}
+        setupNotifications={setupNotifications}
+      />,
+    );
+
+    const button = await screen.findByRole("button", {
+      name: "通知を設定する",
+    });
+    await userEvent.setup().click(button);
+    await waitFor(() => expect(setupNotifications).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("button", { name: "通知を設定する" })).toBeNull();
+  });
+
+  it("does not show notification setup from capture after a browser has already been registered", async () => {
+    const snapshot = createEmptySnapshot({
+      appVersion: "0.1.0",
+      localDeviceId: "device-1",
+      timeZone: "Asia/Tokyo",
+      now,
+    });
+    snapshot.device.pushSubscriptionStatus = "granted";
+    render(
+      <QuickCapturePage
+        repository={createRepository({
+          load: vi.fn().mockResolvedValue(snapshot),
+        })}
+      />,
+    );
+
+    await screen.findByRole("textbox", { name: "思いついたこと" });
+    expect(screen.queryByRole("button", { name: "通知を設定する" })).toBeNull();
+  });
+
   it("saves a draft after 300ms through the repository", async () => {
     vi.useFakeTimers();
     const repository = createRepository();

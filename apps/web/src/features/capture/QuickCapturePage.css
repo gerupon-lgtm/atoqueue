@@ -4,6 +4,25 @@
   max-width: 640px;
 }
 
+.quick-capture .quick-capture__notification-setup {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid #c6d0c8;
+  border-left: 3px solid #568a77;
+  border-radius: 0.75rem;
+  background: #eef5ef;
+}
+
+.quick-capture__notification-setup h2,
+.quick-capture__notification-setup p {
+  margin: 0;
+}
+
+.quick-capture__notification-setup p {
+  line-height: 1.5;
+}
+
 .quick-capture__form {
   display: grid;
   gap: 0.75rem;

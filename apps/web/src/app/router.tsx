@@ -1,9 +1,18 @@
-import { createBrowserRouter, useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  createBrowserRouter,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import { LocalStorageRepository } from "../infrastructure/local-storage/local-storage-repository";
 import { createNotificationSyncService } from "../application/notification-sync-service";
 import { resetDeviceData } from "../application/device-data-reset-service";
 import { NotificationApi } from "../infrastructure/notifications/notification-api";
-import { unsubscribeBrowserPush } from "../infrastructure/notifications/push-subscription";
+import {
+  createBrowserPushAdapter,
+  enableNotifications,
+  unsubscribeBrowserPush,
+} from "../infrastructure/notifications/push-subscription";
 import { QuickCapturePage } from "../features/capture/QuickCapturePage";
 import { InboxPage } from "../features/inbox/InboxPage";
 import { TaskCandidatePage } from "../features/inbox/TaskCandidatePage";
@@ -29,11 +38,19 @@ const pages: PageDefinition[] = [
 ];
 
 const applicationRepository = new LocalStorageRepository(window.localStorage);
-const notificationApi = new NotificationApi("https://api.atoqueue.sikumilab.com");
+const notificationApi = new NotificationApi(
+  "https://api.atoqueue.sikumilab.com",
+);
 const notificationSync = createNotificationSyncService({
   repository: applicationRepository,
   api: notificationApi,
 });
+const setupNotifications = () =>
+  enableNotifications({
+    repository: applicationRepository,
+    api: notificationApi,
+    browser: createBrowserPushAdapter(),
+  });
 
 export const router = createBrowserRouter([
   {
@@ -46,6 +63,7 @@ export const router = createBrowserRouter([
           <QuickCapturePage
             onNotificationChanged={() => notificationSync.flush()}
             repository={applicationRepository}
+            setupNotifications={setupNotifications}
           />
         ) : page.path === "inbox" ? (
           <InboxRoute />
@@ -65,13 +83,17 @@ export const router = createBrowserRouter([
             }}
             flushNotifications={() => notificationSync.flush()}
             repository={applicationRepository}
+            setupNotifications={setupNotifications}
           />
         ) : (
           <Page title={page.label} />
         ),
       })),
       { path: "inbox/:captureId", element: <TaskCandidateRoute /> },
-      { path: "today/result", element: <ReviewResultPage repository={applicationRepository} /> },
+      {
+        path: "today/result",
+        element: <ReviewResultPage repository={applicationRepository} />,
+      },
       { path: "tasks/:taskId", element: <TaskCorrectionRoute /> },
     ],
   },
@@ -113,11 +135,26 @@ function TaskCandidateRoute() {
 function TodayReviewRoute() {
   const navigate = useNavigate();
   const location = useLocation();
-  return <TodayReviewPage onFinished={() => navigate("/today/result")} preferredReminderId={new URLSearchParams(location.search).get("reminder") ?? undefined} repository={applicationRepository} sync={() => notificationSync.flush()} />;
+  return (
+    <TodayReviewPage
+      onFinished={() => navigate("/today/result")}
+      preferredReminderId={
+        new URLSearchParams(location.search).get("reminder") ?? undefined
+      }
+      repository={applicationRepository}
+      sync={() => notificationSync.flush()}
+    />
+  );
 }
 
 function TaskCorrectionRoute() {
   const { taskId } = useParams();
   if (!taskId) return <Page title="タスク" />;
-  return <TaskDetailPage repository={applicationRepository} sync={() => notificationSync.flush()} taskId={taskId} />;
+  return (
+    <TaskDetailPage
+      repository={applicationRepository}
+      sync={() => notificationSync.flush()}
+      taskId={taskId}
+    />
+  );
 }
