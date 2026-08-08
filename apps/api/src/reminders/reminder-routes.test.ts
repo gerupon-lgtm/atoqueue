@@ -9,6 +9,7 @@ const subscription = {
   expirationTime: null,
   keys: { p256dh: "private-p256dh", auth: "private-auth" },
 };
+const testNow = () => "2026-08-01T09:00:00.000Z";
 
 async function register(app: ReturnType<typeof buildApp>, endpoint = subscription.endpoint) {
   const response = await app.inject({ method: "POST", url: "/v1/devices", payload: { subscription: { ...subscription, endpoint } } });
@@ -27,7 +28,7 @@ function upsertRequest(device: { deviceId: string; deviceSecret: string }, remin
 describe("reminder routes", () => {
   it("creates and fully replaces an authenticated device reminder without storing task data", async () => {
     const reminders = new InMemoryReminderRepository();
-    const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: reminders });
+    const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: reminders, now: testNow });
     const device = await register(app);
     const reminderId = randomUUID();
     const first = await app.inject(upsertRequest(device, reminderId, "create-1"));
@@ -41,7 +42,7 @@ describe("reminder routes", () => {
   });
 
   it("cancels idempotently for its owner and returns 404 for another device", async () => {
-    const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: new InMemoryReminderRepository() });
+    const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: new InMemoryReminderRepository(), now: testNow });
     const firstDevice = await register(app, "https://push.example/first");
     const secondDevice = await register(app, "https://push.example/second");
     const reminderId = randomUUID();
@@ -56,7 +57,7 @@ describe("reminder routes", () => {
 
   it("returns 404 without changing a reminder when a different device reuses its id", async () => {
     const reminders = new InMemoryReminderRepository();
-    const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: reminders });
+    const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: reminders, now: testNow });
     const owner = await register(app, "https://push.example/owner");
     const other = await register(app, "https://push.example/other-owner");
     const reminderId = randomUUID();
@@ -69,7 +70,7 @@ describe("reminder routes", () => {
   });
 
   it("replays an idempotent upsert and rejects a changed request with the same key", async () => {
-    const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: new InMemoryReminderRepository() });
+    const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: new InMemoryReminderRepository(), now: testNow });
     const device = await register(app);
     const reminderId = randomUUID();
     const request = upsertRequest(device, reminderId, "replay-1");
@@ -84,7 +85,7 @@ describe("reminder routes", () => {
   });
 
   it.each(["title", "body", "taskId", "category", "dueAt", "actionHistory"])("rejects forbidden field %s", async (field) => {
-    const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: new InMemoryReminderRepository() });
+    const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: new InMemoryReminderRepository(), now: testNow });
     const device = await register(app);
     const response = await app.inject({ ...upsertRequest(device, randomUUID(), "forbidden-1"), payload: { ...upsertRequest(device, randomUUID(), "forbidden-1").payload, [field]: "SECRET_TASK_CANARY" } });
     expect(response.statusCode).toBe(400);

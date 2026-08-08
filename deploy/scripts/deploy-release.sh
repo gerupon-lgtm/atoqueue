@@ -19,6 +19,13 @@ releases_dir=/opt/atoqueue/releases
 current_link="$releases_dir/current"
 service=atoqueue-notification-api.service
 allowed_signers=/etc/atoqueue/deployment-allowed-signers
+node_runtime=/opt/atoqueue/runtime/node/bin/node
+corepack_runtime=/opt/atoqueue/runtime/node/bin/corepack
+
+if [[ ! -x "$node_runtime" || ! -x "$corepack_runtime" ]]; then
+  echo "The dedicated Atoqueue Node.js runtime is unavailable." >&2
+  exit 69
+fi
 
 if [[ ! "$release_id" =~ ^[0-9a-f]{40}$ ]]; then
   echo "Release ID is invalid." >&2
@@ -102,7 +109,7 @@ rollback() {
 # runtime user before it is activated.
 chown -R atoqueue-deploy:atoqueue-deploy "$staging_dir"
 cat -- "$archive" | runuser -u atoqueue-deploy -- tar --extract --gzip --file - --directory "$staging_dir" --no-same-owner
-runuser -u atoqueue-deploy -- corepack pnpm --dir "$staging_dir" install --prod --frozen-lockfile
+runuser -u atoqueue-deploy -- "$corepack_runtime" pnpm --dir "$staging_dir" install --prod --frozen-lockfile
 chown -R root:root "$staging_dir"
 chmod -R go-w "$staging_dir"
 chmod -R a-s "$staging_dir"
@@ -118,7 +125,7 @@ if ! systemd-run --wait --collect --quiet \
   --property=Group=atoqueue \
   --property=EnvironmentFile=/etc/atoqueue/notification-api.env \
   --property=WorkingDirectory="$release_dir/apps/api" \
-  /usr/bin/node --input-type=module --eval '
+  "$node_runtime" --input-type=module --eval '
   import { loadConfig } from "./dist/config.js";
   import { createDatabasePool } from "./dist/db/connection.js";
   import { applyInitialMigration } from "./dist/db/migrate.js";

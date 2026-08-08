@@ -27,7 +27,7 @@ const requiredFragments = {
     "Group=atoqueue",
     "EnvironmentFile=/etc/atoqueue/notification-api.env",
     "WorkingDirectory=/opt/atoqueue/releases/current/apps/api",
-    "ExecStart=/usr/bin/node ./dist/start.js",
+    "ExecStart=/opt/atoqueue/runtime/node/bin/node ./dist/start.js",
     "Restart=on-failure",
   ],
   "deploy/caddy/atoqueue-api.caddyfile": [
@@ -50,6 +50,15 @@ const requiredFragments = {
     "sha256sum",
     "/var/lib/atoqueue-deploy/quarantine",
     "install -m 0600 /dev/null",
+    "/opt/atoqueue/runtime/node/bin/node",
+    "/opt/atoqueue/runtime/node/bin/corepack",
+  ],
+  "deploy/scripts/install-atoqueue-node-runtime.sh": [
+    "node_version=24.18.0",
+    "node-v24.18.0-linux-x64.tar.xz",
+    "55aa7153f9d88f28d765fcdad5ae6945b5c0f98a36881703817e4c450fa76742",
+    "/opt/atoqueue/runtime/node",
+    "sha256sum --check --status",
   ],
   "apps/api/src/start.ts": ['host: "127.0.0.1"'],
   "docs/operations/deployment.md": [
@@ -64,6 +73,8 @@ const requiredFragments = {
     "/usr/local/libexec/atoqueue-deploy-release",
     "DEPLOY_ARTIFACT_SIGNING_PRIVATE_KEY",
     "/etc/atoqueue/deployment-allowed-signers",
+    "/opt/atoqueue/runtime/node/bin/node",
+    "Node.js 20",
   ],
 };
 
@@ -129,6 +140,24 @@ const service = await readFile(
 if (service.includes("ReadWritePaths=")) {
   failures.push(
     "deploy/systemd/atoqueue-notification-api.service: runtime service must not have a writable release tree",
+  );
+}
+
+const releaseScript = await readFile(
+  new URL("deploy/scripts/deploy-release.sh", repositoryRoot),
+  "utf8",
+);
+for (const [relativePath, content] of [
+  ["deploy/systemd/atoqueue-notification-api.service", service],
+  ["deploy/scripts/deploy-release.sh", releaseScript],
+]) {
+  if (content.includes("/usr/bin/node")) {
+    failures.push(`${relativePath}: must not use the host Node.js runtime`);
+  }
+}
+if (releaseScript.includes("runuser -u atoqueue-deploy -- corepack")) {
+  failures.push(
+    "deploy/scripts/deploy-release.sh: must not use the host Corepack runtime",
   );
 }
 

@@ -8,15 +8,20 @@
 
 1. Cloudflare で `atoqueue.sikumilab.com` を GitHub Pages、`api.atoqueue.sikumilab.com` を OCI VPS の A/AAAA レコードへ向け、両方を **DNS only** にする。GitHub Pages の Custom domain を `atoqueue.sikumilab.com` に設定し、HTTPS 強制を有効にする。
 2. GitHub の `production` environment を作り、required reviewers を設定する。Repository secrets に `DEPLOY_HOST`、専用鍵の `DEPLOY_SSH_PRIVATE_KEY`、検証済みホスト鍵だけを含む `DEPLOY_SSH_KNOWN_HOSTS`、release manifest 専用の `DEPLOY_ARTIFACT_SIGNING_PRIVATE_KEY` を登録する。署名鍵は SSH 配置鍵とは別ペアにし、Actions 以外から読めない。いずれの秘密鍵も他用途と共有しない。
-3. VPS に Node.js 24、Corepack、pnpm 10、PostgreSQL client、Caddy を導入する。`atoqueue` をログイン不可の実行ユーザー、`atoqueue-deploy` を配置専用ユーザーとして作成する。OCI の Security List または Network Security Group と VPS の host firewall では、インターネットからの TCP `80/tcp` と `443/tcp` を Caddy 用に許可し、`3030/tcp` は許可しない。DNS only の A/AAAA レコードが VPS の到達可能なアドレスだけを指すことも、この時点で確認する。
+3. 既存サービスの `/usr/bin/node` は変更しない。あとキュー専用に、root 所有の `/opt/atoqueue/runtime/node/bin/node` へ固定版 Node.js 24 を配置する。`atoqueue` をログイン不可の実行ユーザー、`atoqueue-deploy` を配置専用ユーザーとして作成する。OCI の Security List または Network Security Group と VPS の host firewall では、インターネットからの TCP `80/tcp` と `443/tcp` を Caddy 用に許可し、`3030/tcp` は許可しない。DNS only の A/AAAA レコードが VPS の到達可能なアドレスだけを指すことも、この時点で確認する。
 
 ```bash
 sudo useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin --user-group atoqueue
 sudo useradd --create-home --shell /bin/bash atoqueue-deploy
 sudo -u postgres createuser --no-createdb --no-createrole --no-superuser --pwprompt atoqueue_notify_app
 sudo -u postgres createdb --owner=atoqueue_notify_app atoqueue_notify
-sudo install -d -o atoqueue-deploy -g atoqueue-deploy -m 0755 /opt/atoqueue/releases
+sudo install -d -o root -g root -m 0755 /opt/atoqueue/releases
+sudo install -D -o root -g root -m 0750 deploy/scripts/install-atoqueue-node-runtime.sh /usr/local/libexec/atoqueue-install-node-runtime
+sudo /usr/local/libexec/atoqueue-install-node-runtime
+sudo -u atoqueue /opt/atoqueue/runtime/node/bin/node --version
 ```
+
+この runtime installer は Linux x86_64 用の Node.js `24.18.0` を公式配布物の SHA-256 と照合して配置する。`/usr/bin/node`（このVPSでは既存サービス用の Node.js 20）とグローバルの Corepack は変更も参照もしない。Node.js 24の更新時は、installer のバージョンと SHA-256 を公式リリースに合わせて更新し、静的配置検査を通してから root 管理者が再配置する。
 
 4. root 所有・`0600` の `/etc/atoqueue/notification-api.env` を作る。値は秘密管理から投入し、画面共有・シェル履歴・GitHub Actions のログへ出さない。
 
@@ -108,7 +113,7 @@ DB スキーマを変更するリリースでは、先に [通知 DB 復旧手�
 3. `Test and build` が Node 24 で lint、型検査、テスト、Web/API build、配置成果物の静的検査を完了することを確認する。
 4. `Publish PWA to GitHub Pages` は `apps/web/dist` に CNAME を含めて公開する。`Deploy notification API to OCI VPS` は専用 SSH 鍵で `atoqueue-deploy` に接続し、private incoming directory へ archive、release ID と SHA-256 を含む manifest、その署名を送る。root wrapper は別の Actions 署名鍵で manifest を検証するため、SSH 配置鍵だけでは任意コードを migration として実行できない。
 
-VPS 上の `deploy-release.sh` は、リリース用ディレクトリへ依存関係を production mode で入れる。migration は `systemd-run` の一時 unit として `atoqueue` ユーザーで実行し、systemd だけが root 所有の環境ファイルを読むため、配置ユーザーは DB 接続情報・VAPID 鍵を読めない。続いて `current` symlink を切替え、systemd を再起動し、loopback の `/healthz` が 200 になることを確認する。migration、再起動、health check のいずれかが失敗すると、前リリースを `current` に戻して再起動する。
+VPS 上の `deploy-release.sh` は、専用 runtime に同梱された Corepack だけを使ってリリース用ディレクトリへ依存関係を production mode で入れる。migration は `systemd-run` の一時 unit として `atoqueue` ユーザーおよび専用 Node.js 24 で実行し、systemd だけが root 所有の環境ファイルを読むため、配置ユーザーは DB 接続情報・VAPID 鍵を読めない。続いて `current` symlink を切替え、systemd を再起動し、loopback の `/healthz` が 200 になることを確認する。migration、再起動、health check のいずれかが失敗すると、前リリースを `current` に戻して再起動する。
 
 ## VPS での確認・ログ確認
 
