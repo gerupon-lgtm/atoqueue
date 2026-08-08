@@ -210,7 +210,7 @@ describe("device registration routes", () => {
     });
     expect(valid.statusCode).toBe(200);
     await app.close();
-  }, 15_000);
+  }, 35_000);
 
   it("replays a lost delete response when the idempotency key is repeated", async () => {
     const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });

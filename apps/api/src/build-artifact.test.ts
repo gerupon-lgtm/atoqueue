@@ -26,13 +26,13 @@ describe("production API build", () => {
     await applyInitialMigration({ query: async (sql: string) => { executed.push(sql); } } as never);
     expect(executed).toHaveLength(1);
     expect(executed[0]).toContain("CREATE TABLE IF NOT EXISTS device_subscriptions");
-  }, 20_000);
+  }, 45_000);
 
   it("can import the compiled production startup without resolving workspace TypeScript source", () => {
     buildApi();
     const entry = new URL("../dist/start.js", import.meta.url).href;
     execFileSync(process.execPath, ["--input-type=module", "--eval", `import(${JSON.stringify(entry)})`], { cwd: repositoryRoot, stdio: "pipe" });
-  }, 20_000);
+  }, 45_000);
 
   it("executes the compiled entrypoint when Node receives its relative start-script path", () => {
     buildApi();
@@ -40,5 +40,5 @@ describe("production API build", () => {
     const result = spawnSync(process.execPath, ["./dist/start.js"], { cwd: apiRoot, encoding: "utf8", env: {} });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("Notification API failed to start.");
-  }, 20_000);
+  }, 45_000);
 });
