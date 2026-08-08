@@ -80,7 +80,6 @@ export function DeadlineInputFields({
           checked={timeEnabled}
           id={`${idPrefix}-time-enabled`}
           onChange={(event) => onTimeEnabledChange(event.target.checked)}
-          style={touchTarget}
           type="checkbox"
         />
         期限時刻を指定する

@@ -94,6 +94,24 @@ describe("TaskDetailPage", () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 
+  it("returns to the task list from the correction screen", async () => {
+    const { repository } = repositoryWithTask();
+    const onReturn = vi.fn();
+    render(
+      <TaskDetailPage
+        now={() => now}
+        onReturn={onReturn}
+        repository={repository}
+        taskId="task-1"
+      />,
+    );
+
+    await screen.findByDisplayValue("牛乳を買う");
+    fireEvent.click(screen.getByRole("button", { name: /タスク一覧に戻る/ }));
+
+    expect(onReturn).toHaveBeenCalledTimes(1);
+  });
+
   it("F-015 shows source, current/due/review state, derived neglect reason, and chronological history", async () => {
     const { repository } = repositoryWithTask();
     render(
@@ -246,9 +264,14 @@ describe("TaskDetailPage", () => {
 
     await screen.findByDisplayValue("牛乳を買う");
     for (const control of document.querySelectorAll<HTMLElement>(
-      "select, input:not([aria-hidden=true]), button",
+      "select, input:not([aria-hidden=true]):not([type=checkbox]), button",
     )) {
       expect(getComputedStyle(control).minHeight).toBe("44px");
     }
+    const timeToggle = screen.getByLabelText("期限時刻を指定する");
+    expect(timeToggle.style.minHeight).toBe("");
+    expect(timeToggle.closest("label")?.classList).toContain(
+      "deadline-input-fields__toggle",
+    );
   });
 });

@@ -24,6 +24,7 @@ const defaultNow = () => new Date().toISOString();
 export interface TaskDetailPageProps {
   repository: AppRepository;
   taskId: string;
+  onReturn?: () => void;
   now?: () => string;
   sync?: (snapshot: AppSnapshot) => Promise<void>;
 }
@@ -31,6 +32,7 @@ export interface TaskDetailPageProps {
 export function TaskDetailPage({
   repository,
   taskId,
+  onReturn,
   now = defaultNow,
   sync,
 }: TaskDetailPageProps) {
@@ -133,7 +135,18 @@ export function TaskDetailPage({
   };
   return (
     <section aria-labelledby="task-detail-title">
-      <h1 id="task-detail-title">タスクを修正</h1>
+      <header className="task-detail__header">
+        {onReturn ? (
+          <button
+            className="task-detail__return"
+            onClick={onReturn}
+            type="button"
+          >
+            ← タスク一覧に戻る
+          </button>
+        ) : null}
+        <h1 id="task-detail-title">タスクを修正</h1>
+      </header>
       <section className="task-detail__summary" aria-label="タスクの概要">
         <p className="task-detail__source" aria-label="元の記録">
           元の記録: {source?.body ?? "見つかりません"}
@@ -207,6 +220,7 @@ export function TaskDetailPage({
           </select>
         </label>
         <button
+          className="task-detail__content-save"
           style={touchTarget}
           type="button"
           onClick={() =>
@@ -237,6 +251,7 @@ export function TaskDetailPage({
         {task.status === "active" ? (
           <div className="task-detail__actions">
             <button
+              className="task-detail__deadline-save"
               style={touchTarget}
               type="button"
               onClick={() => void applyDue("reschedule")}
@@ -244,6 +259,7 @@ export function TaskDetailPage({
               期限を保存
             </button>
             <button
+              className="task-detail__no-due"
               style={touchTarget}
               type="button"
               onClick={() => void applyDue("no_due")}
@@ -261,6 +277,7 @@ export function TaskDetailPage({
           <h2 id="task-detail-status-heading">状態</h2>
           <div className="task-detail__actions">
             <button
+              className="task-detail__complete"
               style={touchTarget}
               type="button"
               onClick={() => void change({ type: "complete" })}
@@ -268,6 +285,7 @@ export function TaskDetailPage({
               完了
             </button>
             <button
+              className="task-detail__dismiss"
               style={touchTarget}
               type="button"
               onClick={() => void change({ type: "dismiss" })}
@@ -275,6 +293,7 @@ export function TaskDetailPage({
               後回し
             </button>
             <button
+              className="task-detail__archive"
               style={touchTarget}
               type="button"
               onClick={() => void change({ type: "archive" })}
@@ -285,6 +304,7 @@ export function TaskDetailPage({
         </section>
       ) : (
         <button
+          className="task-detail__reopen"
           style={touchTarget}
           type="button"
           onClick={() => void change({ type: "reopen" })}

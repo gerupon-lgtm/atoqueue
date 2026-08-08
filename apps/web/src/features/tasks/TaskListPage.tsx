@@ -55,91 +55,107 @@ export function TaskListPage({
 
   if (!snapshot) return <p>読み込み中です…</p>;
   return (
-    <section aria-labelledby="task-list-title">
+    <section aria-labelledby="task-list-title" className="task-list">
       <h1 id="task-list-title">タスク</h1>
-      <label>
-        状態
-        <select
-          style={touchTarget}
-          value={tab}
-          onChange={(event) => setTab(event.target.value as TaskTab)}
-        >
-          <option value="active">対応中</option>
-          <option value="completed">完了</option>
-          <option value="archived">アーカイブ</option>
-        </select>
-      </label>
-      <label>
-        期限
-        <select
-          style={touchTarget}
-          value={due}
-          onChange={(event) => setDue(event.target.value as DueFilter | "")}
-        >
-          <option value="">すべて</option>
-          <option value="overdue">期限超過</option>
-          <option value="today">今日</option>
-          <option value="unset">未設定</option>
-          <option value="none">なし</option>
-        </select>
-      </label>
-      <label>
-        カテゴリ
-        <select
-          style={touchTarget}
-          value={category}
-          onChange={(event) =>
-            setCategory(event.target.value as Task["category"] | "")
-          }
-        >
-          <option value="">すべて</option>
-          <option value="work">仕事</option>
-          <option value="home">家</option>
-          <option value="shopping">買い物</option>
-          <option value="other">その他</option>
-        </select>
-      </label>
-      <label>
-        検索
-        <input
-          style={touchTarget}
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-      </label>
+      <section aria-label="タスクを絞り込む" className="task-list__filters">
+        <label>
+          状態
+          <select
+            style={touchTarget}
+            value={tab}
+            onChange={(event) => setTab(event.target.value as TaskTab)}
+          >
+            <option value="active">対応中</option>
+            <option value="completed">完了</option>
+            <option value="archived">アーカイブ</option>
+          </select>
+        </label>
+        <label>
+          期限
+          <select
+            style={touchTarget}
+            value={due}
+            onChange={(event) => setDue(event.target.value as DueFilter | "")}
+          >
+            <option value="">すべて</option>
+            <option value="overdue">期限超過</option>
+            <option value="today">今日</option>
+            <option value="unset">未設定</option>
+            <option value="none">なし</option>
+          </select>
+        </label>
+        <label>
+          カテゴリ
+          <select
+            style={touchTarget}
+            value={category}
+            onChange={(event) =>
+              setCategory(event.target.value as Task["category"] | "")
+            }
+          >
+            <option value="">すべて</option>
+            <option value="work">仕事</option>
+            <option value="home">家</option>
+            <option value="shopping">買い物</option>
+            <option value="other">その他</option>
+          </select>
+        </label>
+        <label className="task-list__search">
+          検索
+          <input
+            style={touchTarget}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+      </section>
+      {tab === "completed" ? (
+        <p className="task-list__hint">
+          完了したタスクは、詳細画面の「再開」で戻せます。
+        </p>
+      ) : null}
       {tasks.length === 0 ? (
         <p>該当するタスクはありません。</p>
       ) : (
-        <ul>
+        <ul className="task-list__items">
           {tasks.map((task) => (
             <li key={task.id}>
               <Link
                 aria-label={task.title}
+                className="task-list__item-title"
                 style={touchTarget}
                 to={`/tasks/${task.id}`}
               >
                 {task.title}
-              </Link>{" "}
-              <span aria-label={`${task.title}の期限状態`}>
-                {dueState(
-                  task,
-                  now(),
-                  createLocalCalendar(snapshot.settings.timeZone),
-                )}
-              </span>{" "}
-              {task.dueAt ? (
-                <span aria-label={`${task.title}の期限日時`}>
-                  期限:{" "}
-                  {formatLocalDateTime(task.dueAt, snapshot.settings.timeZone)}
+              </Link>
+              <div className="task-list__item-meta">
+                <span
+                  aria-label={`${task.title}の期限状態`}
+                  className="task-list__due-state"
+                >
+                  {dueState(
+                    task,
+                    now(),
+                    createLocalCalendar(snapshot.settings.timeZone),
+                  )}
                 </span>
-              ) : null}{" "}
-              <span aria-label={`${task.title}の登録日時`}>
-                登録:{" "}
-                {formatLocalDateTime(
-                  task.createdAt,
-                  snapshot.settings.timeZone,
-                )}
-              </span>
+                {task.dueAt ? (
+                  <span aria-label={`${task.title}の期限日時`}>
+                    期限:{" "}
+                    {formatLocalDateTime(
+                      task.dueAt,
+                      snapshot.settings.timeZone,
+                    )}
+                  </span>
+                ) : null}
+                <span aria-label={`${task.title}の登録日時`}>
+                  登録:{" "}
+                  {formatLocalDateTime(
+                    task.createdAt,
+                    snapshot.settings.timeZone,
+                  )}
+                </span>
+              </div>
             </li>
           ))}
         </ul>

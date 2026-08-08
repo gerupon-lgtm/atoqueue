@@ -148,10 +148,12 @@ function TodayReviewRoute() {
 }
 
 function TaskCorrectionRoute() {
+  const navigate = useNavigate();
   const { taskId } = useParams();
   if (!taskId) return <Page title="タスク" />;
   return (
     <TaskDetailPage
+      onReturn={() => navigate("/tasks")}
       repository={applicationRepository}
       sync={() => notificationSync.flush()}
       taskId={taskId}
