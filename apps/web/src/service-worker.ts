@@ -40,7 +40,7 @@ function validReminderUrl(url: unknown, reminderId: unknown): url is string {
   try {
     const parsed = new URL(url, "https://atoqueue.invalid");
     return parsed.origin === "https://atoqueue.invalid"
-      && parsed.pathname === "/today"
+      && (parsed.pathname === "/today" || parsed.pathname === "/inbox")
       && parsed.searchParams.size === 1
       && parsed.searchParams.get("reminder") === reminderId;
   } catch { return false; }

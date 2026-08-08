@@ -145,6 +145,7 @@ Request:
 
 許可値:
 
+- `inbox_review`（未整理記録の受信箱リマインド。Pushタップ先は受信箱）
 - `task_review`
 - `deadline_review`
 - `unset_due_review`

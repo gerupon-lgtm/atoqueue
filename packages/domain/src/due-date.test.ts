@@ -145,4 +145,32 @@ describe("resolveDueChoice", () => {
       nextReviewAt: "2026-04-01T00:30:00.000Z",
     });
   });
+
+  it("F-007 uses the saved default deadline time when a date has no explicit time", () => {
+    const timeCalendar: LocalCalendar = {
+      ...calendar,
+      atTime: (date, hour, minute) => {
+        expect(date).toBe("2026-04-01");
+        expect(hour).toBe(18);
+        expect(minute).toBe(30);
+        return "2026-04-01T09:30:00.000Z";
+      },
+      endOfDay: () => {
+        throw new Error("The configured deadline time should be used.");
+      },
+    };
+
+    expect(
+      resolveDueChoice({
+        choice: { type: "custom", date: "2026-04-01" },
+        now,
+        calendar: timeCalendar,
+        defaultDeadlineTime: "18:30",
+      }),
+    ).toEqual({
+      dueMode: "scheduled",
+      dueAt: "2026-04-01T09:30:00.000Z",
+      nextReviewAt: "2026-04-01T09:30:00.000Z",
+    });
+  });
 });

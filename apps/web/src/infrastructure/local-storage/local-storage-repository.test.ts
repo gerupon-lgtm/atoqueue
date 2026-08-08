@@ -31,11 +31,11 @@ function repositoryContract(
   describe(_name, () => {
     afterEach(() => window.localStorage.clear());
 
-    it("returns an empty version 3 snapshot when storage is missing", async () => {
+    it("returns an empty version 6 snapshot when storage is missing", async () => {
       const snapshot = await createRepository().load();
 
       expect(snapshot).toMatchObject({
-        schemaVersion: 4,
+        schemaVersion: 6,
         captures: [],
         tasks: [],
         actionHistory: [],
@@ -97,7 +97,7 @@ function repositoryContract(
     });
 
     it("rejects a future schema version without overwriting it", async () => {
-      const stored = JSON.stringify({ schemaVersion: 5 });
+      const stored = JSON.stringify({ schemaVersion: 7 });
       window.localStorage.setItem(DATA_KEY, stored);
 
       await expect(createRepository().load()).rejects.toBeInstanceOf(
@@ -150,7 +150,7 @@ describe("LocalStorageRepository persistence failures", () => {
   });
 
   it("preserves an unknown existing schema version when save is attempted", async () => {
-    const existing = JSON.stringify({ schemaVersion: 5 });
+    const existing = JSON.stringify({ schemaVersion: 7 });
     window.localStorage.setItem(DATA_KEY, existing);
 
     await expect(
@@ -236,11 +236,23 @@ describe("LocalStorageRepository persistence failures", () => {
     expect(persisted.actionHistory[0]?.before?.title).toBe("変更前");
     expect(persisted.actionHistory[0]?.after?.title).toBe("変更後");
   });
+
+  it("removes only this application's snapshot and draft keys when device data is cleared", async () => {
+    window.localStorage.setItem(DATA_KEY, JSON.stringify(sampleSnapshot()));
+    window.localStorage.setItem("atoqueue:draft:v1", "private draft");
+    window.localStorage.setItem("another-app", "keep");
+
+    await new LocalStorageRepository(window.localStorage).clearAppData();
+
+    expect(window.localStorage.getItem(DATA_KEY)).toBeNull();
+    expect(window.localStorage.getItem("atoqueue:draft:v1")).toBeNull();
+    expect(window.localStorage.getItem("another-app")).toBe("keep");
+  });
 });
 
 function sampleSnapshot(): AppSnapshot {
   return {
-    schemaVersion: 4,
+    schemaVersion: 6,
     appVersion: "0.1.0",
     device: {
       localDeviceId: "device-1",
@@ -252,6 +264,7 @@ function sampleSnapshot(): AppSnapshot {
       notificationEnabled: false,
       initialReminderDelayMinutes: 60,
       deadlineReminderLeadMinutes: 60,
+      defaultDeadlineTime: "23:59",
       weeklyReviewDay: 0,
     },
     captures: [],

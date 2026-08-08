@@ -1,5 +1,6 @@
 import {
   rebuildActiveTaskNotifications,
+  rebuildPendingCaptureNotifications,
   type AppRepository,
 } from "../../../../../packages/domain/src";
 import type { PushSubscription } from "../../../../../packages/contracts/src";
@@ -116,8 +117,12 @@ export async function enableNotifications(input: {
       settings: { ...snapshot.settings, notificationEnabled: true },
       savedAt,
     };
-    const delivery = rebuildActiveTaskNotifications({ snapshot: updated, now: savedAt });
-    await repository.save({ ...updated, ...delivery });
+    const taskDelivery = rebuildActiveTaskNotifications({ snapshot: updated, now: savedAt });
+    const captureDelivery = rebuildPendingCaptureNotifications({
+      snapshot: { ...updated, ...taskDelivery },
+      now: savedAt,
+    });
+    await repository.save({ ...updated, ...captureDelivery });
     return { state: "granted" };
   } catch {
     return { state: "error", reason: "storage" };
@@ -191,6 +196,18 @@ export function createBrowserPushAdapter(): PushBrowser {
       };
     },
   };
+}
+
+/**
+ * Removes a browser Push subscription after the server-side device has been
+ * deactivated. The remote deactivation is the required boundary; this is
+ * best-effort cleanup for a partially saved local state.
+ */
+export async function unsubscribeBrowserPush(): Promise<void> {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+  await subscription?.unsubscribe();
 }
 
 function fromBase64Url(value: string): Uint8Array {

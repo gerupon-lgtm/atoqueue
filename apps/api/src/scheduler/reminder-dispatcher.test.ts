@@ -7,10 +7,10 @@ import type { PushClient } from "../push/push-client.js";
 const now = new Date("2026-08-06T09:00:00.000Z");
 const pushSubscription = { endpoint: "https://push.example/subscription", p256dh: "private-p256dh", auth: "private-auth" };
 
-function seed(repository: InMemoryReminderRepository, input: Partial<{ id: string; scheduledAt: string; status: "pending" | "claimed" | "cancelled"; attemptCount: number; claimedAt: string | null }> = {}) {
+function seed(repository: InMemoryReminderRepository, input: Partial<{ id: string; scheduledAt: string; status: "pending" | "claimed" | "cancelled"; attemptCount: number; claimedAt: string | null; notificationType: "inbox_review" | "task_review" }> = {}) {
   const id = input.id ?? randomUUID();
   repository.seedDevice({ deviceId: "device-1", status: "active", subscription: pushSubscription });
-  repository.seed({ id, deviceId: "device-1", scheduledAt: input.scheduledAt ?? "2026-08-06T08:59:00.000Z", notificationType: "task_review", status: input.status ?? "pending", attemptCount: input.attemptCount ?? 0, claimedAt: input.claimedAt ?? null });
+  repository.seed({ id, deviceId: "device-1", scheduledAt: input.scheduledAt ?? "2026-08-06T08:59:00.000Z", notificationType: input.notificationType ?? "task_review", status: input.status ?? "pending", attemptCount: input.attemptCount ?? 0, claimedAt: input.claimedAt ?? null });
   return id;
 }
 
@@ -50,6 +50,16 @@ describe("ReminderDispatcher", () => {
     expect(repository.get(id)).toMatchObject({ status: "sent" });
     expect(sends[0].payload).toEqual({ type: "review_due", reminderId: id, url: `/today?reminder=${id}` });
     expect(JSON.stringify(sends[0].payload)).not.toContain("SECRET_TASK_CANARY");
+  });
+
+  it("sends an inbox reservation to the inbox without private capture data", async () => {
+    const repository = new InMemoryReminderRepository();
+    const id = seed(repository, { notificationType: "inbox_review" });
+    const sends: Array<{ payload: Record<string, unknown> }> = [];
+    await new ReminderDispatcher(repository, client(201, sends), () => now).dispatchDue();
+
+    expect(sends[0]?.payload).toEqual({ type: "review_due", reminderId: id, url: `/inbox?reminder=${id}` });
+    expect(JSON.stringify(sends[0]?.payload)).not.toContain("SECRET_CAPTURE_CANARY");
   });
 
   it.each([[0, 5], [1, 15], [2, 60]])("reschedules temporary failure %s after %s minutes", async (attemptCount, minutes) => {

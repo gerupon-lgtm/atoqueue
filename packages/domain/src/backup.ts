@@ -2,7 +2,7 @@ import { CorruptDataError } from "./errors";
 import { createLocalCalendar } from "./due-date";
 import { migrateSnapshot } from "./migrations";
 import { calculateNextReview } from "./reminder-policy";
-import { queueTaskNotifications } from "./notification-queue";
+import { queueCaptureNotification, queueTaskNotifications } from "./notification-queue";
 import type { ActionEvent, AppSnapshot, NotificationOutboxItem, ReminderMapEntry, Task } from "./model";
 
 export const BACKUP_FORMAT = "atoqueue-backup";
@@ -299,7 +299,7 @@ function rebuildReminderDelivery(previousMappings: AppSnapshot["reminderMap"], s
     nextAttemptAt: now,
     createdAt: now,
   }));
-  return snapshot.tasks
+  const taskDelivery = snapshot.tasks
     .filter((task) => task.status === "active")
     .reduce<{ notificationOutbox: NotificationOutboxItem[]; reminderMap: ReminderMapEntry[] }>((result, task) => {
       const queued = queueTaskNotifications({
@@ -312,6 +312,19 @@ function rebuildReminderDelivery(previousMappings: AppSnapshot["reminderMap"], s
       result.reminderMap = queued.reminderMap;
       return result;
     }, { notificationOutbox, reminderMap: [] });
+  return snapshot.captures
+    .filter((capture) => capture.classification === "unclassified")
+    .reduce<{ notificationOutbox: NotificationOutboxItem[]; reminderMap: ReminderMapEntry[] }>((result, capture) => {
+      const queued = queueCaptureNotification({
+        snapshot: { ...snapshot, reminderMap: result.reminderMap },
+        capture,
+        now,
+        createId: idFactory,
+      });
+      result.notificationOutbox.push(...queued.notificationOutbox);
+      result.reminderMap = queued.reminderMap;
+      return result;
+    }, taskDelivery);
 }
 
 function countsFor(data: BackupData): BackupCounts {

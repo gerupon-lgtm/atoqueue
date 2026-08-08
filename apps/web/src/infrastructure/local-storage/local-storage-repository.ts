@@ -87,6 +87,18 @@ export class LocalStorageRepository implements AppRepository {
     }
   }
 
+  /** Removes every key owned by this application; unrelated site storage survives. */
+  async clearAppData(): Promise<void> {
+    try {
+      this.storage.removeItem(DATA_KEY);
+      this.storage.removeItem(DRAFT_KEY);
+    } catch (error) {
+      throw new PersistenceError("Unable to clear application data.", {
+        cause: error,
+      });
+    }
+  }
+
   private backUpCorruptValue(value: string): void {
     try {
       this.storage.setItem(`atoqueue:corrupt:${this.now()}`, value);

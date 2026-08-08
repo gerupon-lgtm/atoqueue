@@ -20,6 +20,7 @@ export function InboxPage({
   onTaskCandidate,
 }: InboxPageProps) {
   const [captures, setCaptures] = useState<Capture[]>([]);
+  const [timeZone, setTimeZone] = useState("Asia/Tokyo");
   const [bodyDrafts, setBodyDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string>();
   const [isMutating, setIsMutating] = useState(false);
@@ -28,6 +29,7 @@ export function InboxPage({
 
   async function reload(): Promise<void> {
     const snapshot = await repository.load();
+    setTimeZone(snapshot.settings.timeZone);
     setCaptures(
       snapshot.captures
         .filter((capture) => capture.classification === "unclassified")
@@ -89,6 +91,9 @@ export function InboxPage({
           return (
             <li key={capture.id}>
               <p>{capture.body}</p>
+              <time dateTime={capture.createdAt}>
+                登録: {formatCaptureCreatedAt(capture.createdAt, timeZone)}
+              </time>
               <label htmlFor={`capture-body-${capture.id}`}>本文を編集</label>
               <textarea
                 id={`capture-body-${capture.id}`}
@@ -107,7 +112,7 @@ export function InboxPage({
                 本文を保存
               </button>
               {suggestion === "task" ? <p>タスク候補です</p> : null}
-              <div aria-label={`${capture.body} の整理操作`}>
+              <div className="inbox-item__actions" aria-label={`${capture.body} の整理操作`}>
                 <button disabled={isMutating} onClick={() => onTaskCandidate?.(capture.id)} type="button">
                   タスクかも
                 </button>
@@ -125,4 +130,16 @@ export function InboxPage({
       {error ? <p role="alert">{error}</p> : null}
     </section>
   );
+}
+
+function formatCaptureCreatedAt(instant: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(instant));
 }

@@ -93,6 +93,7 @@ describe("TaskCandidatePage", () => {
           element.textContent === "元の記録: 明日 牛乳を買う",
       ),
     ).toBeTruthy();
+    expect(screen.getByText("登録: 2026/8/3 18:00")).toBeTruthy();
     expect((screen.getByLabelText("タスク名") as HTMLInputElement).value).toBe(
       "牛乳を買う",
     );
@@ -189,8 +190,8 @@ describe("TaskCandidatePage", () => {
     fireEvent.change(screen.getByLabelText("期限"), {
       target: { value: "custom" },
     });
-    fireEvent.change(screen.getByLabelText("日付"), {
-      target: { value: "2026-08-02" },
+    fireEvent.change(screen.getByLabelText("期限日（8桁）"), {
+      target: { value: "20260802" },
     });
     fireEvent.change(screen.getByLabelText("タスク名"), {
       target: { value: "牛乳を買い足す" },
@@ -202,8 +203,8 @@ describe("TaskCandidatePage", () => {
     expect((screen.getByLabelText("タスク名") as HTMLInputElement).value).toBe(
       "牛乳を買い足す",
     );
-    expect((screen.getByLabelText("日付") as HTMLInputElement).value).toBe(
-      "2026-08-02",
+    expect((screen.getByLabelText("期限日（8桁）") as HTMLInputElement).value).toBe(
+      "20260802",
     );
   });
 
@@ -214,14 +215,14 @@ describe("TaskCandidatePage", () => {
     await screen.findByDisplayValue("牛乳を買う");
     expect(
       screen.getByText(
-        "期限はタスクにする時に選べます。日付と時刻を指定でき、時刻を空欄にすると23:59を期限にします。",
+        "期限はタスクにする時に選べます。日付と時刻を指定でき、時刻を指定しない場合は設定の既定時刻を使います。",
       ),
     ).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("期限"), {
       target: { value: "custom" },
     });
-    expect(screen.getByLabelText("日付")).toHaveProperty("type", "date");
+    expect(screen.getByLabelText("期限日（8桁）")).toHaveProperty("type", "text");
   });
 
   it("F-007 lets the user choose a deadline time while turning a capture into a task", async () => {
@@ -239,11 +240,12 @@ describe("TaskCandidatePage", () => {
     fireEvent.change(screen.getByLabelText("期限"), {
       target: { value: "custom" },
     });
-    fireEvent.change(screen.getByLabelText("日付"), {
-      target: { value: "2026-08-05" },
+    fireEvent.change(screen.getByLabelText("期限日（8桁）"), {
+      target: { value: "20260805" },
     });
-    fireEvent.change(screen.getByLabelText("期限時刻"), {
-      target: { value: "09:30" },
+    fireEvent.click(screen.getByLabelText("期限時刻を指定する"));
+    fireEvent.change(screen.getByLabelText("期限時刻（4桁）"), {
+      target: { value: "0930" },
     });
     fireEvent.click(screen.getByRole("button", { name: "タスクにする" }));
 

@@ -131,6 +131,9 @@ describe("NotificationSettings", () => {
     await user.type(initial, "90");
     await user.clear(deadline);
     await user.type(deadline, "45");
+    const defaultDeadlineTime = screen.getByLabelText("日付だけの期限の時刻（4桁）");
+    await user.clear(defaultDeadlineTime);
+    await user.type(defaultDeadlineTime, "1830");
     await user.click(
       screen.getByRole("button", { name: "通知タイミングを保存" }),
     );
@@ -141,6 +144,7 @@ describe("NotificationSettings", () => {
           settings: expect.objectContaining({
             initialReminderDelayMinutes: 90,
             deadlineReminderLeadMinutes: 45,
+            defaultDeadlineTime: "18:30",
           }),
         }),
       ),
@@ -192,6 +196,11 @@ describe("NotificationSettings", () => {
     ).toContain("Asia/Tokyo");
     expect(
       screen.getByText(/通知サーバーは最大5分ごとに配送対象を確認します/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "この端末でタスクにした項目だけが通知対象です。記録を保存しただけでは通知されず、端末間でデータも同期しません。",
+      ),
     ).toBeTruthy();
   });
 });

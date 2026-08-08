@@ -15,7 +15,7 @@ describe("SettingsPage", () => {
     expect(screen.getByText("あとキュー")).not.toBeNull();
     expect(screen.getByText(/バージョン/)).not.toBeNull();
     expect(screen.getByText("この端末にのみデータを保存します。")).not.toBeNull();
-    expect(screen.getByText(/同期しません/)).not.toBeNull();
+    expect(screen.getByText("端末間では同期しません。")).not.toBeNull();
   });
 
   it("F-017/F-018 delegates post-restore notification sync to the injected application service", async () => {
@@ -29,6 +29,17 @@ describe("SettingsPage", () => {
     await userEvent.setup().click(await screen.findByRole("button", { name: "この内容で置き換える" }));
 
     await waitFor(() => expect(flushNotifications).toHaveBeenCalledTimes(1));
+  });
+
+  it("offers a separate, explicit confirmation before delegating device-data deletion", async () => {
+    const deleteDeviceData = vi.fn(async () => undefined);
+    render(<SettingsPage deleteDeviceData={deleteDeviceData} repository={memory()} />);
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "端末データを削除" }));
+    expect(deleteDeviceData).not.toHaveBeenCalled();
+    await userEvent.setup().click(screen.getByRole("button", { name: "削除を確定する" }));
+    await waitFor(() => expect(deleteDeviceData).toHaveBeenCalledOnce());
+    expect(screen.getByRole("status").textContent).toContain("端末データを削除しました");
   });
 });
 

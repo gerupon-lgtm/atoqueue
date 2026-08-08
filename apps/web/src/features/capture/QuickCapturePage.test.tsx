@@ -162,6 +162,28 @@ describe("QuickCapturePage", () => {
     });
   });
 
+  it("F-014 asks the application notification synchronizer to deliver the new inbox reminder", async () => {
+    const repository = createRepository();
+    const onNotificationChanged = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(
+      <QuickCapturePage
+        createId={() => "capture-1"}
+        now={() => now}
+        onNotificationChanged={onNotificationChanged}
+        repository={repository}
+      />,
+    );
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
+
+    await user.type(input, "牛乳を買う");
+    await user.click(screen.getByRole("button", { name: "保存して戻る" }));
+
+    await waitFor(() => expect(onNotificationChanged).toHaveBeenCalledOnce());
+  });
+
   it("saves with Enter while Shift+Enter keeps a line break", async () => {
     const repository = createRepository();
     const user = userEvent.setup();

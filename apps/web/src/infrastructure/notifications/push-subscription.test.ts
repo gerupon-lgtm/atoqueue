@@ -139,6 +139,30 @@ describe("enableNotifications", () => {
     expect(JSON.stringify(saved.notificationOutbox)).not.toContain("SECRET_TASK_CANARY");
     expect(JSON.stringify(saved.notificationOutbox)).not.toContain("task-local");
   });
+
+  it("queues an immediate anonymous inbox reminder for a capture saved before notification setup", async () => {
+    const repository = memory();
+    const snapshot = await repository.load();
+    snapshot.captures = [{
+      id: "capture-local", body: "SECRET_CAPTURE_CANARY", classification: "unclassified",
+      createdAt: "2026-08-04T06:00:00.000Z", updatedAt: "2026-08-04T06:00:00.000Z",
+    }];
+    await repository.save(snapshot);
+
+    await enableNotifications({
+      repository,
+      api: { publicKey: async () => "AQID", register: async () => ({ deviceId: "device", deviceSecret: "secret", createdAt: "2026-08-04T08:00:00.000Z" }), updateSubscription: async () => undefined },
+      browser: grantedBrowser(),
+      now: () => "2026-08-04T08:00:00.000Z",
+    });
+
+    const saved = await repository.load();
+    expect(saved.notificationOutbox).toEqual(expect.arrayContaining([
+      expect.objectContaining({ notificationType: "inbox_review", scheduledAt: "2026-08-04T08:00:00.000Z" }),
+    ]));
+    expect(JSON.stringify(saved.notificationOutbox)).not.toContain("SECRET_CAPTURE_CANARY");
+    expect(JSON.stringify(saved.notificationOutbox)).not.toContain("capture-local");
+  });
 });
 
 function memory(credentials?: {

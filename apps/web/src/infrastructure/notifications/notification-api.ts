@@ -73,6 +73,17 @@ export class NotificationApi {
     );
   }
 
+  async deactivate(
+    credentials: DeviceCredentials,
+    idempotencyKey: string,
+  ): Promise<void> {
+    await this.request(`/v1/devices/${credentials.deviceId}`, {
+      method: "DELETE",
+      credentials,
+      idempotencyKey,
+    });
+  }
+
   async upsert(
     item: NotificationOutboxItem,
     credentials: DeviceCredentials,

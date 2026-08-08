@@ -21,12 +21,14 @@ export interface QuickCapturePageProps {
   repository: AppRepository;
   now?: () => string;
   createId?: () => string;
+  onNotificationChanged?: () => Promise<unknown>;
 }
 
 export function QuickCapturePage({
   repository,
   now = () => new Date().toISOString(),
   createId = defaultCreateId,
+  onNotificationChanged,
 }: QuickCapturePageProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lastPersistedDraft = useRef<string | undefined>(undefined);
@@ -145,6 +147,7 @@ export function QuickCapturePage({
         createId(),
       );
       await repository.save(next);
+      void onNotificationChanged?.();
       pendingDraftClear.current = body;
       await repository.clearDraft();
       pendingDraftClear.current = undefined;

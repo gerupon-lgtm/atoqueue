@@ -86,6 +86,13 @@ function isStale(item: NotificationOutboxItem, snapshot: AppSnapshot): boolean {
   if (item.operation === "cancel") return false;
   const mapping = snapshot.reminderMap.find((entry) => entry.reminderId === item.reminderId);
   if (!mapping) return true;
+  if (mapping.kind === "capture_initial") {
+    return !snapshot.captures.some(
+      (capture) =>
+        capture.id === mapping.captureId &&
+        capture.classification === "unclassified",
+    );
+  }
   const task = snapshot.tasks.find((candidate) => candidate.id === mapping.taskId);
   return !task || task.revision !== item.taskRevision;
 }
@@ -122,6 +129,27 @@ function registrationFailed(snapshot: AppSnapshot): AppSnapshot {
 
 function reschedule(snapshot: AppSnapshot, item: NotificationOutboxItem, now: string): AppSnapshot {
   const mapping = snapshot.reminderMap.find((entry) => entry.reminderId === item.reminderId);
+  if (mapping?.kind === "capture_initial") {
+    const capture = snapshot.captures.find(
+      (candidate) =>
+        candidate.id === mapping.captureId &&
+        candidate.classification === "unclassified",
+    );
+    if (!capture) return discard(snapshot, item);
+    return {
+      ...snapshot,
+      notificationOutbox: snapshot.notificationOutbox.map((candidate) => candidate.id === item.id ? {
+        ...candidate,
+        id: crypto.randomUUID(),
+        scheduledAt: now,
+        notificationType: "inbox_review",
+        taskRevision: 0,
+        attemptCount: 0,
+        nextAttemptAt: now,
+        createdAt: now,
+      } : candidate),
+    };
+  }
   const task = mapping && snapshot.tasks.find((candidate) => candidate.id === mapping.taskId);
   if (!task || task.status !== "active") return discard(snapshot, item);
   // An elapsed initial/deadline-before slot must not be repurposed as a
@@ -156,6 +184,16 @@ function reschedule(snapshot: AppSnapshot, item: NotificationOutboxItem, now: st
 
 function renewIdempotencyKey(snapshot: AppSnapshot, _item: NotificationOutboxItem, now: string): AppSnapshot {
   const active = snapshot.reminderMap.flatMap((mapping) => {
+    if (mapping.kind === "capture_initial") {
+      const capture = snapshot.captures.find(
+        (candidate) => candidate.id === mapping.captureId && candidate.classification === "unclassified",
+      );
+      return capture ? [{
+        id: crypto.randomUUID(), operation: "upsert" as const, reminderId: mapping.reminderId,
+        scheduledAt: now, notificationType: "inbox_review" as const, taskRevision: 0,
+        attemptCount: 0, nextAttemptAt: now, createdAt: now,
+      }] : [];
+    }
     const task = snapshot.tasks.find((candidate) => candidate.id === mapping.taskId);
     if (!task || task.status !== "active" || task.revision !== mapping.taskRevision) return [];
     const schedule = planNotificationSchedules({

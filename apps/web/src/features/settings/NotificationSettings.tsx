@@ -13,6 +13,7 @@ import {
 import "./NotificationSettings.css";
 import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 import { formatTimeZone } from "../../presentation/format-time-zone";
+import { digits, timeFromDigits } from "../tasks/DeadlineInputFields";
 
 export interface NotificationSettingsProps {
   repository: AppRepository;
@@ -34,6 +35,7 @@ export function NotificationSettings({
   const [busy, setBusy] = useState(false);
   const [initialDelay, setInitialDelay] = useState("60");
   const [deadlineLead, setDeadlineLead] = useState("60");
+  const [defaultDeadlineTime, setDefaultDeadlineTime] = useState("2359");
   const [hasRegisteredDevice, setHasRegisteredDevice] = useState(false);
   const [registeredAt, setRegisteredAt] = useState<string>();
   const [timeZone, setTimeZone] = useState<string>();
@@ -65,6 +67,9 @@ export function NotificationSettings({
       );
       setDeadlineLead(
         String(snapshot.settings.deadlineReminderLeadMinutes ?? 60),
+      );
+      setDefaultDeadlineTime(
+        (snapshot.settings.defaultDeadlineTime ?? "23:59").replace(":", ""),
       );
     });
     return () => {
@@ -108,9 +113,11 @@ export function NotificationSettings({
   async function saveTiming(): Promise<void> {
     const initialReminderDelayMinutes = Number(initialDelay);
     const deadlineReminderLeadMinutes = Number(deadlineLead);
+    const parsedDefaultDeadlineTime = timeFromDigits(defaultDeadlineTime);
     if (
       !isReminderMinutes(initialReminderDelayMinutes) ||
-      !isReminderMinutes(deadlineReminderLeadMinutes)
+      !isReminderMinutes(deadlineReminderLeadMinutes) ||
+      !parsedDefaultDeadlineTime
     ) {
       setState("error");
       return;
@@ -124,6 +131,7 @@ export function NotificationSettings({
           ...snapshot.settings,
           initialReminderDelayMinutes,
           deadlineReminderLeadMinutes,
+          defaultDeadlineTime: parsedDefaultDeadlineTime,
         },
       };
       const savedAt = new Date().toISOString();
@@ -166,6 +174,9 @@ export function NotificationSettings({
         <p>
           初回通知はタスク登録から、期限前通知は期限より前の指定分で予約します。通知サーバーは最大5分ごとに配送対象を確認します。OSや省電力設定により、表示時刻は前後することがあります。
         </p>
+        <p>
+          この端末でタスクにした項目だけが通知対象です。記録を保存しただけでは通知されず、端末間でデータも同期しません。
+        </p>
         <div className="notification-settings__timing-row">
           <label htmlFor="initial-reminder-delay">初回通知まで（分）</label>
           <div className="notification-settings__number-field">
@@ -179,6 +190,29 @@ export function NotificationSettings({
             />
             <span aria-hidden="true">分後</span>
           </div>
+        </div>
+        <div className="notification-settings__timing-row">
+          <label htmlFor="default-deadline-time">日付だけの期限の時刻（4桁）</label>
+          <div className="notification-settings__number-field">
+            <input
+              autoComplete="off"
+              id="default-deadline-time"
+              inputMode="numeric"
+              maxLength={4}
+              onChange={(event) => setDefaultDeadlineTime(digits(event.target.value, 4))}
+              onFocus={(event) => event.currentTarget.select()}
+              pattern="[0-9]*"
+              placeholder="例: 2359"
+              value={defaultDeadlineTime}
+            />
+            <input
+              aria-label="日付だけの期限の時刻を時計から選ぶ"
+              onChange={(event) => setDefaultDeadlineTime(event.target.value.replace(":", ""))}
+              type="time"
+              value={timeFromDigits(defaultDeadlineTime) ?? ""}
+            />
+          </div>
+          <p>期限日に時刻を指定しないときだけ、この時刻を使います。</p>
         </div>
         <div className="notification-settings__timing-row">
           <label htmlFor="deadline-reminder-lead">期限前通知（分）</label>
@@ -205,6 +239,9 @@ export function NotificationSettings({
       >
         通知を設定する
       </button>
+      <p className="notification-settings__setup-note">
+        通知を受けるには、このボタンを最初に一度押して端末登録を完了する必要があります。
+      </p>
       {state === "granted" ? <p role="status">通知を設定しました。</p> : null}
       {state === "granted" && hasRegisteredDevice ? (
         <>
@@ -248,6 +285,9 @@ export function NotificationSettings({
         <ol>
           <li>
             この画面で「通知を設定する」を押し、端末登録の表示と日時を確認します。
+          </li>
+          <li>
+            Androidの通知履歴に出る「タップすると、このアプリのURLがコピーされます」はChromeのPWA管理通知です。あとキューの予定通知ではありません。予定通知は「あとキュー」「確認したい項目があります」と表示されます。
           </li>
           <li>
             端末の設定で、Chromeまたはホーム画面に追加したあとキューの通知を許可します。

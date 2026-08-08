@@ -44,6 +44,10 @@ describe("classification", () => {
     expect(suggestClassification(snapshot.captures[0]!.body)).toBe("task");
     expect(snapshot.captures[0]!.classification).toBe("unclassified");
     expect(snapshot.tasks).toEqual([]);
+    expect(snapshot.notificationOutbox).toHaveLength(1);
+    expect(snapshot.reminderMap).toEqual([
+      expect.objectContaining({ captureId: "capture-1", kind: "capture_initial" }),
+    ]);
   });
 
   it("F-006 confirms a task once and links the source capture", () => {
@@ -89,8 +93,20 @@ describe("classification", () => {
       idFactory: (kind, scheduleKind) => `${kind}-${scheduleKind ?? "event"}`,
     });
 
-    expect(next.notificationOutbox).toHaveLength(3);
+    expect(next.notificationOutbox).toHaveLength(5);
+    expect(next.notificationOutbox).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operation: "cancel", taskRevision: 0 }),
+    ]));
     expect(next.reminderMap.map((entry) => entry.kind)).toEqual(["initial", "deadline_before", "review"]);
+    expect(next.notificationOutbox.filter((item) => item.operation === "upsert" && item.taskRevision === 1).map((item) => ({
+      operation: item.operation,
+      scheduledAt: item.scheduledAt,
+      notificationType: item.notificationType,
+    }))).toEqual([
+      { operation: "upsert", scheduledAt: "2026-08-03T10:00:00.000Z", notificationType: "task_review" },
+      { operation: "upsert", scheduledAt: "2026-08-03T13:59:00.000Z", notificationType: "deadline_review" },
+      { operation: "upsert", scheduledAt: "2026-08-03T14:59:00.000Z", notificationType: "deadline_review" },
+    ]);
     expect(JSON.stringify(next.notificationOutbox)).not.toContain("SECRET_TASK_CANARY");
     expect(JSON.stringify(next.notificationOutbox)).not.toContain("task-1");
   });
@@ -158,5 +174,18 @@ describe("classification", () => {
     expect(note.actionHistory.at(-1)).toMatchObject({ action: "capture_classified" });
     expect(unneeded.captures[0]!.classification).toBe("unneeded");
     expect(unneeded.actionHistory.at(-1)).toMatchObject({ action: "capture_classified" });
+  });
+
+  it("F-014 cancels an inbox reminder when the capture is resolved as a memo", () => {
+    const next = markAsNote({
+      snapshot: snapshotWithCapture(),
+      captureId: "capture-1",
+      now,
+    });
+
+    expect(next.reminderMap).toEqual([]);
+    expect(next.notificationOutbox).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operation: "cancel", taskRevision: 0 }),
+    ]));
   });
 });

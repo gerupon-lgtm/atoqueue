@@ -44,6 +44,14 @@ describe("InboxPage", () => {
     expect(screen.getAllByRole("button", { name: "不要" })).toHaveLength(2);
   });
 
+  it("F-004 shows each inbox capture's local registration date and time", async () => {
+    render(<InboxPage repository={repositoryWithCaptures()} />);
+
+    expect(
+      await screen.findByText("登録: 2026/8/2 18:00"),
+    ).toBeTruthy();
+  });
+
   it("F-006 saves a memo classification locally", async () => {
     const repository = repositoryWithCaptures();
     render(<InboxPage now={() => now} repository={repository} />);

@@ -5,13 +5,14 @@ import { NotificationSettings } from "./NotificationSettings";
 export interface SettingsPageProps {
   repository: AppRepository;
   flushNotifications?: () => Promise<unknown>;
+  deleteDeviceData?: () => Promise<void>;
 }
 
-export function SettingsPage({ repository, flushNotifications }: SettingsPageProps) {
+export function SettingsPage({ repository, flushNotifications, deleteDeviceData }: SettingsPageProps) {
   return <section aria-labelledby="settings-page-title">
     <h1 id="settings-page-title">設定</h1>
-    <BackupSettings repository={repository} flushOutbox={flushNotifications} />
     <NotificationSettings flushNotifications={flushNotifications} repository={repository} />
+    <BackupSettings deleteDeviceData={deleteDeviceData} repository={repository} flushOutbox={flushNotifications} />
     <section aria-labelledby="app-information-title">
       <h2 id="app-information-title">アプリ情報</h2>
       <p>あとキュー</p>

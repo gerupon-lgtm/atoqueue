@@ -1,7 +1,65 @@
-import type { AppSnapshot, NotificationOutboxItem, ReminderMapEntry, Task } from "./model";
+import type { AppSnapshot, Capture, NotificationOutboxItem, ReminderMapEntry, Task } from "./model";
 import { planNotificationSchedules, type ReminderScheduleKind } from "./notification-schedule";
 
-export type NotificationIdFactory = (kind: "outbox" | "reminder", scheduleKind?: ReminderScheduleKind) => string;
+export type CaptureReminderScheduleKind = "capture_initial";
+export type NotificationIdFactory = (kind: "outbox" | "reminder", scheduleKind?: ReminderScheduleKind | CaptureReminderScheduleKind) => string;
+
+/** Queues one generic reminder without exposing capture data to the server. */
+export function queueCaptureNotification(input: {
+  snapshot: AppSnapshot;
+  capture: Capture;
+  now: string;
+  createId?: NotificationIdFactory;
+}): Pick<AppSnapshot, "notificationOutbox" | "reminderMap"> {
+  const prior = input.snapshot.reminderMap.filter((entry) => entry.captureId === input.capture.id);
+  const retained = input.snapshot.reminderMap.filter((entry) => entry.captureId !== input.capture.id);
+  const mapping = prior.find((entry) => entry.kind === "capture_initial") ?? {
+    reminderId: createId(input, "reminder", "capture_initial"),
+    captureId: input.capture.id,
+    kind: "capture_initial" as const,
+    taskRevision: 0,
+    createdAt: input.now,
+  };
+  return {
+    notificationOutbox: [{
+      id: createId(input, "outbox", "capture_initial"),
+      operation: "upsert",
+      reminderId: mapping.reminderId,
+      scheduledAt: laterOf(
+        addMinutes(input.capture.createdAt, input.snapshot.settings.initialReminderDelayMinutes ?? 60),
+        input.now,
+      ),
+      notificationType: "inbox_review",
+      taskRevision: 0,
+      attemptCount: 0,
+      nextAttemptAt: input.now,
+      createdAt: input.now,
+    }],
+    reminderMap: [...retained, mapping],
+  };
+}
+
+/** Cancels the pending inbox reminder when the user resolves a capture. */
+export function cancelCaptureNotification(input: {
+  snapshot: AppSnapshot;
+  captureId: string;
+  now: string;
+  createId?: NotificationIdFactory;
+}): Pick<AppSnapshot, "notificationOutbox" | "reminderMap"> {
+  const prior = input.snapshot.reminderMap.filter((entry) => entry.captureId === input.captureId);
+  return {
+    notificationOutbox: prior.map((entry) => ({
+      id: createId(input, "outbox", "capture_initial"),
+      operation: "cancel" as const,
+      reminderId: entry.reminderId,
+      taskRevision: 0,
+      attemptCount: 0,
+      nextAttemptAt: input.now,
+      createdAt: input.now,
+    })),
+    reminderMap: input.snapshot.reminderMap.filter((entry) => entry.captureId !== input.captureId),
+  };
+}
 
 export function queueTaskNotifications(input: {
   snapshot: AppSnapshot;
@@ -69,6 +127,35 @@ export function rebuildActiveTaskNotifications(input: {
   return { notificationOutbox, reminderMap };
 }
 
+/** Requeues unresolved captures after notification setup or a timing change. */
+export function rebuildPendingCaptureNotifications(input: {
+  snapshot: AppSnapshot;
+  now: string;
+  createId?: NotificationIdFactory;
+}): Pick<AppSnapshot, "notificationOutbox" | "reminderMap"> {
+  let reminderMap = input.snapshot.reminderMap;
+  const captureReminderIds = new Set(
+    input.snapshot.reminderMap
+      .filter((entry) => entry.kind === "capture_initial")
+      .map((entry) => entry.reminderId),
+  );
+  const notificationOutbox = input.snapshot.notificationOutbox.filter(
+    (item) => !(item.operation === "upsert" && captureReminderIds.has(item.reminderId)),
+  );
+  for (const capture of input.snapshot.captures) {
+    if (capture.classification !== "unclassified") continue;
+    const queued = queueCaptureNotification({
+      snapshot: { ...input.snapshot, reminderMap },
+      capture,
+      now: input.now,
+      createId: input.createId,
+    });
+    notificationOutbox.push(...queued.notificationOutbox);
+    reminderMap = queued.reminderMap;
+  }
+  return { notificationOutbox, reminderMap };
+}
+
 function cancel(entry: ReminderMapEntry, input: Parameters<typeof queueTaskNotifications>[0]): NotificationOutboxItem {
   return {
     id: createId(input, "outbox", scheduleKind(entry)),
@@ -91,10 +178,20 @@ function createMapping(kind: ReminderScheduleKind, previous: ReminderMapEntry | 
   };
 }
 
-function createId(input: Parameters<typeof queueTaskNotifications>[0], kind: "outbox" | "reminder", scheduleKind: ReminderScheduleKind): string {
+function createId(input: { createId?: NotificationIdFactory }, kind: "outbox" | "reminder", scheduleKind: ReminderScheduleKind | CaptureReminderScheduleKind): string {
   return input.createId?.(kind, scheduleKind) ?? crypto.randomUUID();
 }
 
 function scheduleKind(entry: ReminderMapEntry): ReminderScheduleKind {
-  return entry.kind ?? "review";
+  return entry.kind === "initial" || entry.kind === "deadline_before" || entry.kind === "review"
+    ? entry.kind
+    : "review";
+}
+
+function addMinutes(iso: string, minutes: number): string {
+  return new Date(Date.parse(iso) + minutes * 60_000).toISOString();
+}
+
+function laterOf(left: string, right: string): string {
+  return left > right ? left : right;
 }

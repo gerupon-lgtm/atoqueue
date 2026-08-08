@@ -152,6 +152,24 @@ describe("NotificationApi", () => {
     ]);
   });
 
+  it("deactivates a device with only its anonymous credentials and an idempotency key", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const api = new NotificationApi("https://api.example.test", fetcher);
+
+    await api.deactivate(credentials, "remove-device-key");
+
+    expect(fetcher).toHaveBeenCalledWith(
+      `https://api.example.test/v1/devices/${credentials.deviceId}`,
+      expect.objectContaining({
+        method: "DELETE",
+        headers: expect.objectContaining({
+          Authorization: "Bearer device-secret",
+          "Idempotency-Key": "remove-device-key",
+        }),
+      }),
+    );
+  });
+
   it("calls the browser fetch function with its global receiver when no fetcher is injected", async () => {
     const browserFetch = vi.fn(function (this: unknown) {
       if (this !== globalThis) throw new TypeError("Illegal invocation");

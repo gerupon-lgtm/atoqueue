@@ -7,7 +7,7 @@ export interface ReminderRecord {
   id: string;
   deviceId: string;
   scheduledAt: string;
-  notificationType: "task_review" | "deadline_review" | "unset_due_review";
+  notificationType: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review";
   status: ReminderStatus;
   idempotencyKey: string;
   attemptCount: number;

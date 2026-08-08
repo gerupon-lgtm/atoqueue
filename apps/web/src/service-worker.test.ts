@@ -33,6 +33,16 @@ describe("service worker notification behavior", () => {
     expect(openWindow).toHaveBeenCalledWith("/today");
   });
 
+  it("opens the inbox for an anonymous inbox reminder", async () => {
+    const openWindow = vi.fn();
+    const reminderId = "22222222-2222-4222-8222-222222222222";
+    await handleNotificationClick(
+      { url: `/inbox?reminder=${reminderId}`, reminderId },
+      { matchAll: async () => [], openWindow },
+    );
+    expect(openWindow).toHaveBeenCalledWith(`/inbox?reminder=${reminderId}`);
+  });
+
   it("rejects extra URL parameters so push data cannot carry task content", async () => {
     const showNotification = vi.fn();
     const reminderId = "22222222-2222-4222-8222-222222222222";

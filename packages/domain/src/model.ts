@@ -1,5 +1,5 @@
 export interface AppSnapshot {
-  schemaVersion: 4;
+  schemaVersion: 6;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -29,6 +29,8 @@ export interface Settings {
   initialReminderDelayMinutes?: number;
   /** Minutes before a scheduled deadline. The user currently prefers 60 minutes. */
   deadlineReminderLeadMinutes?: number;
+  /** Local wall-clock time used when a deadline date has no explicit time. */
+  defaultDeadlineTime?: string;
   /** Local dismissal marker for the first-use guide. */
   onboardingCompletedAt?: string;
   quietHours?: { start: string; end: string };
@@ -109,7 +111,7 @@ export interface NotificationOutboxItem {
   operation: "upsert" | "cancel";
   reminderId: string;
   scheduledAt?: string;
-  notificationType?: "task_review" | "deadline_review" | "unset_due_review";
+  notificationType?: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review";
   taskRevision: number;
   attemptCount: number;
   nextAttemptAt: string;
@@ -118,8 +120,10 @@ export interface NotificationOutboxItem {
 
 export interface ReminderMapEntry {
   reminderId: string;
-  taskId: string;
-  kind?: "initial" | "deadline_before" | "review";
+  /** One local owner only. Capture mappings are never sent to the server. */
+  taskId?: string;
+  captureId?: string;
+  kind?: "capture_initial" | "initial" | "deadline_before" | "review";
   taskRevision: number;
   createdAt: string;
 }

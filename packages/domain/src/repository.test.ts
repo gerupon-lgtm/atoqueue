@@ -58,7 +58,7 @@ function snapshotWithReviewActionOwnership(): Record<string, unknown> {
 }
 
 describe("domain repository model", () => {
-  it("creates a version 4 empty snapshot from the supplied device context", () => {
+  it("creates a version 6 empty snapshot from the supplied device context", () => {
     expect(
       createEmptySnapshot({
         appVersion: "0.1.0",
@@ -67,7 +67,7 @@ describe("domain repository model", () => {
         now: "2026-08-03T00:00:00.000Z",
       }),
     ).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 6,
       appVersion: "0.1.0",
       device: {
         localDeviceId: "device-1",
@@ -77,6 +77,7 @@ describe("domain repository model", () => {
         locale: "ja-JP",
         timeZone: "Asia/Tokyo",
         notificationEnabled: false,
+        defaultDeadlineTime: "23:59",
         weeklyReviewDay: 0,
       },
       captures: [],
@@ -86,6 +87,32 @@ describe("domain repository model", () => {
       notificationOutbox: [],
       reminderMap: [],
       savedAt: "2026-08-03T00:00:00.000Z",
+    });
+  });
+
+  it("migrates version 4 installations to the configurable date-only deadline time", () => {
+    const v4: unknown = {
+      ...createEmptySnapshot({
+        appVersion: "0.1.0",
+        localDeviceId: "device-1",
+        timeZone: "Asia/Tokyo",
+        now: "2026-08-03T00:00:00.000Z",
+      }),
+      schemaVersion: 4,
+      settings: {
+        locale: "ja-JP",
+        timeZone: "Asia/Tokyo",
+        notificationEnabled: false,
+        initialReminderDelayMinutes: 60,
+        deadlineReminderLeadMinutes: 60,
+        onboardingCompletedAt: "2026-08-03T00:00:00.000Z",
+        weeklyReviewDay: 0,
+      },
+    };
+
+    expect(migrateSnapshot(v4)).toMatchObject({
+      schemaVersion: 6,
+      settings: { defaultDeadlineTime: "23:59" },
     });
   });
 
@@ -109,7 +136,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v2)).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 6,
       settings: {
         initialReminderDelayMinutes: 60,
         deadlineReminderLeadMinutes: 60,
@@ -138,13 +165,13 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v3)).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 6,
       settings: { onboardingCompletedAt: "2026-08-03T00:00:00.000Z" },
     });
   });
 
   it("rejects a stored future schema version", () => {
-    expect(() => migrateSnapshot({ schemaVersion: 5 })).toThrow(
+    expect(() => migrateSnapshot({ schemaVersion: 7 })).toThrow(
       UnsupportedSchemaVersionError,
     );
   });
@@ -173,7 +200,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v1)).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 6,
       reviewSessions: [{ id: "session-1", actionEventIds: [] }],
     });
   });
@@ -272,7 +299,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v1)).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 6,
       reviewSessions: [
         {
           orderedTaskIds: ["task-1", "task-2"],

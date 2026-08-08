@@ -1,4 +1,5 @@
 import type { AppSnapshot } from "./model";
+import { queueCaptureNotification, type NotificationIdFactory } from "./notification-queue";
 
 const MAX_CAPTURE_LENGTH = 280;
 
@@ -7,6 +8,7 @@ export function createCapture(
   rawBody: string,
   now: string,
   id: string,
+  idFactory?: NotificationIdFactory,
 ): AppSnapshot {
   const body = rawBody.trim();
 
@@ -14,18 +16,25 @@ export function createCapture(
     throw new Error("A capture must contain between 1 and 280 characters.");
   }
 
+  const capture = {
+    id,
+    body,
+    classification: "unclassified" as const,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const notification = queueCaptureNotification({
+    snapshot,
+    capture,
+    now,
+    createId: idFactory,
+  });
+
   return {
     ...snapshot,
-    captures: [
-      ...snapshot.captures,
-      {
-        id,
-        body,
-        classification: "unclassified",
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
+    captures: [...snapshot.captures, capture],
+    notificationOutbox: [...snapshot.notificationOutbox, ...notification.notificationOutbox],
+    reminderMap: notification.reminderMap,
     actionHistory: [
       ...snapshot.actionHistory,
       {

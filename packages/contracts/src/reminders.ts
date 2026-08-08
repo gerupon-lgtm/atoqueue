@@ -6,7 +6,7 @@ const UtcTimestampSchema = z
   .datetime({ offset: true })
   .refine((value) => value.endsWith("Z"), "must be an ISO 8601 UTC timestamp");
 
-export const NotificationTypeSchema = z.enum(["task_review", "deadline_review", "unset_due_review"]);
+export const NotificationTypeSchema = z.enum(["inbox_review", "task_review", "deadline_review", "unset_due_review"]);
 
 export const CreateReminderRequestSchema = z
   .object({

@@ -40,6 +40,23 @@ describe("createCapture", () => {
     });
   });
 
+  it("F-014 schedules one anonymous inbox reminder when a capture is saved", () => {
+    const next = createCapture(snapshot(), "SECRET_CAPTURE_CANARY", now, "capture-1");
+
+    expect(next.reminderMap).toEqual([
+      expect.objectContaining({ captureId: "capture-1", kind: "capture_initial" }),
+    ]);
+    expect(next.notificationOutbox).toEqual([
+      expect.objectContaining({
+        operation: "upsert",
+        scheduledAt: "2026-08-03T01:00:00.000Z",
+        notificationType: "inbox_review",
+      }),
+    ]);
+    expect(JSON.stringify(next.notificationOutbox)).not.toContain("SECRET_CAPTURE_CANARY");
+    expect(JSON.stringify(next.notificationOutbox)).not.toContain("capture-1");
+  });
+
   it.each(["", "   ", "\n\t", "a".repeat(281)])(
     "rejects invalid body %j without changing the original snapshot",
     (body) => {

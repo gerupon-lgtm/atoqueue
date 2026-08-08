@@ -1,7 +1,9 @@
 import { createBrowserRouter, useLocation, useNavigate, useParams } from "react-router-dom";
 import { LocalStorageRepository } from "../infrastructure/local-storage/local-storage-repository";
 import { createNotificationSyncService } from "../application/notification-sync-service";
+import { resetDeviceData } from "../application/device-data-reset-service";
 import { NotificationApi } from "../infrastructure/notifications/notification-api";
+import { unsubscribeBrowserPush } from "../infrastructure/notifications/push-subscription";
 import { QuickCapturePage } from "../features/capture/QuickCapturePage";
 import { InboxPage } from "../features/inbox/InboxPage";
 import { TaskCandidatePage } from "../features/inbox/TaskCandidatePage";
@@ -27,9 +29,10 @@ const pages: PageDefinition[] = [
 ];
 
 const applicationRepository = new LocalStorageRepository(window.localStorage);
+const notificationApi = new NotificationApi("https://api.atoqueue.sikumilab.com");
 const notificationSync = createNotificationSyncService({
   repository: applicationRepository,
-  api: new NotificationApi("https://api.atoqueue.sikumilab.com"),
+  api: notificationApi,
 });
 
 export const router = createBrowserRouter([
@@ -40,7 +43,10 @@ export const router = createBrowserRouter([
       ...pages.map((page) => ({
         ...(page.index ? { index: true } : { path: page.path }),
         element: page.index ? (
-          <QuickCapturePage repository={applicationRepository} />
+          <QuickCapturePage
+            onNotificationChanged={() => notificationSync.flush()}
+            repository={applicationRepository}
+          />
         ) : page.path === "inbox" ? (
           <InboxRoute />
         ) : page.path === "today" ? (
@@ -48,7 +54,18 @@ export const router = createBrowserRouter([
         ) : page.path === "tasks" ? (
           <TaskListPage repository={applicationRepository} />
         ) : page.path === "settings" ? (
-          <SettingsPage flushNotifications={() => notificationSync.flush()} repository={applicationRepository} />
+          <SettingsPage
+            deleteDeviceData={async () => {
+              await resetDeviceData({
+                repository: applicationRepository,
+                api: notificationApi,
+                unsubscribeBrowserPush,
+              });
+              window.location.assign("/");
+            }}
+            flushNotifications={() => notificationSync.flush()}
+            repository={applicationRepository}
+          />
         ) : (
           <Page title={page.label} />
         ),

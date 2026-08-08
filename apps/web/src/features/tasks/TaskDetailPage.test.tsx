@@ -83,6 +83,17 @@ function repositoryWithTask(
 describe("TaskDetailPage", () => {
   afterEach(cleanup);
 
+  it("keeps one stable initial load when it uses the built-in clock", async () => {
+    const { repository } = repositoryWithTask();
+    const load = vi.spyOn(repository, "load");
+    render(<TaskDetailPage repository={repository} taskId="task-1" />);
+
+    await screen.findByRole("heading", { level: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
   it("F-015 shows source, current/due/review state, derived neglect reason, and chronological history", async () => {
     const { repository } = repositoryWithTask();
     render(
@@ -170,10 +181,10 @@ describe("TaskDetailPage", () => {
     );
 
     await screen.findByDisplayValue("牛乳を買う");
-    fireEvent.change(screen.getByLabelText("新しい期限"), {
-      target: { value: "2026-08-10" },
+    fireEvent.change(screen.getByLabelText("期限日（8桁）"), {
+      target: { value: "20260810" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "期限を変更" }));
+    fireEvent.click(screen.getByRole("button", { name: "期限を保存" }));
 
     await waitFor(() =>
       expect(snapshot().tasks[0]?.dueAt).toBe("2026-08-10T23:59:00.000Z"),
@@ -191,13 +202,13 @@ describe("TaskDetailPage", () => {
     );
 
     await screen.findByDisplayValue("牛乳を買う");
-    fireEvent.change(screen.getByLabelText("新しい期限"), {
-      target: { value: "2026-08-10" },
+    fireEvent.change(screen.getByLabelText("期限日（8桁）"), {
+      target: { value: "20260810" },
     });
-    fireEvent.change(screen.getByLabelText("期限時刻"), {
-      target: { value: "09:30" },
+    fireEvent.change(screen.getByLabelText("期限時刻（4桁）"), {
+      target: { value: "0930" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "期限を変更" }));
+    fireEvent.click(screen.getByRole("button", { name: "期限を保存" }));
 
     await waitFor(() =>
       expect(snapshot().tasks[0]?.dueAt).toBe("2026-08-10T09:30:00.000Z"),

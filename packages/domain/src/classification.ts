@@ -1,7 +1,7 @@
 import { AlreadyClassifiedError } from "./errors";
 import type { AppSnapshot, Capture, Task } from "./model";
 import type { DueResolution } from "./due-date";
-import { queueTaskNotifications, type NotificationIdFactory } from "./notification-queue";
+import { cancelCaptureNotification, queueTaskNotifications, type NotificationIdFactory } from "./notification-queue";
 
 export interface ClassifyCaptureInput {
   snapshot: AppSnapshot;
@@ -56,8 +56,14 @@ export function confirmTask(input: ConfirmTaskInput): AppSnapshot {
     updatedAt: input.now,
     revision: 1,
   };
-  const notification = queueTaskNotifications({
+  const captureCancellation = cancelCaptureNotification({
     snapshot: input.snapshot,
+    captureId: capture.id,
+    now: input.now,
+    createId: input.idFactory,
+  });
+  const notification = queueTaskNotifications({
+    snapshot: { ...input.snapshot, reminderMap: captureCancellation.reminderMap },
     task,
     now: input.now,
     createId: input.idFactory,
@@ -67,7 +73,7 @@ export function confirmTask(input: ConfirmTaskInput): AppSnapshot {
     ...input.snapshot,
     captures: replaceCapture(input.snapshot, updatedCapture),
     tasks: [...input.snapshot.tasks, task],
-    notificationOutbox: [...input.snapshot.notificationOutbox, ...notification.notificationOutbox],
+    notificationOutbox: [...input.snapshot.notificationOutbox, ...captureCancellation.notificationOutbox, ...notification.notificationOutbox],
     reminderMap: notification.reminderMap,
     actionHistory: [
       ...input.snapshot.actionHistory,
@@ -114,9 +120,16 @@ function classifyWithoutTask(
     updatedAt: input.now,
   };
 
+  const captureCancellation = cancelCaptureNotification({
+    snapshot: input.snapshot,
+    captureId: input.captureId,
+    now: input.now,
+  });
   return {
     ...input.snapshot,
     captures: replaceCapture(input.snapshot, updatedCapture),
+    notificationOutbox: [...input.snapshot.notificationOutbox, ...captureCancellation.notificationOutbox],
+    reminderMap: captureCancellation.reminderMap,
     actionHistory: [
       ...input.snapshot.actionHistory,
       captureClassificationEvent(updatedCapture, input.now),

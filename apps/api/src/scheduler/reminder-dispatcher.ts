@@ -28,7 +28,8 @@ export class ReminderDispatcher {
     const claimedAt = job.claimedAt;
     if (!claimedAt) return;
     try {
-      const result = await this.push.send({ subscription: job.subscription, payload: { type: "review_due", reminderId: job.id, url: `/today?reminder=${job.id}` } });
+      const path = job.notificationType === "inbox_review" ? "/inbox" : "/today";
+      const result = await this.push.send({ subscription: job.subscription, payload: { type: "review_due", reminderId: job.id, url: `${path}?reminder=${job.id}` } });
       if (result.statusCode >= 200 && result.statusCode < 300) { await this.repository.markSent(job.id, claimedAt, now.toISOString()); return; }
       if (result.statusCode === 404 || result.statusCode === 410) { await this.repository.disableDeviceAndFailPending(job.deviceId, job.id, claimedAt, now.toISOString(), `push_${result.statusCode}`); return; }
       await this.handleTemporary(job.id, claimedAt, job.attemptCount, now, `push_${result.statusCode}`);

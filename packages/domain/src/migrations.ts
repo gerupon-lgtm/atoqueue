@@ -25,24 +25,32 @@ export function migrateSnapshot(input: unknown): AppSnapshot {
   if (version === 1) {
     validateSnapshot(snapshot, false);
     return normalizeSnapshot(
-      upgradeV3ToV4(upgradeV2ToV3(upgradeV1ToV2(snapshot))),
+      upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(upgradeV2ToV3(upgradeV1ToV2(snapshot))))),
     );
   }
   if (version === 2) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV3ToV4(upgradeV2ToV3(snapshot)));
+    return normalizeSnapshot(upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(upgradeV2ToV3(snapshot)))));
   }
   if (version === 3) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV3ToV4(snapshot));
+    return normalizeSnapshot(upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(snapshot))));
   }
   if (version === 4) {
+    validateSnapshot(snapshot, true);
+    return normalizeSnapshot(upgradeV5ToV6(upgradeV4ToV5(snapshot)));
+  }
+  if (version === 5) {
+    validateSnapshot(snapshot, true);
+    return normalizeSnapshot(upgradeV5ToV6(snapshot));
+  }
+  if (version === 6) {
     validateSnapshot(snapshot, true);
     return normalizeSnapshot(snapshot);
   }
   if (typeof version === "number")
     throw new UnsupportedSchemaVersionError(version);
-  throw corrupt("schemaVersion must be 1, 2, 3, or 4");
+  throw corrupt("schemaVersion must be 1, 2, 3, 4, 5, or 6");
 }
 
 function validateSnapshot(
@@ -106,6 +114,7 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
     "notificationEnabled",
     "initialReminderDelayMinutes",
     "deadlineReminderLeadMinutes",
+    "defaultDeadlineTime",
     "onboardingCompletedAt",
     "weeklyReviewDay",
   ]);
@@ -193,6 +202,7 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
   normalized.reminderMap = normalizedEntities(snapshot.reminderMap, [
     "reminderId",
     "taskId",
+    "captureId",
     "kind",
     "taskRevision",
     "createdAt",
@@ -260,6 +270,7 @@ function settings(value: unknown): void {
     entity.initialReminderDelayMinutes,
     "settings.initialReminderDelayMinutes",
   );
+  optionalClockTime(entity.defaultDeadlineTime, "settings.defaultDeadlineTime");
   optionalReminderMinutes(
     entity.deadlineReminderLeadMinutes,
     "settings.deadlineReminderLeadMinutes",
@@ -312,6 +323,24 @@ function upgradeV3ToV4(snapshot: RecordValue): RecordValue {
   };
 }
 
+/** Version 5 lets date-only deadlines follow an explicit local default time. */
+function upgradeV4ToV5(snapshot: RecordValue): RecordValue {
+  const settingsValue = object(snapshot.settings, "settings");
+  return {
+    ...snapshot,
+    schemaVersion: 5,
+    settings: {
+      ...settingsValue,
+      defaultDeadlineTime: settingsValue.defaultDeadlineTime ?? "23:59",
+    },
+  };
+}
+
+/** Version 6 adds capture-owned anonymous inbox reminders. */
+function upgradeV5ToV6(snapshot: RecordValue): RecordValue {
+  return { ...snapshot, schemaVersion: 6 };
+}
+
 function optionalReminderMinutes(value: unknown, name: string): void {
   if (value === undefined) return;
   if (
@@ -322,6 +351,12 @@ function optionalReminderMinutes(value: unknown, name: string): void {
   ) {
     throw corrupt(`${name} must be an integer between 0 and 10080`);
   }
+}
+
+function optionalClockTime(value: unknown, name: string): void {
+  if (value === undefined) return;
+  if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value))
+    throw corrupt(`${name} must use HH:MM.`);
 }
 
 function capture(value: unknown, index: number): void {
@@ -512,7 +547,7 @@ function notificationOutboxItem(value: unknown, index: number): void {
   optionalOneOf(
     entity.notificationType,
     `notificationOutbox[${index}].notificationType`,
-    ["task_review", "deadline_review", "unset_due_review"],
+    ["inbox_review", "task_review", "deadline_review", "unset_due_review"],
   );
   optionalString(
     entity.scheduledAt,
@@ -523,9 +558,15 @@ function notificationOutboxItem(value: unknown, index: number): void {
 
 function reminderMapEntry(value: unknown, index: number): void {
   const entity = object(value, `reminderMap[${index}]`);
-  strings(entity, ["reminderId", "taskId", "createdAt"]);
+  strings(entity, ["reminderId", "createdAt"]);
+  const hasTask = typeof entity.taskId === "string";
+  const hasCapture = typeof entity.captureId === "string";
+  if (hasTask === hasCapture) {
+    throw corrupt(`reminderMap[${index}] must have exactly one local owner`);
+  }
   number(entity.taskRevision, `reminderMap[${index}].taskRevision`);
   optionalOneOf(entity.kind, `reminderMap[${index}].kind`, [
+    "capture_initial",
     "initial",
     "deadline_before",
     "review",

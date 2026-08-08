@@ -13,16 +13,19 @@ export interface BackupSettingsProps {
   repository: AppRepository;
   now?: () => string;
   flushOutbox?: () => Promise<unknown>;
+  deleteDeviceData?: () => Promise<void>;
 }
 
 /** Keeps export/import at the local persistence boundary, never in a page route. */
-export function BackupSettings({ repository, now = () => new Date().toISOString(), flushOutbox }: BackupSettingsProps) {
+export function BackupSettings({ repository, now = () => new Date().toISOString(), flushOutbox, deleteDeviceData }: BackupSettingsProps) {
   const [current, setCurrent] = useState<AppSnapshot>();
   const [serialized, setSerialized] = useState<string>();
   const [inspection, setInspection] = useState<BackupInspection>();
   const [error, setError] = useState<string>();
   const [download, setDownload] = useState<{ href: string; filename: string }>();
   const [busy, setBusy] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState(false);
+  const [deleted, setDeleted] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -78,6 +81,21 @@ export function BackupSettings({ repository, now = () => new Date().toISOString(
     }
   }
 
+  async function removeDeviceData(): Promise<void> {
+    if (!deleteDeviceData) return;
+    setBusy(true);
+    try {
+      await deleteDeviceData();
+      setDeleted(true);
+      setDeleteConfirmation(false);
+      setCurrent(undefined);
+    } catch {
+      setError("端末データを削除できませんでした。通信状態を確認してから、もう一度お試しください。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return <section aria-labelledby="backup-settings-title">
     <h2 id="backup-settings-title">データ</h2>
     <p>バックアップにはこの端末のタスク、記録、設定を含めます。通知の登録情報は含めません。</p>
@@ -94,6 +112,20 @@ export function BackupSettings({ repository, now = () => new Date().toISOString(
       <button disabled={busy} onClick={() => void replace()} type="button">この内容で置き換える</button>
     </section> : null}
     {error ? <p role="alert">{error}</p> : null}
+    <section aria-labelledby="device-data-title" className="backup-settings__danger-zone">
+      <h2 id="device-data-title">端末データ</h2>
+      <p>この端末に保存した記録、タスク、設定、下書きを削除します。バックアップを作成してから実行してください。</p>
+      {!deleteConfirmation ? (
+        <button disabled={busy || !deleteDeviceData} onClick={() => setDeleteConfirmation(true)} type="button">端末データを削除</button>
+      ) : (
+        <div role="alert">
+          <p>この操作は取り消せません。</p>
+          <button disabled={busy} onClick={() => void removeDeviceData()} type="button">削除を確定する</button>
+          <button disabled={busy} onClick={() => setDeleteConfirmation(false)} type="button">やめる</button>
+        </div>
+      )}
+      {deleted ? <p role="status">端末データを削除しました。</p> : null}
+    </section>
   </section>;
 }
 

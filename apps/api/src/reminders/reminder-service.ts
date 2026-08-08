@@ -13,7 +13,7 @@ export class ReminderService {
     private readonly rateLimiter?: DeviceRateLimiter,
   ) {}
 
-  async upsert(input: { deviceId: string; bearer: string | undefined; reminderId: string; scheduledAt: string; notificationType: "task_review" | "deadline_review" | "unset_due_review"; idempotencyKey: string }) {
+  async upsert(input: { deviceId: string; bearer: string | undefined; reminderId: string; scheduledAt: string; notificationType: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review"; idempotencyKey: string }) {
     await this.authenticate(input.deviceId, input.bearer);
     this.rateLimiter?.consumeDevice(input.deviceId);
     const now = this.now();
@@ -41,6 +41,6 @@ export class ReminderService {
   }
 }
 
-export function reminderFingerprint(input: Pick<{ reminderId: string; scheduledAt: string; notificationType: "task_review" | "deadline_review" | "unset_due_review" }, "reminderId" | "scheduledAt" | "notificationType">): string {
+export function reminderFingerprint(input: Pick<{ reminderId: string; scheduledAt: string; notificationType: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review" }, "reminderId" | "scheduledAt" | "notificationType">): string {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }

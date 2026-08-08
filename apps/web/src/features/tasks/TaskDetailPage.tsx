@@ -13,6 +13,9 @@ import { createReviewCalendar } from "../../infrastructure/review-calendar/revie
 import { ActionHistoryList } from "./ActionHistoryList";
 import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 import { formatLocalTime } from "../../presentation/format-local-time";
+import { DeadlineInputFields, dateFromDigits, timeFromDigits } from "./DeadlineInputFields";
+
+const defaultNow = () => new Date().toISOString();
 
 export interface TaskDetailPageProps {
   repository: AppRepository;
@@ -24,7 +27,7 @@ export interface TaskDetailPageProps {
 export function TaskDetailPage({
   repository,
   taskId,
-  now = () => new Date().toISOString(),
+  now = defaultNow,
   sync,
 }: TaskDetailPageProps) {
   const [snapshot, setSnapshot] = useState<AppSnapshot>();
@@ -32,6 +35,7 @@ export function TaskDetailPage({
   const [category, setCategory] = useState<Task["category"] | "">("");
   const [selectedDueDate, setSelectedDueDate] = useState("");
   const [selectedDueTime, setSelectedDueTime] = useState("");
+  const [dueTimeEnabled, setDueTimeEnabled] = useState(false);
   const [message, setMessage] = useState<string>();
   useEffect(() => {
     let current = true;
@@ -44,13 +48,14 @@ export function TaskDetailPage({
         setSelectedDueDate(
           createLocalCalendar(value.settings.timeZone).today(
             task.dueAt ?? now(),
-          ),
+          ).replaceAll("-", ""),
         );
         setSelectedDueTime(
           task.dueAt
-            ? formatLocalTime(task.dueAt, value.settings.timeZone)
+            ? formatLocalTime(task.dueAt, value.settings.timeZone).replace(":", "")
             : "",
         );
+        setDueTimeEnabled(Boolean(task.dueAt));
       }
     });
     return () => {
@@ -101,16 +106,21 @@ export function TaskDetailPage({
   );
   const applyDue = async (type: "reschedule" | "no_due") => {
     if (type === "no_due") return change({ type });
-    if (!selectedDueDate) return setMessage("新しい期限を選択してください。");
+    const date = dateFromDigits(selectedDueDate);
+    if (!date) return setMessage("新しい期限日を8桁で入力してください。");
+    const time = dueTimeEnabled ? timeFromDigits(selectedDueTime) : undefined;
+    if (dueTimeEnabled && !time)
+      return setMessage("期限時刻を4桁で入力してください。");
     const due = resolveDueChoice({
       choice: {
         type: "custom",
-        date: selectedDueDate,
-        time: selectedDueTime || undefined,
+        date,
+        time,
       },
       now: timestamp,
       calendar: createLocalCalendar(snapshot.settings.timeZone),
       weeklyReviewDay: snapshot.settings.weeklyReviewDay,
+      defaultDeadlineTime: snapshot.settings.defaultDeadlineTime ?? "23:59",
     });
     return change({ type, due });
   };
@@ -137,79 +147,86 @@ export function TaskDetailPage({
         {formatLocalDateTime(task.nextReviewAt, snapshot.settings.timeZone)}
       </p>
       <p aria-label="放置理由">放置理由: {neglectReason(level)}</p>
-      <label>
-        タイトル
-        <input
+      <section className="task-detail__section" aria-labelledby="task-detail-content-heading">
+        <h2 id="task-detail-content-heading">内容</h2>
+        <label>
+          タイトル
+          <input
+            style={touchTarget}
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </label>
+        <label>
+          カテゴリ
+          <select
+            style={touchTarget}
+            value={category}
+            onChange={(event) =>
+              setCategory(event.target.value as Task["category"] | "")
+            }
+          >
+            <option value="">なし</option>
+            <option value="work">仕事</option>
+            <option value="home">家</option>
+            <option value="shopping">買い物</option>
+            <option value="other">その他</option>
+          </select>
+        </label>
+        <button
           style={touchTarget}
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-        />
-      </label>
-      <label>
-        カテゴリ
-        <select
-          style={touchTarget}
-          value={category}
-          onChange={(event) =>
-            setCategory(event.target.value as Task["category"] | "")
+          type="button"
+          onClick={() =>
+            void change({ type: "edit", title, category: category || null })
           }
         >
-          <option value="">なし</option>
-          <option value="work">仕事</option>
-          <option value="home">家</option>
-          <option value="shopping">買い物</option>
-          <option value="other">その他</option>
-        </select>
-      </label>
-      <label>
-        新しい期限
-        <input
-          style={touchTarget}
-          type="date"
-          value={selectedDueDate}
-          onChange={(event) => setSelectedDueDate(event.target.value)}
+          内容を保存
+        </button>
+      </section>
+      <section className="task-detail__section" aria-labelledby="task-detail-deadline-heading">
+        <h2 id="task-detail-deadline-heading">期限</h2>
+        <DeadlineInputFields
+          dateDigits={selectedDueDate}
+          defaultDeadlineTime={snapshot.settings.defaultDeadlineTime ?? "23:59"}
+          idPrefix="task-detail"
+          onDateDigitsChange={setSelectedDueDate}
+          onTimeDigitsChange={setSelectedDueTime}
+          onTimeEnabledChange={(enabled) => {
+            setDueTimeEnabled(enabled);
+            if (!enabled) setSelectedDueTime("");
+          }}
+          timeDigits={selectedDueTime}
+          timeEnabled={dueTimeEnabled}
         />
-      </label>
-      <label>
-        期限時刻
-        <input
-          style={touchTarget}
-          type="time"
-          value={selectedDueTime}
-          onChange={(event) => setSelectedDueTime(event.target.value)}
-        />
-      </label>
-      <button
-        style={touchTarget}
-        type="button"
-        onClick={() =>
-          void change({ type: "edit", title, category: category || null })
-        }
-      >
-        編集を保存
-      </button>
+        {task.status === "active" ? (
+          <div className="task-detail__actions">
+            <button
+              style={touchTarget}
+              type="button"
+              onClick={() => void applyDue("reschedule")}
+            >
+              期限を保存
+            </button>
+            <button
+              style={touchTarget}
+              type="button"
+              onClick={() => void applyDue("no_due")}
+            >
+              期限なしにする
+            </button>
+          </div>
+        ) : null}
+      </section>
       {task.status === "active" ? (
-        <>
+        <section className="task-detail__section" aria-labelledby="task-detail-status-heading">
+          <h2 id="task-detail-status-heading">状態</h2>
+          <div className="task-detail__actions">
           <button
             style={touchTarget}
             type="button"
             onClick={() => void change({ type: "complete" })}
           >
             完了
-          </button>
-          <button
-            style={touchTarget}
-            type="button"
-            onClick={() => void applyDue("reschedule")}
-          >
-            期限を変更
-          </button>
-          <button
-            style={touchTarget}
-            type="button"
-            onClick={() => void applyDue("no_due")}
-          >
-            期限なし
           </button>
           <button
             style={touchTarget}
@@ -225,7 +242,8 @@ export function TaskDetailPage({
           >
             アーカイブ
           </button>
-        </>
+          </div>
+        </section>
       ) : (
         <button
           style={touchTarget}
