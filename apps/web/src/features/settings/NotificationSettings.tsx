@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AppRepository } from "../../../../../packages/domain/src";
+import { rebuildActiveTaskNotifications, type AppRepository } from "../../../../../packages/domain/src";
 import { NotificationApi } from "../../infrastructure/notifications/notification-api";
 import {
   createBrowserPushAdapter,
@@ -11,12 +11,14 @@ import {
 export interface NotificationSettingsProps {
   repository: AppRepository;
   setup?: () => Promise<NotificationSetupResult>;
+  flushNotifications?: () => Promise<unknown>;
 }
 
 /** Settings keeps permission behind a deliberate button press. */
 export function NotificationSettings({
   repository,
   setup,
+  flushNotifications,
 }: NotificationSettingsProps) {
   const [state, setState] = useState<
     NotificationSetupResult["state"] | "stale" | "diagnostic_error"
@@ -24,6 +26,8 @@ export function NotificationSettings({
   const [errorReason, setErrorReason] =
     useState<NotificationSetupErrorReason>();
   const [busy, setBusy] = useState(false);
+  const [initialDelay, setInitialDelay] = useState("60");
+  const [deadlineLead, setDeadlineLead] = useState("60");
   useEffect(() => {
     let active = true;
     void repository.load().then((snapshot) => {
@@ -40,6 +44,8 @@ export function NotificationSettings({
           ? undefined
           : snapshot.device.pushSubscriptionStatus,
       );
+      setInitialDelay(String(snapshot.settings.initialReminderDelayMinutes ?? 60));
+      setDeadlineLead(String(snapshot.settings.deadlineReminderLeadMinutes ?? 60));
     });
     return () => {
       active = false;
@@ -60,9 +66,35 @@ export function NotificationSettings({
       )();
       setState(result.state === "error" ? "diagnostic_error" : result.state);
       setErrorReason(result.state === "error" ? result.reason : undefined);
+      if (result.state === "granted") void flushNotifications?.();
     } catch {
       setState("error");
       setErrorReason(undefined);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveTiming(): Promise<void> {
+    const initialReminderDelayMinutes = Number(initialDelay);
+    const deadlineReminderLeadMinutes = Number(deadlineLead);
+    if (!isReminderMinutes(initialReminderDelayMinutes) || !isReminderMinutes(deadlineReminderLeadMinutes)) {
+      setState("error");
+      return;
+    }
+    setBusy(true);
+    try {
+      const snapshot = await repository.load();
+      const updated = {
+        ...snapshot,
+        settings: { ...snapshot.settings, initialReminderDelayMinutes, deadlineReminderLeadMinutes },
+      };
+      const savedAt = new Date().toISOString();
+      const delivery = rebuildActiveTaskNotifications({ snapshot: updated, now: savedAt });
+      await repository.save({ ...updated, ...delivery, savedAt });
+      void flushNotifications?.();
+    } catch {
+      setState("error");
     } finally {
       setBusy(false);
     }
@@ -75,6 +107,29 @@ export function NotificationSettings({
         通知を使うと、アプリを開いて今日の確認に戻るきっかけを受け取れます。
       </p>
       <p>タスク本文は通知サーバーへ送信しません。</p>
+      <section aria-labelledby="notification-timing-title">
+        <h2 id="notification-timing-title">通知タイミング</h2>
+        <p>初回通知はタスク登録から、期限前通知は期限より前の指定分で予約します。</p>
+        <label htmlFor="initial-reminder-delay">初回通知まで（分）</label>
+        <input
+          id="initial-reminder-delay"
+          min="0"
+          onChange={(event) => setInitialDelay(event.target.value)}
+          step="1"
+          type="number"
+          value={initialDelay}
+        />
+        <label htmlFor="deadline-reminder-lead">期限前通知（分）</label>
+        <input
+          id="deadline-reminder-lead"
+          min="0"
+          onChange={(event) => setDeadlineLead(event.target.value)}
+          step="1"
+          type="number"
+          value={deadlineLead}
+        />
+        <button disabled={busy} onClick={() => void saveTiming()} type="button">通知タイミングを保存</button>
+      </section>
       <button
         disabled={busy || state === "denied"}
         onClick={() => void configure()}
@@ -123,4 +178,8 @@ function errorMessage(
     default:
       return "通知サービスへの端末登録に失敗しました。時間をおいて、もう一度お試しください。";
   }
+}
+
+function isReminderMinutes(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= 10_080;
 }

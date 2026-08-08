@@ -1,5 +1,5 @@
 export interface AppSnapshot {
-  schemaVersion: 2;
+  schemaVersion: 3;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -28,6 +28,10 @@ export interface Settings {
   locale: "ja-JP";
   timeZone: string;
   notificationEnabled: boolean;
+  /** Minutes after task creation. The user currently prefers 60 minutes. */
+  initialReminderDelayMinutes?: number;
+  /** Minutes before a scheduled deadline. The user currently prefers 60 minutes. */
+  deadlineReminderLeadMinutes?: number;
   quietHours?: { start: string; end: string };
   weeklyReviewDay: 0;
 }
@@ -116,6 +120,7 @@ export interface NotificationOutboxItem {
 export interface ReminderMapEntry {
   reminderId: string;
   taskId: string;
+  kind?: "initial" | "deadline_before" | "review";
   taskRevision: number;
   createdAt: string;
 }

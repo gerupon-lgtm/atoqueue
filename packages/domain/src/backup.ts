@@ -2,7 +2,7 @@ import { CorruptDataError } from "./errors";
 import { createLocalCalendar } from "./due-date";
 import { migrateSnapshot } from "./migrations";
 import { calculateNextReview } from "./reminder-policy";
-import { notificationTypeForTask } from "./task-actions";
+import { queueTaskNotifications } from "./notification-queue";
 import type { ActionEvent, AppSnapshot, NotificationOutboxItem, ReminderMapEntry, Task } from "./model";
 
 export const BACKUP_FORMAT = "atoqueue-backup";
@@ -104,7 +104,7 @@ export async function restoreBackup(input: RestoreBackupInput): Promise<AppSnaps
   const inspection = await inspectBackup(input.serialized);
   const snapshot = snapshotFromData(inspection.data, input.current.device);
   const restored = { ...snapshot, tasks: recalculateRestoredTasks(snapshot.tasks, input.now, snapshot.settings.timeZone) };
-  const delivery = rebuildReminderDelivery(input.current.reminderMap, restored.tasks, input.now, input.idFactory);
+  const delivery = rebuildReminderDelivery(input.current.reminderMap, restored, input.now, input.idFactory);
   const actionId = idFor(input, "action");
   const event: ActionEvent = {
     id: actionId,
@@ -286,7 +286,7 @@ function validateLocalDate(value: string, label: string): void {
   }
 }
 
-function rebuildReminderDelivery(previousMappings: AppSnapshot["reminderMap"], tasks: AppSnapshot["tasks"], now: string, idFactory?: RestoreBackupInput["idFactory"]): {
+function rebuildReminderDelivery(previousMappings: AppSnapshot["reminderMap"], snapshot: AppSnapshot, now: string, idFactory?: RestoreBackupInput["idFactory"]): {
   notificationOutbox: NotificationOutboxItem[];
   reminderMap: ReminderMapEntry[];
 } {
@@ -299,22 +299,19 @@ function rebuildReminderDelivery(previousMappings: AppSnapshot["reminderMap"], t
     nextAttemptAt: now,
     createdAt: now,
   }));
-  return tasks.filter((task) => task.status === "active").reduce<{ notificationOutbox: NotificationOutboxItem[]; reminderMap: ReminderMapEntry[] }>((result, task) => {
-    const reminderId = idFactory?.("reminder") ?? randomId();
-    result.reminderMap.push({ reminderId, taskId: task.id, taskRevision: task.revision, createdAt: now });
-    result.notificationOutbox.push({
-      id: idFactory?.("outbox") ?? randomId(),
-      operation: "upsert",
-      reminderId,
-      scheduledAt: task.nextReviewAt,
-      notificationType: notificationTypeForTask(task),
-      taskRevision: task.revision,
-      attemptCount: 0,
-      nextAttemptAt: now,
-      createdAt: now,
-    });
-    return result;
-  }, { notificationOutbox, reminderMap: [] });
+  return snapshot.tasks
+    .filter((task) => task.status === "active")
+    .reduce<{ notificationOutbox: NotificationOutboxItem[]; reminderMap: ReminderMapEntry[] }>((result, task) => {
+      const queued = queueTaskNotifications({
+        snapshot: { ...snapshot, reminderMap: result.reminderMap },
+        task,
+        now,
+        createId: idFactory,
+      });
+      result.notificationOutbox.push(...queued.notificationOutbox);
+      result.reminderMap = queued.reminderMap;
+      return result;
+    }, { notificationOutbox, reminderMap: [] });
 }
 
 function countsFor(data: BackupData): BackupCounts {

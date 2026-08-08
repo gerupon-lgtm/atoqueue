@@ -50,6 +50,8 @@ export async function start(input: { version: string; environment?: NodeJS.Proce
   const dispatcher = new ReminderDispatcher(
     new PgReminderRepository(pool),
     new WebPushClient({ publicKey: config.vapidPublicKey, privateKey: config.vapidPrivateKey, subject: config.vapidSubject }),
+    () => new Date(),
+    config.deadlineDeliveryLeadSeconds,
   );
   return startServer({ app, pool, dispatcher, port: config.port, reportFailure: () => { process.stderr.write("Reminder dispatch failed.\n"); } });
 }

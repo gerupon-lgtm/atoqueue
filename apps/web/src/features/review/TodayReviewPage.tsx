@@ -27,6 +27,7 @@ export interface TodayReviewPageProps {
   onFinished?: () => void;
   /** Anonymous ID supplied by a generic push link; resolved only from loaded local state. */
   preferredReminderId?: string;
+  sync?: () => Promise<unknown>;
 }
 
 const currentTime = () => new Date().toISOString();
@@ -38,6 +39,7 @@ export function TodayReviewPage({
   createId = defaultCreateId,
   onFinished,
   preferredReminderId,
+  sync,
 }: TodayReviewPageProps) {
   const [snapshot, setSnapshot] = useState<AppSnapshot>();
   const [session, setSession] = useState<ReviewSession>();
@@ -100,6 +102,7 @@ export function TodayReviewPage({
         due,
       });
       await repository.save(next);
+      void sync?.();
       const updated = next.reviewSessions.find((candidate) => candidate.id === session.id)!;
       setSnapshot(next);
       setSession(updated);

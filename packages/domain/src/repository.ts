@@ -7,7 +7,7 @@ export function createEmptySnapshot(params: {
   now: string;
 }): AppSnapshot {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     appVersion: params.appVersion,
     device: {
       localDeviceId: params.localDeviceId,
@@ -17,6 +17,8 @@ export function createEmptySnapshot(params: {
       locale: "ja-JP",
       timeZone: params.timeZone,
       notificationEnabled: false,
+      initialReminderDelayMinutes: 60,
+      deadlineReminderLeadMinutes: 60,
       weeklyReviewDay: 0,
     },
     captures: [],

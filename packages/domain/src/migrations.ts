@@ -24,14 +24,18 @@ export function migrateSnapshot(input: unknown): AppSnapshot {
 
   if (version === 1) {
     validateSnapshot(snapshot, false);
-    return normalizeSnapshot(upgradeV1ToV2(snapshot));
+    return normalizeSnapshot(upgradeV2ToV3(upgradeV1ToV2(snapshot)));
   }
   if (version === 2) {
+    validateSnapshot(snapshot, true);
+    return normalizeSnapshot(upgradeV2ToV3(snapshot));
+  }
+  if (version === 3) {
     validateSnapshot(snapshot, true);
     return normalizeSnapshot(snapshot);
   }
   if (typeof version === "number") throw new UnsupportedSchemaVersionError(version);
-  throw corrupt("schemaVersion must be 1 or 2");
+  throw corrupt("schemaVersion must be 1, 2, or 3");
 }
 
 function validateSnapshot(snapshot: RecordValue, requireReviewEventIds: boolean): void {
@@ -75,6 +79,8 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
     "locale",
     "timeZone",
     "notificationEnabled",
+    "initialReminderDelayMinutes",
+    "deadlineReminderLeadMinutes",
     "weeklyReviewDay",
   ]);
   if (settingsValue.quietHours !== undefined) {
@@ -154,6 +160,7 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
   normalized.reminderMap = normalizedEntities(snapshot.reminderMap, [
     "reminderId",
     "taskId",
+    "kind",
     "taskRevision",
     "createdAt",
   ]);
@@ -211,6 +218,8 @@ function settings(value: unknown): void {
   oneOf(entity.locale, "settings.locale", ["ja-JP"]);
   string(entity.timeZone, "settings.timeZone");
   boolean(entity.notificationEnabled, "settings.notificationEnabled");
+  optionalReminderMinutes(entity.initialReminderDelayMinutes, "settings.initialReminderDelayMinutes");
+  optionalReminderMinutes(entity.deadlineReminderLeadMinutes, "settings.deadlineReminderLeadMinutes");
   if (entity.weeklyReviewDay !== 0) {
     throw corrupt("settings.weeklyReviewDay must be 0");
   }
@@ -218,6 +227,31 @@ function settings(value: unknown): void {
     const quietHours = object(entity.quietHours, "settings.quietHours");
     string(quietHours.start, "settings.quietHours.start");
     string(quietHours.end, "settings.quietHours.end");
+  }
+}
+
+/** Version 3 makes global notification timing and each reminder's purpose explicit. */
+function upgradeV2ToV3(snapshot: RecordValue): RecordValue {
+  const settingsValue = object(snapshot.settings, "settings");
+  return {
+    ...snapshot,
+    schemaVersion: 3,
+    settings: {
+      ...settingsValue,
+      initialReminderDelayMinutes: settingsValue.initialReminderDelayMinutes ?? 60,
+      deadlineReminderLeadMinutes: settingsValue.deadlineReminderLeadMinutes ?? 60,
+    },
+    reminderMap: (snapshot.reminderMap as unknown[]).map((value, index) => {
+      const entry = object(value, `reminderMap[${index}]`);
+      return { ...entry, kind: entry.kind ?? "review" };
+    }),
+  };
+}
+
+function optionalReminderMinutes(value: unknown, name: string): void {
+  if (value === undefined) return;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 10_080) {
+    throw corrupt(`${name} must be an integer between 0 and 10080`);
   }
 }
 
@@ -367,6 +401,11 @@ function reminderMapEntry(value: unknown, index: number): void {
   const entity = object(value, `reminderMap[${index}]`);
   strings(entity, ["reminderId", "taskId", "createdAt"]);
   number(entity.taskRevision, `reminderMap[${index}].taskRevision`);
+  optionalOneOf(entity.kind, `reminderMap[${index}].kind`, [
+    "initial",
+    "deadline_before",
+    "review",
+  ]);
 }
 
 function entities(

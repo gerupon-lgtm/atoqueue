@@ -48,7 +48,7 @@ export const router = createBrowserRouter([
         ) : page.path === "tasks" ? (
           <TaskListPage repository={applicationRepository} />
         ) : page.path === "settings" ? (
-          <SettingsPage flushNotifications={() => notificationSync.flushAfterRestore()} repository={applicationRepository} />
+          <SettingsPage flushNotifications={() => notificationSync.flush()} repository={applicationRepository} />
         ) : (
           <Page title={page.label} />
         ),
@@ -87,6 +87,7 @@ function TaskCandidateRoute() {
     <TaskCandidatePage
       captureId={captureId}
       onReturn={() => navigate("/inbox")}
+      onNotificationChanged={() => notificationSync.flush()}
       repository={applicationRepository}
     />
   );
@@ -95,11 +96,11 @@ function TaskCandidateRoute() {
 function TodayReviewRoute() {
   const navigate = useNavigate();
   const location = useLocation();
-  return <TodayReviewPage onFinished={() => navigate("/today/result")} preferredReminderId={new URLSearchParams(location.search).get("reminder") ?? undefined} repository={applicationRepository} />;
+  return <TodayReviewPage onFinished={() => navigate("/today/result")} preferredReminderId={new URLSearchParams(location.search).get("reminder") ?? undefined} repository={applicationRepository} sync={() => notificationSync.flush()} />;
 }
 
 function TaskCorrectionRoute() {
   const { taskId } = useParams();
   if (!taskId) return <Page title="タスク" />;
-  return <TaskDetailPage repository={applicationRepository} taskId={taskId} />;
+  return <TaskDetailPage repository={applicationRepository} sync={() => notificationSync.flush()} taskId={taskId} />;
 }

@@ -30,7 +30,7 @@
 - pnpmワークスペース
 - TypeScript / Node.js 24 LTS
 - React 19.2 / Vite 8 / PWA
-- Fastify 5 / SQLite / Web Push
+- Fastify 5 / PostgreSQL / Web Push
 - Vitest / React Testing Library / Playwright
 
 UI、ドメインルール、保存処理、通知同期を分離する。画面コンポーネントから `localStorage` やHTTP APIを直接呼ばない。

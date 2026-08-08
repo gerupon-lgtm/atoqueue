@@ -76,6 +76,25 @@ describe("classification", () => {
     ]);
   });
 
+  it("F-014 queues the initial and deadline reminders only as anonymous local records when notifications are enabled", () => {
+    const snapshot = snapshotWithCapture();
+    snapshot.settings.notificationEnabled = true;
+    const next = confirmTask({
+      snapshot,
+      captureId: "capture-1",
+      taskId: "task-1",
+      title: "SECRET_TASK_CANARY",
+      due: { dueMode: "scheduled", dueAt: "2026-08-03T14:59:00.000Z", nextReviewAt: "2026-08-03T14:59:00.000Z" },
+      now,
+      idFactory: (kind, scheduleKind) => `${kind}-${scheduleKind ?? "event"}`,
+    });
+
+    expect(next.notificationOutbox).toHaveLength(3);
+    expect(next.reminderMap.map((entry) => entry.kind)).toEqual(["initial", "deadline_before", "review"]);
+    expect(JSON.stringify(next.notificationOutbox)).not.toContain("SECRET_TASK_CANARY");
+    expect(JSON.stringify(next.notificationOutbox)).not.toContain("task-1");
+  });
+
   it("F-006 rejects a second confirmation for the same capture", () => {
     const classified = confirmTask({
       snapshot: snapshotWithCapture(),

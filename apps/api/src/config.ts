@@ -12,6 +12,7 @@ const ConfigSchema = z
     VAPID_SUBJECT: z.literal("mailto:gerupon@gmail.com"),
     ALLOWED_ORIGIN: z.literal(PWA_ORIGIN),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
+    DEADLINE_DELIVERY_LEAD_SECONDS: z.coerce.number().int().min(0).max(3_600).default(300),
   })
   .strict();
 
@@ -25,6 +26,7 @@ export type ApiConfig = {
   pwaOrigin: typeof PWA_ORIGIN;
   apiOrigin: typeof API_ORIGIN;
   logLevel: "fatal" | "error" | "warn" | "info" | "debug" | "trace";
+  deadlineDeliveryLeadSeconds: number;
 };
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): ApiConfig {
@@ -36,6 +38,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): ApiCon
     VAPID_SUBJECT: environment.VAPID_SUBJECT,
     ALLOWED_ORIGIN: environment.ALLOWED_ORIGIN,
     LOG_LEVEL: environment.LOG_LEVEL,
+    DEADLINE_DELIVERY_LEAD_SECONDS: environment.DEADLINE_DELIVERY_LEAD_SECONDS,
   });
   return {
     port: parsed.PORT,
@@ -47,5 +50,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): ApiCon
     pwaOrigin: PWA_ORIGIN,
     apiOrigin: API_ORIGIN,
     logLevel: parsed.LOG_LEVEL,
+    deadlineDeliveryLeadSeconds: parsed.DEADLINE_DELIVERY_LEAD_SECONDS,
   };
 }

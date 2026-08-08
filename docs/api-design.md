@@ -194,37 +194,41 @@ Response `200` または `201`:
 
 ## 7. 配送処理
 
-1. 30秒ごとに `status=pending AND scheduled_at<=now` を最大100件取得する（【想定】）。
+【確定】配送ポーリングは5分ごとに行う。`DEADLINE_DELIVERY_LEAD_SECONDS`（初期値300秒）を先読みして予約をclaimし、ネットワークやOS都合の遅延を見込んで期限前にPush送信を試行する。これは正確な到達時刻の保証ではない。
+
+1. 5分ごとに `status=pending AND scheduled_at<=now` を最大100件取得する。
 2. トランザクション内で `claimed` にし、`claimed_at` を記録する。
 3. Web Pushへ送信する。
-4. 成功時は `sent`、一時失敗時は `pending` に戻して予定を1分、5分、30分後へ移す。
-5. 3回失敗で `failed` とする（【想定】）。
+4. 成功時は `sent`、一時失敗時は `pending` に戻して予定を5分、15分、60分後へ移す。
+5. 3回失敗で `failed` とする。
 6. Push endpointが404/410なら端末購読を `disabled` にし、対象端末の未配送予約を `failed` にする。
-7. 10分以上 `claimed` のままのジョブは起動時に `pending` へ戻す。
+7. 15分以上 `claimed` のままのジョブは起動時に `pending` へ戻す。
 
 配送成功はOS表示を保証しない。アプリは起動時に端末内ルールを再計算し、未処理対象を「今日の確認」に表示する。
 
 ## 8. セキュリティ・運用
 
 - VAPID秘密鍵、購読鍵、端末シークレットはログへ出さない。
-- SQLiteファイルとバックアップはサーバー側暗号化ストレージへ置く（【想定】）。
+- 通知データはOCI VPS上で稼働中のPostgreSQLの専用DB `atoqueue_notify` へ保存する。アプリ接続ロールは `atoqueue_notify_app`、スキーマは既定 `public`（【想定】）とする。
 - HTTPSを必須とする。
 - `POST /devices`: IPあたり10回/時、endpointあたり3回/時（【想定】）。
 - その他: 端末あたり60回/分（【想定】）。
-- CORS許可元、VAPID subject、鍵、DBパスは環境変数化する。
-- DBバックアップは日次、7世代保持（【想定】）。タスク本文がないことを運用手順にも明記する。
-- requestId、endpointのハッシュ先頭、結果コード、処理時間だけを構造化ログに残す。
+- CORS許可元は `https://atoqueue.sikumilab.com` に固定し、VAPID subject、鍵、PostgreSQL接続URLは環境変数化する。
+- VAPID subjectは `mailto:gerupon@gmail.com` とする。秘密鍵、DB接続情報、許可オリジンはVPSの `/etc/atoqueue/notification-api.env` だけに置き、rootだけが読める権限にする。
+- OCI Object Storage連携・定期DBバックアップはMVP対象外とする。DB消失時はクライアントが新規端末登録と有効予約の再同期を行う。DBスキーマ変更の直前は必要に応じて管理者が手動で `pg_dump` を取得する。
+- `requestId`、購読がある要求だけのendpoint SHA-256先頭12桁、HTTP結果コード、処理時間だけを構造化ログに残す。endpointがない要求ではハッシュ値は未定義とし、本文、URL、購読鍵、Bearer値は記録しない。専用ログは日次圧縮ローテーションで30日保持し、1日10MBを目安とする。
+- Fastifyは将来 `127.0.0.1:3030` で待受し、Caddyが `https://api.atoqueue.sikumilab.com` のHTTPS終端とリバースプロキシを担う。実行エントリポイントと待受開始はTask 11の `apps/api/src/start.ts` で実装予定であり、Task 10では追加しない。Cloudflare DNSは最初はDNSのみ（プロキシなし）とする。
 
 ## 9. 環境変数
 
 | 変数                | 必須 | 内容                |
 | ------------------- | ---- | ------------------- |
-| `PORT`              | 任意 | 既定3000            |
-| `DATABASE_PATH`     | 必須 | SQLiteファイル      |
-| `ALLOWED_ORIGIN`    | 必須 | PWAオリジン         |
+| `PORT`              | 任意 | 既定3030            |
+| `DATABASE_URL`      | 必須 | PostgreSQL接続URL   |
+| `ALLOWED_ORIGIN`    | 必須 | `https://atoqueue.sikumilab.com` |
 | `VAPID_PUBLIC_KEY`  | 必須 | 公開鍵              |
 | `VAPID_PRIVATE_KEY` | 必須 | 秘密鍵              |
-| `VAPID_SUBJECT`     | 必須 | `mailto:` またはURL |
+| `VAPID_SUBJECT`     | 必須 | `mailto:gerupon@gmail.com` |
 | `LOG_LEVEL`         | 任意 | 既定info            |
 
 ## 10. 契約テスト
@@ -236,11 +240,11 @@ Response `200` または `201`:
 - 取消済み予約は配送されない。
 - 404/410 Push応答で購読が無効になる。
 - 一時失敗は規定間隔で再試行される。
+- 通知DB消失後の端末認証失敗は、新規端末登録と有効予約の再同期で回復する。
 - タスク本文らしい文字列がDB・ログ・Push payloadに現れない。
 
 ## 11. 要確認事項
 
-- 【要確認】通知バックエンドの本番配置先と永続ボリューム方式
 - 【要確認】端末無操作時の購読情報の保持期間
 - 【要確認】APIレート制限の初期値
 - 【要確認】通知表示のアプリ名を仮称のまま出してよいか

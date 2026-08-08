@@ -29,6 +29,19 @@ describe("ReminderDispatcher", () => {
     expect(sends).toHaveLength(100);
   });
 
+  it("claims a deadline reservation up to the configured delivery lead time without claiming jobs beyond that window", async () => {
+    const repository = new InMemoryReminderRepository();
+    const withinLead = seed(repository, { scheduledAt: "2026-08-06T09:04:59.000Z" });
+    const outsideLead = seed(repository, { scheduledAt: "2026-08-06T09:05:01.000Z" });
+    const sends: unknown[] = [];
+
+    await new ReminderDispatcher(repository, client(201, sends), () => now, 300).dispatchDue();
+
+    expect(repository.get(withinLead)?.status).toBe("sent");
+    expect(repository.get(outsideLead)?.status).toBe("pending");
+    expect(sends).toHaveLength(1);
+  });
+
   it("marks a successful generic send as sent and never includes task data", async () => {
     const repository = new InMemoryReminderRepository();
     const id = seed(repository, { scheduledAt: "2026-08-06T08:39:00.000Z" });

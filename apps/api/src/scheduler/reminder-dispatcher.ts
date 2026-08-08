@@ -4,7 +4,12 @@ import type { ReminderRepository } from "../reminders/reminder-repository.js";
 const RETRY_MINUTES = [5, 15, 60] as const;
 
 export class ReminderDispatcher {
-  constructor(private readonly repository: ReminderRepository, private readonly push: PushClient, private readonly clock = () => new Date()) {}
+  constructor(
+    private readonly repository: ReminderRepository,
+    private readonly push: PushClient,
+    private readonly clock = () => new Date(),
+    private readonly deliveryLeadSeconds = 0,
+  ) {}
 
   async recoverStaleClaims(): Promise<void> {
     const now = this.clock();
@@ -13,7 +18,9 @@ export class ReminderDispatcher {
 
   async dispatchDue(): Promise<void> {
     const now = this.clock();
-    const jobs = await this.repository.claimDue(now.toISOString(), 100);
+    const claimedAt = now.toISOString();
+    const dueBefore = new Date(now.getTime() + this.deliveryLeadSeconds * 1_000).toISOString();
+    const jobs = await this.repository.claimDue(claimedAt, 100, dueBefore);
     await Promise.all(jobs.map((job) => this.send(job, now)));
   }
 

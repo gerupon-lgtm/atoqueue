@@ -74,13 +74,18 @@ describe("local backup", () => {
     expect(restored.actionHistory).toEqual([...original.actionHistory, expect.objectContaining({ action: "backup_restored" })]);
     expect(restored.settings).toEqual(original.settings);
     expect(restored.device.localDeviceId).toBe("66666666-6666-4666-8666-666666666666");
-    expect(restored.notificationOutbox).toEqual([
-      expect.objectContaining({ id: "new-outbox-1", operation: "cancel", reminderId: "old-reminder", taskRevision: 3 }),
-      expect.objectContaining({ id: "new-outbox-3", operation: "upsert", reminderId: "new-reminder-2", taskRevision: 3 }),
-    ]);
+    expect(restored.notificationOutbox).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "new-outbox-1", operation: "cancel", reminderId: "old-reminder", taskRevision: 3 }),
+        expect.objectContaining({ operation: "upsert", notificationType: "task_review", scheduledAt: "2026-08-04T10:00:00.000Z", taskRevision: 3 }),
+        expect.objectContaining({ operation: "upsert", notificationType: "deadline_review", scheduledAt: "2026-08-05T08:00:00.000Z", taskRevision: 3 }),
+        expect.objectContaining({ operation: "upsert", notificationType: "deadline_review", scheduledAt: "2026-08-05T09:00:00.000Z", taskRevision: 3 }),
+      ]),
+    );
+    expect(restored.notificationOutbox).toHaveLength(4);
     expect(JSON.stringify(restored.notificationOutbox)).not.toContain(taskId);
     expect(JSON.stringify(restored.notificationOutbox)).not.toContain("牛乳を買う");
-    expect(restored.reminderMap).toEqual([expect.objectContaining({ reminderId: "new-reminder-2", taskId })]);
+    expect(restored.reminderMap.map((entry) => entry.kind)).toEqual(["initial", "deadline_before", "review"]);
   });
 
   it("F-018 rejects an altered backup before a replacement can happen", async () => {
@@ -182,7 +187,8 @@ describe("local backup", () => {
 
     const restored = await restoreBackup({ current: snapshot(), serialized: backup, now });
     expect(restored.tasks[0]?.nextReviewAt).toBe("2026-08-07T09:00:00.000Z");
-    expect(restored.notificationOutbox.find((item) => item.operation === "upsert")?.scheduledAt).toBe("2026-08-07T09:00:00.000Z");
+    const reviewReminderId = restored.reminderMap.find((entry) => entry.kind === "review")?.reminderId;
+    expect(restored.notificationOutbox.find((item) => item.operation === "upsert" && item.reminderId === reviewReminderId)?.scheduledAt).toBe("2026-08-07T09:00:00.000Z");
     expect(restored.notificationOutbox.find((item) => item.operation === "upsert")?.scheduledAt).not.toBe("2026-01-01T09:00:00.000Z");
   });
 });

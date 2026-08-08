@@ -19,13 +19,16 @@ describe("production API configuration", () => {
     const config = loadConfig({ ...productionEnvironment, ALLOWED_ORIGIN: PWA_ORIGIN });
     expect(config.port).toBe(3030);
     expect(config.logLevel).toBe("info");
+    expect(config.deadlineDeliveryLeadSeconds).toBe(300);
   });
 
   it("validates listener and logging settings", () => {
-    expect(loadConfig({ ...productionEnvironment, ALLOWED_ORIGIN: PWA_ORIGIN, PORT: "3040", LOG_LEVEL: "debug" }))
-      .toMatchObject({ port: 3040, logLevel: "debug" });
+    expect(loadConfig({ ...productionEnvironment, ALLOWED_ORIGIN: PWA_ORIGIN, PORT: "3040", LOG_LEVEL: "debug", DEADLINE_DELIVERY_LEAD_SECONDS: "120" }))
+      .toMatchObject({ port: 3040, logLevel: "debug", deadlineDeliveryLeadSeconds: 120 });
     expect(() => loadConfig({ ...productionEnvironment, ALLOWED_ORIGIN: PWA_ORIGIN, PORT: "0" })).toThrow();
     expect(() => loadConfig({ ...productionEnvironment, ALLOWED_ORIGIN: PWA_ORIGIN, LOG_LEVEL: "verbose" })).toThrow();
+    expect(() => loadConfig({ ...productionEnvironment, ALLOWED_ORIGIN: PWA_ORIGIN, DEADLINE_DELIVERY_LEAD_SECONDS: "-1" })).toThrow();
+    expect(() => loadConfig({ ...productionEnvironment, ALLOWED_ORIGIN: PWA_ORIGIN, DEADLINE_DELIVERY_LEAD_SECONDS: "3601" })).toThrow();
   });
 
   it("requires the confirmed VAPID contact address", () => {

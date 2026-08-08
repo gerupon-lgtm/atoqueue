@@ -4,9 +4,9 @@
 
 **Goal:** 思いつきを一文で端末内へ退避し、後からタスク化し、放置度合いに応じた「今日の確認」とWeb Pushで確実な処理へ導くPWAのMVPを実装する。
 
-**Architecture:** pnpm monorepo内にReact PWA、純粋なドメインパッケージ、HTTP契約パッケージ、Fastify通知APIを分離する。タスク本文・期限・履歴は `localStorage` にだけ保存し、APIは匿名端末と匿名通知予約だけをSQLiteへ保存する。通知が不達でも、PWA起動時に同じドメインルールから確認対象を再計算する。
+**Architecture:** pnpm monorepo内にReact PWA、純粋なドメインパッケージ、HTTP契約パッケージ、Fastify通知APIを分離する。タスク本文・期限・履歴は `localStorage` にだけ保存し、APIは匿名端末と匿名通知予約だけをOCI VPS上のPostgreSQLへ保存する。通知が不達でも、PWA起動時に同じドメインルールから確認対象を再計算する。
 
-**Tech Stack:** TypeScript, Node.js 24 LTS, pnpm, React 19.2, Vite 8, React Router, vite-plugin-pwa, Fastify 5, SQLite, better-sqlite3, Zod, web-push, Vitest, React Testing Library, Playwright, ESLint, Prettier, Docker
+**Tech Stack:** TypeScript, Node.js 24 LTS, pnpm, React 19.2, Vite 8, React Router, vite-plugin-pwa, Fastify 5, PostgreSQL, pg, Zod, web-push, Vitest, React Testing Library, Playwright, ESLint, Prettier, systemd, Caddy, GitHub Actions
 
 ---
 
@@ -102,8 +102,8 @@ pnpm install
 pnpm add -Dw typescript eslint @eslint/js typescript-eslint prettier vitest @vitest/coverage-v8
 pnpm --filter @atoqueue/web add react react-dom react-router-dom zod
 pnpm --filter @atoqueue/web add -D vite @vitejs/plugin-react vite-plugin-pwa @types/react @types/react-dom @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom @playwright/test
-pnpm --filter @atoqueue/api add fastify @fastify/cors @fastify/rate-limit better-sqlite3 zod web-push argon2 pino
-pnpm --filter @atoqueue/api add -D @types/better-sqlite3 @types/web-push
+pnpm --filter @atoqueue/api add fastify @fastify/cors @fastify/rate-limit pg zod web-push argon2 pino
+pnpm --filter @atoqueue/api add -D @types/pg @types/web-push
 ```
 
 Expected: the lockfile is created with no peer-dependency errors. If Vite 8 or Node 24 is rejected by a selected dependency, stop and record the incompatibility before changing versions.
@@ -117,8 +117,8 @@ import { describe, expect, it } from "vitest";
 import { DOMAIN_SCHEMA_VERSION } from "./index";
 
 describe("domain package", () => {
-  it("starts at schema version 1", () => {
-    expect(DOMAIN_SCHEMA_VERSION).toBe(1);
+  it("starts at the current schema version", () => {
+    expect(DOMAIN_SCHEMA_VERSION).toBe(2);
   });
 });
 ```
@@ -203,11 +203,11 @@ repositoryContract(
 
 Required assertions:
 
-- missing storage returns `createEmptySnapshot()` with `schemaVersion: 1`;
+- missing storage returns `createEmptySnapshot()` with the current `schemaVersion`;
 - save then load preserves Unicode task text and action history;
 - `save()` writes only `atoqueue:data:v1` once;
 - malformed JSON is copied to `atoqueue:corrupt:<timestamp>` and throws `CorruptDataError`;
-- `schemaVersion: 2` throws `UnsupportedSchemaVersionError` without overwriting data;
+- newer unknown `schemaVersion` throws `UnsupportedSchemaVersionError` without overwriting data;
 - storage quota failure throws `PersistenceError` without clearing the current UI state.
 
 **Step 2: Run the focused test and confirm failure**
@@ -248,7 +248,7 @@ export interface AppRepository {
 - Parse JSON to `unknown`.
 - Validate the root and all entity arrays before casting.
 - Implement `migrateSnapshot(input: unknown): AppSnapshot`.
-- Accept only version 1 in this milestone.
+- 初期実装ではv1だけを受理した。実装済みのv2ではv1をv2へ移行して受理し、v2を検証する。v3以降の未知版は拒否する。
 - Generate corrupt backup keys with the injected clock, not `Date.now()` inside tests.
 
 **Step 5: Re-run the focused and package tests**
@@ -435,7 +435,7 @@ git add packages/domain apps/web/src/features/capture apps/web/e2e/quick-capture
 git commit -m "feat: add safe one-sentence capture"
 ```
 
-## Task 5: Implement inbox classification and task confirmation
+## Task 5: Implement inbox classification and task confirmation（完了: 2026-08-03）
 
 **Requirements:** F-004, F-005, F-006, F-007, NF-001, NF-006
 
@@ -509,7 +509,9 @@ git add packages/domain apps/web/src/features/inbox apps/web/e2e/inbox-classific
 git commit -m "feat: add user-confirmed inbox classification"
 ```
 
-## Task 6: Implement reminder policy and neglect levels
+**実装結果（2026-08-03）:** 候補表示はローカルの透明な規則に限定し、タイトル・期限・カテゴリの初期候補を編集可能な形で提示する。候補表示時にはキャプチャ状態を変えず、`タスクにする` の明示操作だけがタスクとリンクを生成する。本文編集と分類操作は直列化し、期限なしは次の日曜18:00（同時刻以降なら翌週）の週次見直しへ回す。ドメイン29件、Web37件、型検査、両パッケージのビルド、単一E2Eが成功した。
+
+## Task 6: Implement reminder policy and neglect levels（完了: 2026-08-03）
 
 **Requirements:** F-008, F-009, F-010, F-011, NF-003, NF-006
 
@@ -533,7 +535,7 @@ Include this matrix:
 | dismissed count 0            | now + 1 day       |
 | dismissed count 1            | now + 3 days      |
 | dismissed count 2            | now + 7 days      |
-| dismissed count 3            | next Sunday 18:00 |
+| dismissed count 3            | now + 7 days      |
 
 Add neglect-level boundary assertions for exactly 24 hours, overdue 1 day, overdue 7 days, dismiss counts 1/2/4, and repeated unset-due prompts.
 
@@ -549,11 +551,13 @@ Expected: FAIL because policy functions are missing.
 
 ```ts
 export function calculateNextReview(input: NextReviewInput): string;
-export function calculateNeglectLevel(input: NeglectInput): 0 | 1 | 2 | 3;
-export function choosePrompt(level: 0 | 1 | 2 | 3): PromptCopy;
+export function calculateNeglectLevel(input: NeglectInput): 0 | 1 | 2 | 3 | 4;
+export function choosePrompt(level: 0 | 1 | 2 | 3 | 4): PromptCopy;
 ```
 
 `PromptCopy` must contain the exact Japanese messages from `docs/screens.md`. Keep copy outside React components so tone changes do not change the state machine.
+
+**要件優先の差分（2026-08-03）:** F-011に合わせて放置レベルは0〜4とする。F-012に合わせて「今回は閉じる」は1日後、3日後、7日後、以後は7日ごとに再提示する。旧来の4段階・4回目以降を週次にする記述は採用しない。
 
 **Step 4: Run tests and inspect boundary coverage**
 
@@ -570,7 +574,9 @@ git add packages/domain/src/reminder-policy.ts packages/domain/src/reminder-poli
 git commit -m "feat: add escalating reminder policy"
 ```
 
-## Task 7: Implement the review-session state machine
+**実装結果（2026-08-03）:** 要件優先の5段階（0〜4）で放置レベルを導出し、期限未設定は3日後・3回目以降は次の日曜18:00、見送りは1日後・3日後・7日後・以後7日ごとにした。`test:coverage`で`reminder-policy.ts`の分岐100%を強制し、ドメイン59件、型検査、ビルドが成功した。
+
+## Task 7: Implement the review-session state machine（完了: 2026-08-03）
 
 **Requirements:** F-012, F-014, F-015, F-016, NF-001, NF-006
 
@@ -637,7 +643,9 @@ git add packages/domain/src
 git commit -m "feat: add reversible daily review session"
 ```
 
-## Task 8: Build Today Review and result screens
+**実装結果（2026-08-03）:** 固定順序・中断再開・前への移動・再回答・結果集計を端末内の状態機械として実装した。完了・保管はローカルを先に更新して匿名の取消Outboxを積む。`schemaVersion`をv2へ上げ、v1のレビューセッションには空の`actionEventIds`を追加して移行する。v2では終端日時、期限モード、順序ID、セッション所有イベントを検証する。状態遷移対象の分岐100%、ドメイン112件、型検査、ビルド、移行テストが成功した。
+
+## Task 8: Build Today Review and result screens（完了: 2026-08-03）
 
 **Requirements:** F-012, F-014, F-015, F-016, NF-001, NF-012
 
@@ -661,7 +669,7 @@ Assert the following exact behaviors:
 - the left control text is `← 前のタスク`, not an arrow-only accessible name;
 - the previous control is disabled on item 1 and enabled on item 2;
 - one task card is rendered at a time;
-- level 0–3 messages match `choosePrompt()`;
+- level 0–4 messages match `choosePrompt()`;
 - `完了`, `今日やる`, `日付を変える`, `期限なし`, `今回は閉じる`, `不要` call the matching domain command;
 - choosing an answer moves immediately to the next task without a confirmation dialog;
 - returning to the previous task displays its current result and permits re-answering;
@@ -726,7 +734,9 @@ git add apps/web/src/features/review apps/web/e2e/today-review.spec.ts apps/web/
 git commit -m "feat: add one-at-a-time today review"
 ```
 
-## Task 9: Build task list, detail, edits, and history
+**実装結果（2026-08-03）:** Task 7の状態機械を`AppRepository`経由で画面化し、空セッションの再計算、戻った項目の最新回答表示、結果からの修正導線、期限・経過表示、DST境界、画面全体中央の見出しを実装した。Web50件、型検査、ビルドが成功した。単一E2EはCodex実行環境のChromium `spawn EPERM` で未完了のため、実機環境で再実行する。
+
+## Task 9: Build task list, detail, edits, and history（完了: 2026-08-04）
 
 **Requirements:** F-014, F-015, F-016, F-018, NF-006, NF-012
 
@@ -783,6 +793,8 @@ git add packages/domain/src/task-query.ts packages/domain/src/task-query.test.ts
 git commit -m "feat: add active task management and history"
 ```
 
+**実装結果（2026-08-04）:** 一覧・詳細・履歴・編集を端末内状態と匿名Outboxの境界を保って実装した。元メモを含むUnicode検索、IANAタイムゾーン基準の当日判定、選択日による期限変更、保存失敗の復旧表示、44px以上の主要操作をテストした。ドメイン126件、Web58件、型検査、Webビルドが成功した。対象E2EはCodex環境のChromium起動制約により未完了であり、実機環境で再実行する。
+
 ## Task 10: Define strict notification contracts and device registration API
 
 **Requirements:** F-013, NF-004, NF-005, NF-007, NF-008, NF-009, NF-010, NF-013
@@ -827,7 +839,7 @@ Repeat for `title`, `taskId`, and `category`. Verify all response and error sche
 
 **Step 2: Write failing device API tests**
 
-Use Fastify injection and a temporary SQLite file. Cover:
+Use Fastify injection and an isolated PostgreSQL fixture. Cover:
 
 - `GET /v1/push/public-key`;
 - `POST /v1/devices` returns a device secret only once;
@@ -848,7 +860,7 @@ Expected: FAIL.
 
 **Step 4: Create the database schema**
 
-Implement `device_subscriptions` and `reminder_jobs` exactly as `docs/data-model.md` defines. Add indexes:
+Implement `device_subscriptions` and `reminder_jobs` exactly as `docs/data-model.md` defines in PostgreSQL. Add indexes:
 
 ```sql
 CREATE INDEX idx_reminder_jobs_due
@@ -858,7 +870,7 @@ CREATE UNIQUE INDEX idx_reminder_jobs_idempotency
 ON reminder_jobs(device_id, idempotency_key);
 ```
 
-Enable foreign keys and WAL mode on connection.
+PostgreSQLの外部キー制約を `001_initial.sql` で定義する。SQLite固有のWAL設定は行わず、PostgreSQLの通常の永続化設定を使用する。
 
 **Step 5: Implement API security**
 
@@ -886,9 +898,13 @@ git add packages/contracts apps/api
 git commit -m "feat: add private device registration api"
 ```
 
+**実装結果（2026-08-04）:** 端末登録・購読更新・無効化、共有Zod契約、PostgreSQL migration、Argon2id端末認証、信頼済みCaddy経由のレート制限、操作冪等性、プライバシー制限ログを実装した。ビルド済みアセットからmigrationを読込むこと、DBヘルス依存、設定、ログ漏えいをテストした。実行エントリポイントと `listen()` はこのTaskの範囲外であり、次のTask 11で作成する `apps/api/src/start.ts` に繰り延べる。
+
 ## Task 11: Implement reminder API, scheduler, and generic Web Push
 
 **Requirements:** F-013, NF-003, NF-004, NF-005, NF-007, NF-009, NF-010, NF-013
+
+**実装結果（2026-08-04）:** 匿名端末所有者の予約PUT/取消、履歴を保持する予約冪等性、PostgreSQL行ロックによる配送claim、claim token付き配送確定、汎用Web Push、5分pollと起動時のstale claim回復を実装した。ビルド済み `dist/start.js` は `pnpm --filter @atoqueue/api start` から起動し、相対パス実行時も設定検証と起動処理へ到達することを成果物テストで確認した。
 
 **Files:**
 
@@ -905,7 +921,7 @@ git commit -m "feat: add private device registration api"
 
 **Step 1: Write failing reminder-route tests**
 
-Cover create, full replacement, cancel, other-device isolation, past-time validation, idempotent replay, idempotency conflict, and forbidden fields. Query SQLite after each request and assert that the only user-supplied values are device ID, reminder ID, schedule, type, and idempotency key.
+Cover create, full replacement, cancel, other-device isolation, past-time validation, idempotent replay, idempotency conflict, and forbidden fields. Query PostgreSQL after each request and assert that the only user-supplied values are device ID, reminder ID, schedule, type, and idempotency key.
 
 **Step 2: Write failing dispatcher tests**
 
@@ -925,10 +941,10 @@ Required cases:
 - claim at most 100 due jobs;
 - do not send future or cancelled jobs;
 - successful send marks `sent`;
-- temporary failure reschedules at 1, 5, then 30 minutes;
+- temporary failure reschedules at 5, 15, then 60 minutes;
 - third failed attempt marks `failed`;
 - 404/410 disables the subscription and fails pending jobs;
-- jobs claimed over 10 minutes ago return to pending at startup;
+- jobs claimed over 15 minutes ago return to pending at startup;
 - two dispatcher ticks do not send the same claim twice;
 - payload contains no task data and uses `/today?reminder=<id>`.
 
@@ -944,8 +960,8 @@ Expected: FAIL.
 
 - `PUT /v1/reminders/:reminderId` upserts by authenticated device and idempotency key.
 - `DELETE` is idempotent for the authenticated owner.
-- Claim jobs in a SQLite transaction.
-- Poll every 30 seconds from `start.ts`; call `unref()` on the timer so tests can exit.
+- Claim jobs in a PostgreSQL transaction with row locking.
+- Poll every 5 minutes from `start.ts`; call `unref()` on the timer so tests can exit.
 - Keep `web-push` library calls behind `PushClient`.
 - Use the generic notification data from `docs/api-design.md`.
 
@@ -1147,11 +1163,11 @@ Cover:
 - unsupported schema version without overwrite;
 - stale notification link;
 - notification denied and unavailable;
-- server restart with pending SQLite reminders.
+- server restart with pending PostgreSQL reminders.
 
 **Step 3: Add the privacy regression test**
 
-Seed unique canaries such as `SECRET_TASK_CANARY_8D3`. Exercise all API routes and one dispatcher cycle, then search serialized HTTP captures, SQLite text columns, push payloads, and captured logs. Assert the canary never appears.
+Seed unique canaries such as `SECRET_TASK_CANARY_8D3`. Exercise all API routes and one dispatcher cycle, then search serialized HTTP captures, PostgreSQL text columns, push payloads, and captured logs. Assert the canary never appears.
 
 **Step 4: Confirm failures before fixes**
 
@@ -1201,44 +1217,43 @@ git commit -m "test: verify accessibility resilience and privacy"
 
 **Files:**
 
-- Create: `Dockerfile`
-- Create: `docker-compose.yml`
-- Create: `.dockerignore`
+- Create: `.github/workflows/deploy.yml`
+- Create: `deploy/systemd/atoqueue-notification-api.service`
+- Create: `deploy/caddy/atoqueue-api.caddyfile`
+- Create: `deploy/scripts/deploy-release.sh`
 - Create: `docs/operations/deployment.md`
-- Create: `docs/operations/backup-restore.md`
+- Create: `docs/operations/notification-db-recovery.md`
 - Create: `docs/operations/push-key-rotation.md`
 - Create: `docs/pilot/7-day-checklist.md`
 - Create: `docs/pilot/result-template.md`
 - Modify: `AGENTS.md`
 - Modify: `基本設計サマリ.md` only if deployment decisions replace a current 【想定】
 
-**Step 1: Write a failing container smoke check**
+**Step 1: Write failing deployment configuration checks**
 
-Build should fail until runtime files are complete:
+Verify the deployment workflow and service artifacts are absent before implementation, then add tests or static assertions that require:
 
-```powershell
-docker build -t atoqueue:local .
-```
+- `systemd` runs the API as non-login user `atoqueue` on `127.0.0.1:3030` and restarts it on failure;
+- Caddy only proxies `https://api.atoqueue.sikumilab.com` to that loopback address;
+- the service reads `/etc/atoqueue/notification-api.env` without placing secrets in Git, images, or GitHub workflow output;
+- the app uses PostgreSQL DB `atoqueue_notify` through role `atoqueue_notify_app`;
+- GitHub Actions tests every push and deploys only from a manually approved production environment through `atoqueue-deploy` and its dedicated SSH key.
 
-Expected before implementation: FAIL due to missing runtime stages or start command.
+**Step 2: Implement the systemd and GitHub Actions deployment**
 
-**Step 2: Implement multi-stage build and compose**
-
-- build Web and API with Node 24;
-- serve the Web build and API behind HTTPS-capable reverse proxy or document the external TLS boundary;
-- mount SQLite at `/data/atoqueue.sqlite`;
-- run as a non-root user;
-- expose health check against `/healthz`;
-- require secrets through environment, never image layers;
-- restart unless stopped.
-
-`docker-compose.yml` must use an explicit named volume `atoqueue-data`, an environment file, and a health check. Do not include real VAPID keys.
+- build Web and API with Node 24 in CI;
+- publish the PWA to GitHub Pages at `https://atoqueue.sikumilab.com`;
+- deploy the API release to the OCI VPS only through a manually triggered, approved GitHub Actions workflow;
+- migrate the existing PostgreSQL notification DB, restart the systemd unit, then require `/healthz` to succeed;
+- use Caddy for TLS and reverse proxying; Cloudflare DNS starts in DNS-only mode;
+- never deploy containers, a local notification DB volume, or real VAPID keys;
+- roll back to the previous release if migration, restart, or health check fails.
 
 **Step 3: Write operating procedures**
 
-`deployment.md` must contain exact commands for build, migration, start, health check, rollback, and log inspection after the production host is chosen. Until then, provide the Docker/Compose commands that work on any persistent-volume host and label provider-specific DNS/TLS steps 【要確認】.
+`deployment.md` must contain exact commands for build, PostgreSQL migration, start, health check, rollback, and log inspection for the OCI VPS. It must use the confirmed PWA URL, notification API URL, PostgreSQL DB/role, Caddy TLS, and GitHub Actions approval flow.
 
-`backup-restore.md` must stop the scheduler, copy the SQLite file consistently, verify `PRAGMA integrity_check`, restore to a separate path first, start, and verify health plus pending job counts.
+`notification-db-recovery.md` must explain that OCI Object Storage and scheduled database backup are out of MVP scope. It must define the manual pre-migration `pg_dump` option and the post-loss recovery flow: client clears obsolete server credentials, registers a device again, and re-sends active reminders from local state.
 
 `push-key-rotation.md` must explain that VAPID rotation invalidates or requires re-registration of existing subscriptions and define the user-facing recovery state.
 
@@ -1257,19 +1272,11 @@ Checklist fields:
 
 Do not send analytics to the server; calculate from exported local data and participant notes.
 
-**Step 5: Verify clean deployment**
+**Step 5: Verify approved deployment and recovery**
 
-```powershell
-docker build -t atoqueue:local .
-docker compose up -d
-docker compose ps
-curl.exe --fail http://localhost:3000/healthz
-docker compose restart
-curl.exe --fail http://localhost:3000/healthz
-docker compose down
-```
+Run the manually approved GitHub Actions deployment to the OCI VPS. Confirm Caddy HTTPS, `/healthz`, systemd restart recovery, and a DB-loss simulation that results in client re-registration and reminder re-sync. Run the 7-day pilot on the production URL; no public staging environment is created for MVP.
 
-Expected: build succeeds, health is 200 before and after restart, and the named volume remains.
+Expected: health is 200 before and after restart, pending notification jobs remain in PostgreSQL across restart, and client-local tasks remain intact after notification DB loss.
 
 **Step 6: Run final release checks**
 
@@ -1287,7 +1294,7 @@ Expected: all checks pass and only intended documentation/runtime files are stag
 **Step 7: Commit**
 
 ```powershell
-git add Dockerfile docker-compose.yml .dockerignore docs AGENTS.md 基本設計サマリ.md
+git add .github deploy docs AGENTS.md 基本設計サマリ.md
 git commit -m "docs: add deployment operations and mvp pilot"
 ```
 
@@ -1297,7 +1304,7 @@ Before claiming completion, answer each question with file/test evidence:
 
 1. Does every F-001–F-018 requirement have an implementation task and an acceptance test?
 2. Does every NF-001–NF-013 requirement have an automated or named manual verification?
-3. Can any code path serialize task text into an HTTP request, API log, SQLite row, or Push payload?
+3. Can any code path serialize task text into an HTTP request, API log, PostgreSQL row, or Push payload?
 4. Does the app remain useful when notification permission is denied, Push is late, or the API is down?
 5. Can a user return to the previous Today Review task and change the choice without an Undo toast?
 6. Is `今日の確認` centered independently from the left and right controls at supported widths?
@@ -1306,7 +1313,7 @@ Before claiming completion, answer each question with file/test evidence:
 9. Does backup round-trip all user data while excluding all device secrets?
 10. Are all environment variables, commands, error codes, IDs, and file paths consistent across code and documents?
 11. Are there any placeholders such as TODO/TBD/XXX or unexplained skipped tests?
-12. Does a clean clone pass install, migration, build, test, container start, restart, and health verification?
+12. Does a clean clone pass install, migration, build, test, approved deployment, systemd restart, and health verification?
 
 Run one last source scan:
 
@@ -1315,3 +1322,13 @@ rg -n "TODO|TBD|XXX|\.skip\(|\.only\(" . --glob '!node_modules/**' --glob '!dist
 ```
 
 Expected: no unresolved production placeholders, skipped tests, or focused tests.
+
+## Follow-up: configurable notification timing（2026-08-08）
+
+**Requirements:** F-014, F-018, NF-003, NF-004, NF-005, NF-007, NF-010, NF-013
+
+**Confirmed design:** Every active task can have anonymous `initial`, `deadline_before`, and `review` reservations. The initial and deadline-before delays are global device settings, both initially 60 minutes. Completion, archival, and unneeded actions cancel every reservation for that task. The API claims reservations up to `DEADLINE_DELIVERY_LEAD_SECONDS` (default 300) ahead of the current time so a five-minute poll can attempt delivery before the deadline. This does not guarantee OS delivery time.
+
+**Implementation steps:** Add a versioned local model migration, plan anonymous schedules in the domain package, rebuild reservation outbox after settings or task changes, preserve schedule kinds during error recovery, and cover the API prefetch window with fake-clock tests. No task title, task ID, deadline meaning, or history may cross the API boundary.
+
+**Open assumption:** Whether same-timestamp generic notifications should be coalesced is retained as 【想定】 until pilot feedback confirms the preferred behavior.

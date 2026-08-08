@@ -30,7 +30,7 @@ export type UpsertResult =
 export interface ReminderRepository {
   upsert(input: Omit<ReminderRecord, "status" | "attemptCount" | "claimedAt" | "sentAt" | "lastErrorCode" | "createdAt" | "updatedAt"> & { now: string }): Promise<UpsertResult>;
   cancel(deviceId: string, reminderId: string, now: string): Promise<"cancelled" | "missing">;
-  claimDue(now: string, limit: number): Promise<DueReminder[]>;
+  claimDue(now: string, limit: number, dueBefore?: string): Promise<DueReminder[]>;
   markSent(reminderId: string, claimedAt: string, now: string): Promise<void>;
   retry(reminderId: string, claimedAt: string, scheduledAt: string, attemptCount: number, now: string, errorCode: string): Promise<void>;
   fail(reminderId: string, claimedAt: string, attemptCount: number, now: string, errorCode: string): Promise<void>;
@@ -77,11 +77,11 @@ export class InMemoryReminderRepository implements ReminderRepository {
     return "cancelled";
   }
 
-  async claimDue(now: string, limit: number): Promise<DueReminder[]> {
+  async claimDue(now: string, limit: number, dueBefore = now): Promise<DueReminder[]> {
     const claimed: DueReminder[] = [];
     for (const job of this.jobs.values()) {
       const device = this.devices.get(job.deviceId);
-      if (claimed.length === limit || job.status !== "pending" || job.scheduledAt > now || !device || device.status !== "active") continue;
+      if (claimed.length === limit || job.status !== "pending" || job.scheduledAt > dueBefore || !device || device.status !== "active") continue;
       const record = { ...job, status: "claimed" as const, claimedAt: now, updatedAt: now };
       this.jobs.set(job.id, record);
       claimed.push({ ...record, subscription: { ...device.subscription } });
@@ -152,15 +152,15 @@ export class PgReminderRepository implements ReminderRepository {
     const owned = await this.pool.query("SELECT 1 FROM reminder_jobs WHERE id=$1 AND device_id=$2", [reminderId, deviceId]);
     return owned.rowCount ? "cancelled" : "missing";
   }
-  async claimDue(now: string, limit: number): Promise<DueReminder[]> {
+  async claimDue(now: string, limit: number, dueBefore = now): Promise<DueReminder[]> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       const result = await client.query<Row & DeviceRow>(
-        `WITH due AS (SELECT job.id FROM reminder_jobs job JOIN device_subscriptions device ON device.device_id=job.device_id WHERE job.status='pending' AND job.scheduled_at <= $1 AND device.status='active' ORDER BY job.scheduled_at FOR UPDATE OF job SKIP LOCKED LIMIT $2)
+        `WITH due AS (SELECT job.id FROM reminder_jobs job JOIN device_subscriptions device ON device.device_id=job.device_id WHERE job.status='pending' AND job.scheduled_at <= $2 AND device.status='active' ORDER BY job.scheduled_at FOR UPDATE OF job SKIP LOCKED LIMIT $3)
          UPDATE reminder_jobs job SET status='claimed', claimed_at=$1, updated_at=$1 FROM due, device_subscriptions device
          WHERE job.id=due.id AND device.device_id=job.device_id
-         RETURNING job.*, device.endpoint, device.p256dh, device.auth`, [now, limit],
+         RETURNING job.*, device.endpoint, device.p256dh, device.auth`, [now, dueBefore, limit],
       );
       await client.query("COMMIT");
       return result.rows.map((row) => ({ ...rowToRecord(row), subscription: { endpoint: row.endpoint, p256dh: row.p256dh, auth: row.auth } }));

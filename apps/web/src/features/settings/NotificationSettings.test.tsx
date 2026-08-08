@@ -107,6 +107,31 @@ describe("NotificationSettings", () => {
       ),
     ).not.toBeNull();
   });
+
+  it("saves global initial and deadline-before reminder timing locally", async () => {
+    const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now: "2026-08-04T08:00:00.000Z" });
+    const repository: AppRepository = {
+      load: async () => snapshot,
+      save: vi.fn().mockResolvedValue(undefined),
+      loadDraft: async () => "",
+      saveDraft: async () => undefined,
+      clearDraft: async () => undefined,
+    };
+    const user = userEvent.setup();
+    render(<NotificationSettings repository={repository} />);
+
+    const initial = await screen.findByLabelText("初回通知まで（分）");
+    const deadline = screen.getByLabelText("期限前通知（分）");
+    await user.clear(initial);
+    await user.type(initial, "90");
+    await user.clear(deadline);
+    await user.type(deadline, "45");
+    await user.click(screen.getByRole("button", { name: "通知タイミングを保存" }));
+
+    await waitFor(() => expect(repository.save).toHaveBeenCalledWith(expect.objectContaining({
+      settings: expect.objectContaining({ initialReminderDelayMinutes: 90, deadlineReminderLeadMinutes: 45 }),
+    })));
+  });
 });
 
 function memory(

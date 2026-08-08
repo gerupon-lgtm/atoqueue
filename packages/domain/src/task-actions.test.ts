@@ -272,4 +272,22 @@ describe("review task actions", () => {
 
     expect(next.notificationOutbox[0]).toMatchObject({ notificationType: "unset_due_review" });
   });
+
+  it("F-014 cancels every anonymous reminder for a completed task without exposing task data", () => {
+    const initial = snapshotWithSession([task("task-1", { dueAt: "2026-08-10T23:59:00.000Z", nextReviewAt: "2026-08-10T23:59:00.000Z" })]);
+    initial.settings.notificationEnabled = true;
+    initial.reminderMap = [
+      { reminderId: "initial-reminder", taskId: "task-1", kind: "initial", taskRevision: 1, createdAt: now },
+      { reminderId: "early-reminder", taskId: "task-1", kind: "deadline_before", taskRevision: 1, createdAt: now },
+      { reminderId: "deadline-reminder", taskId: "task-1", kind: "review", taskRevision: 1, createdAt: now },
+    ];
+
+    const next = answer(initial, "complete");
+
+    expect(next.reminderMap).toEqual([]);
+    expect(next.notificationOutbox).toHaveLength(3);
+    expect(next.notificationOutbox.every((item) => item.operation === "cancel")).toBe(true);
+    expect(JSON.stringify(next.notificationOutbox)).not.toContain("SECRET_TASK_TITLE");
+    expect(JSON.stringify(next.notificationOutbox)).not.toContain("task-1");
+  });
 });

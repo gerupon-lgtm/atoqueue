@@ -18,6 +18,7 @@ export interface TaskCandidatePageProps {
   confirmPastDate?: (date: string) => boolean;
   onReturn?: () => void;
   onCompleted?: () => void;
+  onNotificationChanged?: () => Promise<unknown>;
 }
 
 export function TaskCandidatePage({
@@ -28,6 +29,7 @@ export function TaskCandidatePage({
   confirmPastDate = defaultConfirmPastDate,
   onReturn,
   onCompleted,
+  onNotificationChanged,
 }: TaskCandidatePageProps) {
   const [title, setTitle] = useState("");
   const [captureBody, setCaptureBody] = useState("");
@@ -97,6 +99,7 @@ export function TaskCandidatePage({
           now: timestamp,
         }),
       );
+      void onNotificationChanged?.();
       (onReturn ?? onCompleted)?.();
     } catch {
       setError("タスクを保存できませんでした。もう一度お試しください。");

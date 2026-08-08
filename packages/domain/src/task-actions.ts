@@ -1,7 +1,9 @@
 import { resolveDueChoice, type DueResolution } from "./due-date";
 import { calculateNextReview } from "./reminder-policy";
 import { findNextReviewIndex, type ReviewCalendar } from "./review-session";
-import type { ActionEvent, AppSnapshot, NotificationOutboxItem, ReviewSession, Task } from "./model";
+import type { ActionEvent, AppSnapshot, ReviewSession, Task } from "./model";
+import { queueTaskNotifications } from "./notification-queue";
+export { notificationTypeForTask } from "./notification-schedule";
 
 export type ReviewAnswer = "complete" | "do_today" | "reschedule" | "no_due" | "dismiss" | "archive";
 
@@ -58,13 +60,18 @@ export function modifyTask(input: ModifyTaskInput): AppSnapshot {
     after: taskMetadata(updatedTask),
     occurredAt: input.now,
   };
-  const notification = queueNotification(input.snapshot, updatedTask, input);
+  const notification = queueTaskNotifications({
+    snapshot: input.snapshot,
+    task: updatedTask,
+    now: input.now,
+    createId: (kind) => createId(input, kind),
+  });
 
   return {
     ...input.snapshot,
     tasks: input.snapshot.tasks.map((candidate) => candidate.id === task.id ? updatedTask : candidate),
     actionHistory: [...input.snapshot.actionHistory, event],
-    notificationOutbox: [...input.snapshot.notificationOutbox, notification.outbox],
+    notificationOutbox: [...input.snapshot.notificationOutbox, ...notification.notificationOutbox],
     reminderMap: notification.reminderMap,
     savedAt: input.now,
   };
@@ -99,7 +106,12 @@ export function answerReview(input: AnswerReviewInput): AppSnapshot {
     occurredAt: input.now,
   };
   const tasks = input.snapshot.tasks.map((candidate) => candidate.id === task.id ? updatedTask : candidate);
-  const notification = queueNotification(input.snapshot, updatedTask, input);
+  const notification = queueTaskNotifications({
+    snapshot: input.snapshot,
+    task: updatedTask,
+    now: input.now,
+    createId: (kind) => createId(input, kind),
+  });
   const answeredTaskIds = unique([...session.answeredTaskIds, task.id]);
   const visitedTaskIds = unique([...session.visitedTaskIds, task.id]);
   const nextIndex = findNextReviewIndex({ ...session, answeredTaskIds }, tasks, currentIndex + 1);
@@ -118,7 +130,7 @@ export function answerReview(input: AnswerReviewInput): AppSnapshot {
     tasks,
     reviewSessions: input.snapshot.reviewSessions.map((candidate) => candidate.id === session.id ? updatedSession : candidate),
     actionHistory: [...input.snapshot.actionHistory, event],
-    notificationOutbox: [...input.snapshot.notificationOutbox, notification.outbox],
+    notificationOutbox: [...input.snapshot.notificationOutbox, ...notification.notificationOutbox],
     reminderMap: notification.reminderMap,
     savedAt: input.now,
   };
@@ -199,38 +211,6 @@ function applyDirectChange(task: Task, input: ModifyTaskInput): Task {
   return applyAnswer(task, reviewInput);
 }
 
-function queueNotification(snapshot: AppSnapshot, task: Task, input: IdInput): {
-  outbox: NotificationOutboxItem;
-  reminderMap: AppSnapshot["reminderMap"];
-} {
-  const existing = snapshot.reminderMap.find((entry) => entry.taskId === task.id);
-  const reminderId = existing?.reminderId ?? createId(input, "reminder");
-  const cancel = task.status === "completed" || task.status === "archived";
-  const outbox: NotificationOutboxItem = {
-    id: createId(input, "outbox"),
-    operation: cancel ? "cancel" : "upsert",
-    reminderId,
-    ...(!cancel ? { scheduledAt: task.nextReviewAt, notificationType: notificationTypeForTask(task) } : {}),
-    taskRevision: task.revision,
-    attemptCount: 0,
-    nextAttemptAt: input.now,
-    createdAt: input.now,
-  };
-  const entry = { reminderId, taskId: task.id, taskRevision: task.revision, createdAt: existing?.createdAt ?? input.now };
-  return {
-    outbox,
-    reminderMap: existing
-      ? snapshot.reminderMap.map((candidate) => candidate.reminderId === reminderId ? entry : candidate)
-      : [...snapshot.reminderMap, entry],
-  };
-}
-
-/** Maps local task state to the anonymous notification category. */
-export function notificationTypeForTask(task: Pick<Task, "dueMode">): NotificationOutboxItem["notificationType"] {
-  if (task.dueMode === "unset") return "unset_due_review";
-  if (task.dueMode === "scheduled") return "deadline_review";
-  return "task_review";
-}
 
 function actionFor(answer: ReviewAnswer): ActionEvent["action"] {
   switch (answer) {

@@ -83,6 +83,47 @@ describe("flushOutbox", () => {
     expect(queued.every((item) => item.id !== "outbox" && item.operation === "upsert" && item.attemptCount === 0)).toBe(true);
   });
 
+  it("keeps each anonymous schedule kind when an idempotency conflict rebuilds a scheduled task", async () => {
+    const initial = snapshotWithOutbox();
+    initial.settings = {
+      ...initial.settings,
+      notificationEnabled: true,
+      initialReminderDelayMinutes: 60,
+      deadlineReminderLeadMinutes: 60,
+    };
+    initial.tasks[0] = {
+      ...initial.tasks[0]!,
+      dueMode: "scheduled",
+      dueAt: "2026-08-05T12:00:00.000Z",
+      nextReviewAt: "2026-08-05T12:00:00.000Z",
+    };
+    initial.reminderMap = [
+      { reminderId: "22222222-2222-4222-8222-222222222222", taskId: "task", kind: "initial", taskRevision: 3, createdAt: now },
+      { reminderId: "33333333-3333-4333-8333-333333333333", taskId: "task", kind: "deadline_before", taskRevision: 3, createdAt: now },
+      { reminderId: "44444444-4444-4444-8444-444444444444", taskId: "task", kind: "review", taskRevision: 3, createdAt: now },
+    ];
+    const repository = memory(initial);
+
+    await flushOutbox({
+      repository,
+      now: () => now,
+      api: {
+        upsert: async () => { throw new NotificationApiError(409, undefined, "IDEMPOTENCY_CONFLICT"); },
+        cancel: async () => undefined,
+      },
+    });
+
+    expect((await repository.load()).notificationOutbox.map((item) => ({
+      reminderId: item.reminderId,
+      scheduledAt: item.scheduledAt,
+      notificationType: item.notificationType,
+    }))).toEqual([
+      { reminderId: "22222222-2222-4222-8222-222222222222", scheduledAt: "2026-08-04T09:00:00.000Z", notificationType: "task_review" },
+      { reminderId: "33333333-3333-4333-8333-333333333333", scheduledAt: "2026-08-05T11:00:00.000Z", notificationType: "deadline_review" },
+      { reminderId: "44444444-4444-4444-8444-444444444444", scheduledAt: "2026-08-05T12:00:00.000Z", notificationType: "deadline_review" },
+    ]);
+  });
+
   it("recalculates a rejected past schedule from the local reminder policy", async () => {
     const repository = memory(snapshotWithOutbox());
     const snapshot = await repository.load();
@@ -98,6 +139,24 @@ describe("flushOutbox", () => {
       taskRevision: 3,
     })]);
     expect((await repository.load()).notificationOutbox[0]?.id).not.toBe("outbox");
+  });
+
+  it("drops only a missed initial or deadline-before reservation instead of turning it into a review reminder", async () => {
+    const snapshot = snapshotWithOutbox();
+    snapshot.reminderMap[0] = { ...snapshot.reminderMap[0]!, kind: "initial" };
+    const repository = memory(snapshot);
+
+    await flushOutbox({
+      repository,
+      now: () => now,
+      api: {
+        upsert: async () => { throw new NotificationApiError(400, undefined, "INVALID_SCHEDULE"); },
+        cancel: async () => undefined,
+      },
+    });
+
+    expect((await repository.load()).notificationOutbox).toEqual([]);
+    expect((await repository.load()).reminderMap).toEqual([]);
   });
 
   it("preserves a local edit saved while a launch flush is awaiting the API", async () => {

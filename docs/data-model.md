@@ -40,7 +40,7 @@
 
 ```ts
 export interface AppSnapshot {
-  schemaVersion: 1;
+  schemaVersion: 3;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -70,6 +70,8 @@ export interface Settings {
   locale: "ja-JP";
   timeZone: string;
   notificationEnabled: boolean;
+  initialReminderDelayMinutes: number;
+  deadlineReminderLeadMinutes: number;
   quietHours?: { start: string; end: string };
   weeklyReviewDay: 0;
 }
@@ -137,7 +139,7 @@ export interface Task {
 ### 3.5 放置レベル
 
 ```ts
-export type NeglectLevel = 0 | 1 | 2 | 3;
+export type NeglectLevel = 0 | 1 | 2 | 3 | 4;
 ```
 
 放置レベルは保存せず、以下の順で毎回導出する。境界は初期値であり、7日間試用後に調整する（【想定】）。
@@ -146,8 +148,9 @@ export type NeglectLevel = 0 | 1 | 2 | 3;
 | ------ | ----------------------------------------------------------- | -------------------------------- |
 | 0      | 作成24時間未満、期限前、見送り0回                           | 軽く確認する                     |
 | 1      | 作成24時間以上、期限当日、見送り1回                         | 次の一手を選ばせる               |
-| 2      | 期限超過1〜6日、見送り2〜3回、期限未設定の再確認2回目       | 具体的な日付か処理を求める       |
-| 3      | 期限超過7日以上、見送り4回以上、期限未設定の再確認3回目以降 | 完了・再設定・不要を明確に決める |
+| 2      | 期限超過1〜3日、見送り1回、期限未設定の再確認2回目          | 経過事実と状態更新を促す         |
+| 3      | 期限超過4〜7日、見送り2回以上                               | 残すか判断するよう促す           |
+| 4      | 期限超過8日以上、延期・無反応が継続、期限未設定の再確認3回目以降 | 完了・再設定・不要を明確に決める |
 
 複数条件に該当する場合は最大レベルを採用する。OS通知を閉じた回数は取得できないため、`dismissCount` へ加算しない。
 
@@ -161,6 +164,8 @@ export interface ReviewSession {
   currentIndex: number;
   visitedTaskIds: string[];
   answeredTaskIds: string[];
+  /** このセッションの回答操作が作成した ActionEvent のID */
+  actionEventIds: string[];
   startedAt: string;
   updatedAt: string;
   completedAt?: string;
@@ -217,12 +222,13 @@ export interface NotificationOutboxItem {
 export interface ReminderMapEntry {
   reminderId: string;
   taskId: string;
+  kind: "initial" | "deadline_before" | "review";
   taskRevision: number;
   createdAt: string;
 }
 ```
 
-`reminderId` は推測困難なUUIDとする。サーバーは `taskId` を受け取らない。Push payloadの `reminderId` を端末側の `ReminderMapEntry` で解決する。解決できない場合は「今日の確認」全体を開く。
+`reminderId` は推測困難なUUIDとする。サーバーは `taskId` を受け取らない。Push payloadの `reminderId` を端末側の `ReminderMapEntry` で解決する。解決できない場合は「今日の確認」全体を開く。1タスクは `initial`、`deadline_before`、`review` の最大3件を持ち、完了・不要・保管時は全件を取消す。
 
 ## 4. リマインド計算規則
 
@@ -230,10 +236,10 @@ export interface ReminderMapEntry {
 
 | 操作                      | 次回確認                                     |
 | ------------------------- | -------------------------------------------- |
-| タスク化時に未回答        | 3日後の同時刻（【想定】）                    |
+| タスク化時に未回答        | 3日後の23:59（実装済み。再確認時刻は今後の試用で調整可能） |
 | 「まだ決めない」1〜2回目  | 3日後                                        |
 | 「まだ決めない」3回目以降 | 翌週日曜18:00（【想定】）                    |
-| 「期限なし」              | 期限設定確認は停止。通常の週次見直しだけ対象 |
+| 「期限なし」              | 期限設定確認は停止。次の日曜18:00の通常週次見直しだけ対象（日曜18:00以降なら翌週） |
 
 ### 4.2 期限超過または見送り
 
@@ -242,9 +248,17 @@ export interface ReminderMapEntry {
 | 1回目      | 1日後                     |
 | 2回目      | 3日後                     |
 | 3回目      | 7日後                     |
-| 4回目以降  | 翌週日曜18:00（【想定】） |
+| 4回目以降  | 7日後                     |
 
 期限を変更した場合は `dismissCount` を0へ戻す。完了・不要では通知予約を取消す。過去日を新期限として保存しようとした場合は確認を表示する。
+
+### 4.3 通知時刻（2026-08-08確定）
+
+- 【確定】初回通知は、利用者が設定した作成後の分数で予約する。初期値は60分。
+- 【確定】期限ありタスクは、利用者が設定した期限前の分数で予約する。初期値は60分。期限時は通常の `review` 予約を使う。
+- 【確定】設定は個別タスクではなく端末全体に適用し、変更時は有効タスクの匿名予約を再計算する。
+- 【確定】サーバーへ送るのは匿名予約ID、予定時刻、通知種別、端末IDだけであり、タスクID・本文・期限の意味は送らない。
+- 【想定】同一時刻に複数の予約が重なった場合の集約方針は、試用で過剰通知を確認してから調整する。
 
 ## 5. サーバーデータモデル
 
@@ -280,7 +294,36 @@ export interface ReminderMapEntry {
 | `created_at`        | TEXT      | UTC                                                     |
 | `updated_at`        | TEXT      | UTC                                                     |
 
-サーバーは単一稼働インスタンスを前提に30秒ごとに期限到来ジョブを取得する（【想定】）。将来水平分割する場合は、SQLiteから行ロック可能なDBへ移行する。
+### 5.3 reminder_idempotency_operations
+
+| 列                    | 型        | 制約・用途                                                        |
+| --------------------- | --------- | ----------------------------------------------------------------- |
+| `device_id`           | TEXT      | `device_subscriptions.device_id`、複合主キーの一部                |
+| `reminder_id`         | TEXT      | 匿名通知予約ID、複合主キーの一部                                 |
+| `idempotency_key`     | TEXT      | クライアント操作キー、複合主キーの一部                           |
+| `request_fingerprint` | TEXT      | 同一キーで異なる要求を409にする要求フィンガープリント            |
+| `response_body`       | TEXT      | 予約ID・予定時刻・通知種別などの最小応答JSON。タスク本文は含めない |
+| `created_at`          | TEXT      | UTC                                                               |
+
+主キーは `(device_id, reminder_id, idempotency_key)` とする。予約を後から全置換しても、この操作履歴の応答は変更しない。通知DB消失時は他の通知メタデータと同様に失われ、端末側の有効予約から再同期する。
+
+### 5.4 device_idempotency_operations
+
+| 列                    | 型        | 制約・用途                                                        |
+| --------------------- | --------- | ----------------------------------------------------------------- |
+| `device_id`           | TEXT      | `device_subscriptions.device_id` 外部キー、複合主キーの一部       |
+| `operation`           | TEXT      | `subscription_update` / `device_delete`、複合主キーの一部         |
+| `idempotency_key`     | TEXT      | クライアント操作キー、複合主キーの一部                            |
+| `request_fingerprint` | TEXT      | 同じキーで異なる要求を409にするSHA-256フィンガープリント          |
+| `response_status`     | INTEGER   | 再送時に返すHTTP結果コード                                        |
+| `response_body`       | TEXT NULL | 再送時に返す端末メタデータだけのJSON。タスク本文は保存しない       |
+| `created_at`          | TEXT      | UTC                                                               |
+
+端末購読の更新・無効化を再送安全にするサーバー専用メタデータであり、主キーは `(device_id, operation, idempotency_key)` とする。予約やタスク本文を保持せず、端末購読と同じ通知DBの保持・消失復旧方針に従う。
+
+サーバーはOCI VPS上の単一Fastify systemdサービスを前提に、専用PostgreSQL DB `atoqueue_notify` から5分ごとに期限到来ジョブを最大100件取得する。ジョブ取得はPostgreSQLのトランザクションと行ロックを用いて競合を防ぐ。`DEADLINE_DELIVERY_LEAD_SECONDS`（初期値300秒）だけ先の予約までclaimし、期限前に配送を試行する。専用ロールは `atoqueue_notify_app`、スキーマは既定 `public`（【想定】）とする。一時失敗は5分、15分、60分後に再試行し、3回失敗で `failed` にする。15分以上 `claimed` のジョブは起動時に `pending` へ戻す。
+
+通知DBはMVPで外部バックアップを構成しない。DB消失または端末認証が復旧不能になった場合、クライアントは保存済みのサーバー端末ID・シークレットを破棄して新規端末登録を行い、端末内の有効な `ReminderMap` から予約を再同期する。タスク本文などの端末内データはこの処理で失わない。
 
 ## 6. バックアップ形式
 
@@ -308,6 +351,8 @@ export interface BackupEnvelopeV1 {
 ## 7. 移行・破損時の扱い
 
 1. `schemaVersion` が既知なら純粋関数で段階移行する。
+   - v1 → v2: 各 `ReviewSession` に空の `actionEventIds` を追加する。既存の操作履歴を推測で再帰属しない。
+   - v2: `answeredTaskIds` は `orderedTaskIds` の部分集合、`actionEventIds` は実在する一意なタスク操作履歴であり、当該セッションの処理済みタスクを参照することを検証する。
 2. 新しい未知バージョンは上書きせず、読み取り停止とJSON退避を案内する。
 3. JSON解析失敗時は破損値を別キー `atoqueue:corrupt:<timestamp>` へ退避して初期化可否を確認する。
 4. 破損復旧や復元では元データを直ちに削除しない。

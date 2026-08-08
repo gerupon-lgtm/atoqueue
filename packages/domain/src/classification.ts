@@ -1,6 +1,7 @@
 import { AlreadyClassifiedError } from "./errors";
 import type { AppSnapshot, Capture, Task } from "./model";
 import type { DueResolution } from "./due-date";
+import { queueTaskNotifications, type NotificationIdFactory } from "./notification-queue";
 
 export interface ClassifyCaptureInput {
   snapshot: AppSnapshot;
@@ -13,6 +14,7 @@ export interface ConfirmTaskInput extends ClassifyCaptureInput {
   title: string;
   category?: Task["category"];
   due: DueResolution;
+  idFactory?: NotificationIdFactory;
 }
 
 export function suggestClassification(body: string): "task" | "unknown" {
@@ -54,11 +56,19 @@ export function confirmTask(input: ConfirmTaskInput): AppSnapshot {
     updatedAt: input.now,
     revision: 1,
   };
+  const notification = queueTaskNotifications({
+    snapshot: input.snapshot,
+    task,
+    now: input.now,
+    createId: input.idFactory,
+  });
 
   return {
     ...input.snapshot,
     captures: replaceCapture(input.snapshot, updatedCapture),
     tasks: [...input.snapshot.tasks, task],
+    notificationOutbox: [...input.snapshot.notificationOutbox, ...notification.notificationOutbox],
+    reminderMap: notification.reminderMap,
     actionHistory: [
       ...input.snapshot.actionHistory,
       captureClassificationEvent(updatedCapture, input.now),

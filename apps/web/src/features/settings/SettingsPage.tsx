@@ -11,7 +11,7 @@ export function SettingsPage({ repository, flushNotifications }: SettingsPagePro
   return <section aria-labelledby="settings-page-title">
     <h1 id="settings-page-title">設定</h1>
     <BackupSettings repository={repository} flushOutbox={flushNotifications} />
-    <NotificationSettings repository={repository} />
+    <NotificationSettings flushNotifications={flushNotifications} repository={repository} />
     <section aria-labelledby="app-information-title">
       <h2 id="app-information-title">アプリ情報</h2>
       <p>あとキュー</p>

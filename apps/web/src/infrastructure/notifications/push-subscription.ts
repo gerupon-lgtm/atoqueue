@@ -1,4 +1,7 @@
-import type { AppRepository } from "../../../../../packages/domain/src";
+import {
+  rebuildActiveTaskNotifications,
+  type AppRepository,
+} from "../../../../../packages/domain/src";
 import type { PushSubscription } from "../../../../../packages/contracts/src";
 import type { DeviceCredentials } from "./notification-api";
 
@@ -96,11 +99,12 @@ export async function enableNotifications(input: {
   }
 
   try {
-    await repository.save({
+    const savedAt = now();
+    const updated = {
       ...snapshot,
       device: {
         ...snapshot.device,
-        pushSubscriptionStatus: "granted",
+        pushSubscriptionStatus: "granted" as const,
         ...(registered
           ? {
               pushDeviceId: registered.deviceId,
@@ -110,8 +114,10 @@ export async function enableNotifications(input: {
           : {}),
       },
       settings: { ...snapshot.settings, notificationEnabled: true },
-      savedAt: now(),
-    });
+      savedAt,
+    };
+    const delivery = rebuildActiveTaskNotifications({ snapshot: updated, now: savedAt });
+    await repository.save({ ...updated, ...delivery });
     return { state: "granted" };
   } catch {
     return { state: "error", reason: "storage" };

@@ -1,4 +1,12 @@
-import { calculateNextReview, createLocalCalendar, notificationTypeForTask, type AppRepository, type AppSnapshot, type NotificationOutboxItem } from "../../../../../packages/domain/src";
+import {
+  calculateNextReview,
+  createLocalCalendar,
+  notificationTypeForTask,
+  planNotificationSchedules,
+  type AppRepository,
+  type AppSnapshot,
+  type NotificationOutboxItem,
+} from "../../../../../packages/domain/src";
 import { NotificationApiError, type DeviceCredentials } from "./notification-api";
 
 export interface OutboxApi {
@@ -116,6 +124,14 @@ function reschedule(snapshot: AppSnapshot, item: NotificationOutboxItem, now: st
   const mapping = snapshot.reminderMap.find((entry) => entry.reminderId === item.reminderId);
   const task = mapping && snapshot.tasks.find((candidate) => candidate.id === mapping.taskId);
   if (!task || task.status !== "active") return discard(snapshot, item);
+  // An elapsed initial/deadline-before slot must not be repurposed as a
+  // second review reminder.  The distinct review mapping remains queued.
+  if ((mapping.kind ?? "review") !== "review") {
+    return {
+      ...discard(snapshot, item),
+      reminderMap: snapshot.reminderMap.filter((entry) => entry.reminderId !== item.reminderId),
+    };
+  }
   const scheduledAt = calculateNextReview({
     now,
     dueMode: task.dueMode,
@@ -142,12 +158,18 @@ function renewIdempotencyKey(snapshot: AppSnapshot, _item: NotificationOutboxIte
   const active = snapshot.reminderMap.flatMap((mapping) => {
     const task = snapshot.tasks.find((candidate) => candidate.id === mapping.taskId);
     if (!task || task.status !== "active" || task.revision !== mapping.taskRevision) return [];
+    const schedule = planNotificationSchedules({
+      task,
+      settings: snapshot.settings,
+      now,
+    }).find((candidate) => candidate.kind === (mapping.kind ?? "review"));
+    if (!schedule) return [];
     return [{
       id: crypto.randomUUID(),
       operation: "upsert" as const,
       reminderId: mapping.reminderId,
-      scheduledAt: task.nextReviewAt,
-      notificationType: notificationTypeForTask(task),
+      scheduledAt: schedule.scheduledAt,
+      notificationType: schedule.notificationType,
       taskRevision: task.revision,
       attemptCount: 0,
       nextAttemptAt: now,

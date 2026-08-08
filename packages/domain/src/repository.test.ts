@@ -47,7 +47,7 @@ function snapshotWithReviewActionOwnership(): Record<string, unknown> {
 }
 
 describe("domain repository model", () => {
-  it("creates a version 2 empty snapshot from the supplied device context", () => {
+  it("creates a version 3 empty snapshot from the supplied device context", () => {
     expect(
       createEmptySnapshot({
         appVersion: "0.1.0",
@@ -56,7 +56,7 @@ describe("domain repository model", () => {
         now: "2026-08-03T00:00:00.000Z",
       }),
     ).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       appVersion: "0.1.0",
       device: {
         localDeviceId: "device-1",
@@ -78,13 +78,37 @@ describe("domain repository model", () => {
     });
   });
 
+  it("migrates version 2 notification records to explicit timing preferences and schedule kinds", () => {
+    const v2: unknown = {
+      ...createEmptySnapshot({
+        appVersion: "0.1.0",
+        localDeviceId: "device-1",
+        timeZone: "Asia/Tokyo",
+        now: "2026-08-03T00:00:00.000Z",
+      }),
+      schemaVersion: 2,
+      reminderMap: [{
+        reminderId: "reminder-1",
+        taskId: "task-1",
+        taskRevision: 1,
+        createdAt: "2026-08-03T00:00:00.000Z",
+      }],
+    };
+
+    expect(migrateSnapshot(v2)).toMatchObject({
+      schemaVersion: 3,
+      settings: { initialReminderDelayMinutes: 60, deadlineReminderLeadMinutes: 60 },
+      reminderMap: [{ kind: "review" }],
+    });
+  });
+
   it("rejects a stored future schema version", () => {
-    expect(() => migrateSnapshot({ schemaVersion: 3 })).toThrow(
+    expect(() => migrateSnapshot({ schemaVersion: 4 })).toThrow(
       UnsupportedSchemaVersionError,
     );
   });
 
-  it("migrates a complete version 1 snapshot to version 2 with empty review event ownership", () => {
+  it("migrates a complete version 1 snapshot through current schema with empty review event ownership", () => {
     const v1: unknown = {
       ...createEmptySnapshot({
         appVersion: "0.1.0",
@@ -106,7 +130,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v1)).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       reviewSessions: [{ id: "session-1", actionEventIds: [] }],
     });
   });
@@ -194,7 +218,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v1)).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       reviewSessions: [{
         orderedTaskIds: ["task-1", "task-2"],
         answeredTaskIds: ["task-1"],
