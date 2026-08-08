@@ -203,9 +203,9 @@ describe("TaskCandidatePage", () => {
     expect((screen.getByLabelText("タスク名") as HTMLInputElement).value).toBe(
       "牛乳を買い足す",
     );
-    expect((screen.getByLabelText("期限日（8桁）") as HTMLInputElement).value).toBe(
-      "20260802",
-    );
+    expect(
+      (screen.getByLabelText("期限日（8桁）") as HTMLInputElement).value,
+    ).toBe("2026/08/02");
   });
 
   it("F-007 explains that a deadline is chosen while turning an inbox item into a task", async () => {
@@ -222,7 +222,10 @@ describe("TaskCandidatePage", () => {
     fireEvent.change(screen.getByLabelText("期限"), {
       target: { value: "custom" },
     });
-    expect(screen.getByLabelText("期限日（8桁）")).toHaveProperty("type", "text");
+    expect(screen.getByLabelText("期限日（8桁）")).toHaveProperty(
+      "type",
+      "text",
+    );
   });
 
   it("F-007 lets the user choose a deadline time while turning a capture into a task", async () => {

@@ -113,12 +113,12 @@ describe("TaskDetailPage", () => {
     expect(screen.getByLabelText("期限の状態").textContent).toBe(
       "期限: 2026/8/2 23:59（期限超過）",
     );
-    expect(screen.getByLabelText("次の確認").textContent).toContain("次の確認");
+    expect(screen.queryByLabelText("次の確認")).toBeNull();
     expect(screen.getByLabelText("放置理由").textContent).toContain("放置理由");
     expect(screen.getByLabelText("登録日時").textContent).toBe(
       "登録日時: 2026/8/1 00:00",
     );
-    expect(screen.getByText("後回し")).toBeTruthy();
+    expect(screen.getByLabelText("放置理由").textContent).toContain("後回し");
   });
 
   it("F-015 shows a local due-today state rather than a generic scheduled state", async () => {
@@ -246,7 +246,7 @@ describe("TaskDetailPage", () => {
 
     await screen.findByDisplayValue("牛乳を買う");
     for (const control of document.querySelectorAll<HTMLElement>(
-      "select, input, button",
+      "select, input:not([aria-hidden=true]), button",
     )) {
       expect(getComputedStyle(control).minHeight).toBe("44px");
     }

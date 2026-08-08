@@ -1,4 +1,5 @@
 import type { ActionEvent } from "../../../../../packages/domain/src";
+import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 
 const labels: Record<ActionEvent["action"], string> = {
   capture_created: "記録を作成",
@@ -15,11 +16,26 @@ const labels: Record<ActionEvent["action"], string> = {
   backup_restored: "バックアップを復元",
 };
 
-export function ActionHistoryList({ events }: { events: readonly ActionEvent[] }) {
+export function ActionHistoryList({
+  events,
+  timeZone,
+}: {
+  events: readonly ActionEvent[];
+  timeZone: string;
+}) {
   if (events.length === 0) return <p>操作履歴はありません。</p>;
-  return <ol aria-label="操作履歴">
-    {[...events].sort((left, right) => left.occurredAt.localeCompare(right.occurredAt)).map((event) => (
-      <li key={event.id}><time dateTime={event.occurredAt}>{event.occurredAt}</time> — {labels[event.action]}</li>
-    ))}
-  </ol>;
+  return (
+    <ol aria-label="操作履歴">
+      {[...events]
+        .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
+        .map((event) => (
+          <li key={event.id}>
+            <time dateTime={event.occurredAt}>
+              {formatLocalDateTime(event.occurredAt, timeZone)}
+            </time>{" "}
+            — {labels[event.action]}
+          </li>
+        ))}
+    </ol>
+  );
 }

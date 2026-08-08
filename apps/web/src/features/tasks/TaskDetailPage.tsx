@@ -13,7 +13,11 @@ import { createReviewCalendar } from "../../infrastructure/review-calendar/revie
 import { ActionHistoryList } from "./ActionHistoryList";
 import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 import { formatLocalTime } from "../../presentation/format-local-time";
-import { DeadlineInputFields, dateFromDigits, timeFromDigits } from "./DeadlineInputFields";
+import {
+  DeadlineInputFields,
+  dateFromDigits,
+  timeFromDigits,
+} from "./DeadlineInputFields";
 
 const defaultNow = () => new Date().toISOString();
 
@@ -46,13 +50,16 @@ export function TaskDetailPage({
         setTitle(task.title);
         setCategory(task.category ?? "");
         setSelectedDueDate(
-          createLocalCalendar(value.settings.timeZone).today(
-            task.dueAt ?? now(),
-          ).replaceAll("-", ""),
+          createLocalCalendar(value.settings.timeZone)
+            .today(task.dueAt ?? now())
+            .replaceAll("-", ""),
         );
         setSelectedDueTime(
           task.dueAt
-            ? formatLocalTime(task.dueAt, value.settings.timeZone).replace(":", "")
+            ? formatLocalTime(task.dueAt, value.settings.timeZone).replace(
+                ":",
+                "",
+              )
             : "",
         );
         setDueTimeEnabled(Boolean(task.dueAt));
@@ -127,27 +134,53 @@ export function TaskDetailPage({
   return (
     <section aria-labelledby="task-detail-title">
       <h1 id="task-detail-title">タスクを修正</h1>
-      <p aria-label="元の記録">元の記録: {source?.body ?? "見つかりません"}</p>
-      <p aria-label="現在の状態">状態: {statusLabel(task.status)}</p>
-      <p aria-label="登録日時">
-        登録日時:{" "}
-        {formatLocalDateTime(task.createdAt, snapshot.settings.timeZone)}
-      </p>
-      <p aria-label="期限の状態">
-        期限:{" "}
-        {dueLabel(
-          task,
-          timestamp,
-          createLocalCalendar(snapshot.settings.timeZone),
-          snapshot.settings.timeZone,
-        )}
-      </p>
-      <p aria-label="次の確認">
-        次の確認:{" "}
-        {formatLocalDateTime(task.nextReviewAt, snapshot.settings.timeZone)}
-      </p>
-      <p aria-label="放置理由">放置理由: {neglectReason(level)}</p>
-      <section className="task-detail__section" aria-labelledby="task-detail-content-heading">
+      <section className="task-detail__summary" aria-label="タスクの概要">
+        <p className="task-detail__source" aria-label="元の記録">
+          元の記録: {source?.body ?? "見つかりません"}
+        </p>
+        <dl>
+          <div aria-label="現在の状態">
+            <dt>状態: </dt>
+            <dd>{statusLabel(task.status)}</dd>
+          </div>
+          <div aria-label="登録日時">
+            <dt>登録日時: </dt>
+            <dd>
+              {formatLocalDateTime(task.createdAt, snapshot.settings.timeZone)}
+            </dd>
+          </div>
+          <div aria-label="期限の状態">
+            <dt>期限: </dt>
+            <dd>
+              {dueLabel(
+                task,
+                timestamp,
+                createLocalCalendar(snapshot.settings.timeZone),
+                snapshot.settings.timeZone,
+              )}
+            </dd>
+          </div>
+          {task.nextReviewAt !== task.dueAt ? (
+            <div aria-label="次の確認">
+              <dt>次の確認: </dt>
+              <dd>
+                {formatLocalDateTime(
+                  task.nextReviewAt,
+                  snapshot.settings.timeZone,
+                )}
+              </dd>
+            </div>
+          ) : null}
+          <div aria-label="放置理由">
+            <dt>放置理由</dt>
+            <dd>{neglectReason(level)}</dd>
+          </div>
+        </dl>
+      </section>
+      <section
+        className="task-detail__section"
+        aria-labelledby="task-detail-content-heading"
+      >
         <h2 id="task-detail-content-heading">内容</h2>
         <label>
           タイトル
@@ -183,7 +216,10 @@ export function TaskDetailPage({
           内容を保存
         </button>
       </section>
-      <section className="task-detail__section" aria-labelledby="task-detail-deadline-heading">
+      <section
+        className="task-detail__section"
+        aria-labelledby="task-detail-deadline-heading"
+      >
         <h2 id="task-detail-deadline-heading">期限</h2>
         <DeadlineInputFields
           dateDigits={selectedDueDate}
@@ -218,30 +254,33 @@ export function TaskDetailPage({
         ) : null}
       </section>
       {task.status === "active" ? (
-        <section className="task-detail__section" aria-labelledby="task-detail-status-heading">
+        <section
+          className="task-detail__section"
+          aria-labelledby="task-detail-status-heading"
+        >
           <h2 id="task-detail-status-heading">状態</h2>
           <div className="task-detail__actions">
-          <button
-            style={touchTarget}
-            type="button"
-            onClick={() => void change({ type: "complete" })}
-          >
-            完了
-          </button>
-          <button
-            style={touchTarget}
-            type="button"
-            onClick={() => void change({ type: "dismiss" })}
-          >
-            後回し
-          </button>
-          <button
-            style={touchTarget}
-            type="button"
-            onClick={() => void change({ type: "archive" })}
-          >
-            アーカイブ
-          </button>
+            <button
+              style={touchTarget}
+              type="button"
+              onClick={() => void change({ type: "complete" })}
+            >
+              完了
+            </button>
+            <button
+              style={touchTarget}
+              type="button"
+              onClick={() => void change({ type: "dismiss" })}
+            >
+              後回し
+            </button>
+            <button
+              style={touchTarget}
+              type="button"
+              onClick={() => void change({ type: "archive" })}
+            >
+              アーカイブ
+            </button>
           </div>
         </section>
       ) : (
@@ -258,6 +297,7 @@ export function TaskDetailPage({
         events={snapshot.actionHistory.filter(
           (event) => event.entityType === "task" && event.entityId === taskId,
         )}
+        timeZone={snapshot.settings.timeZone}
       />
       {message ? <p role="alert">{message}</p> : null}
     </section>
