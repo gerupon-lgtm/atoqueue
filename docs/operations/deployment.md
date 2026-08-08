@@ -25,6 +25,19 @@ sudo -u atoqueue /opt/atoqueue/runtime/node/bin/node --version
 
 4. root 所有・`0600` の `/etc/atoqueue/notification-api.env` を作る。値は秘密管理から投入し、画面共有・シェル履歴・GitHub Actions のログへ出さない。
 
+VAPID 鍵を VPS で生成する場合は、既存のホストNode.jsではなく専用 runtime を先頭にした `PATH` と、`atoqueue-deploy` が読める作業ディレクトリを使う。
+
+```bash
+sudo -u atoqueue-deploy -H sh -c '
+  cd /home/atoqueue-deploy
+  PATH=/opt/atoqueue/runtime/node/bin:/usr/bin:/bin
+  export PATH
+  exec /opt/atoqueue/runtime/node/bin/corepack pnpm@10.20.0 dlx web-push@3.6.7 generate-vapid-keys
+'
+```
+
+表示される鍵値はこの端末でだけ控え、チャット・チケット・リポジトリ・ログへ貼り付けない。
+
 ```dotenv
 PORT=3030
 DATABASE_URL=postgresql://atoqueue_notify_app:REDACTED@localhost:5432/atoqueue_notify

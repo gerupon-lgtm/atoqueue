@@ -52,6 +52,7 @@ const requiredFragments = {
     "install -m 0600 /dev/null",
     "/opt/atoqueue/runtime/node/bin/node",
     "/opt/atoqueue/runtime/node/bin/corepack",
+    'PATH="$2:/usr/bin:/bin"',
   ],
   "deploy/scripts/install-atoqueue-node-runtime.sh": [
     "node_version=24.18.0",
@@ -158,6 +159,11 @@ for (const [relativePath, content] of [
 if (releaseScript.includes("runuser -u atoqueue-deploy -- corepack")) {
   failures.push(
     "deploy/scripts/deploy-release.sh: must not use the host Corepack runtime",
+  );
+}
+if (!releaseScript.includes('PATH="$2:/usr/bin:/bin"')) {
+  failures.push(
+    "deploy/scripts/deploy-release.sh: must run Corepack with the dedicated Node.js runtime first in PATH",
   );
 }
 
