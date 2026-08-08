@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+type AnswerAction = "complete" | "do_today" | "no_due" | "dismiss" | "archive";
+
 export interface ReviewActionSheetProps {
   disabled?: boolean;
   onAnswer: (
@@ -15,6 +17,12 @@ export function ReviewActionSheet({
 }: ReviewActionSheetProps) {
   const [isChoosingDate, setIsChoosingDate] = useState(false);
   const [date, setDate] = useState("");
+  const [pressedAction, setPressedAction] = useState<AnswerAction>();
+
+  function answer(action: AnswerAction): void {
+    setPressedAction(action);
+    onAnswer(action);
+  }
 
   if (isChoosingDate) {
     return (
@@ -53,17 +61,17 @@ export function ReviewActionSheet({
   return (
     <div aria-label="タスクの操作" className="reviewActionSheet">
       <button
-        className="reviewActionSheet__complete"
+        className={`reviewActionSheet__complete${pressedAction === "complete" ? " is-pressed" : ""}`}
         disabled={disabled}
-        onClick={() => onAnswer("complete")}
+        onClick={() => answer("complete")}
         type="button"
       >
         完了
       </button>
       <button
-        className="reviewActionSheet__today"
+        className={`reviewActionSheet__today${pressedAction === "do_today" ? " is-pressed" : ""}`}
         disabled={disabled}
-        onClick={() => onAnswer("do_today")}
+        onClick={() => answer("do_today")}
         type="button"
       >
         今日やる
@@ -77,25 +85,25 @@ export function ReviewActionSheet({
         日付を変える
       </button>
       <button
-        className="reviewActionSheet__no-due"
+        className={`reviewActionSheet__no-due${pressedAction === "no_due" ? " is-pressed" : ""}`}
         disabled={disabled}
-        onClick={() => onAnswer("no_due")}
+        onClick={() => answer("no_due")}
         type="button"
       >
         期限なし
       </button>
       <button
-        className="reviewActionSheet__dismiss"
+        className={`reviewActionSheet__dismiss${pressedAction === "dismiss" ? " is-pressed" : ""}`}
         disabled={disabled}
-        onClick={() => onAnswer("dismiss")}
+        onClick={() => answer("dismiss")}
         type="button"
       >
         今回は閉じる
       </button>
       <button
-        className="reviewActionSheet__archive"
+        className={`reviewActionSheet__archive${pressedAction === "archive" ? " is-pressed" : ""}`}
         disabled={disabled}
-        onClick={() => onAnswer("archive")}
+        onClick={() => answer("archive")}
         type="button"
       >
         不要

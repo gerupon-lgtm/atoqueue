@@ -52,28 +52,74 @@
 }
 
 .app-shell__content .reviewActionSheet__complete {
-  background: #1d5a4b;
-  border-color: #1d5a4b;
+  border-color: #1f7257;
+  background: #d6ebdd;
+  color: #14523e;
 }
 .app-shell__content .reviewActionSheet__today {
-  background: #176d73;
-  border-color: #176d73;
+  border-color: #aa620c;
+  background: #f4d6b0;
+  color: #713b00;
 }
 .app-shell__content .reviewActionSheet__reschedule {
-  background: #2f6078;
-  border-color: #2f6078;
+  border-color: #39699e;
+  background: #d8e4f5;
+  color: #214d80;
 }
 .app-shell__content .reviewActionSheet__no-due {
-  background: #68726d;
-  border-color: #68726d;
+  border-color: #68746b;
+  background: #e4e8e3;
+  color: #46554d;
 }
 .app-shell__content .reviewActionSheet__dismiss {
-  background: #76623a;
-  border-color: #76623a;
+  border-color: #896f3d;
+  background: #ece3cf;
+  color: #614a1f;
 }
 .app-shell__content .reviewActionSheet__archive {
-  background: #8e4b46;
-  border-color: #8e4b46;
+  border-color: #9b514c;
+  background: #f0d9d6;
+  color: #703832;
+}
+
+.app-shell__content .reviewActionSheet__complete:is(:active, .is-pressed) {
+  border-color: #1f7257;
+  background: #1f7257;
+  color: #fff;
+}
+.app-shell__content .reviewActionSheet__today:is(:active, .is-pressed) {
+  border-color: #aa620c;
+  background: #aa620c;
+  color: #fff;
+}
+.app-shell__content .reviewActionSheet__reschedule:active {
+  border-color: #39699e;
+  background: #39699e;
+  color: #fff;
+}
+.app-shell__content .reviewActionSheet__no-due:is(:active, .is-pressed) {
+  border-color: #68746b;
+  background: #68746b;
+  color: #fff;
+}
+.app-shell__content .reviewActionSheet__dismiss:is(:active, .is-pressed) {
+  border-color: #896f3d;
+  background: #896f3d;
+  color: #fff;
+}
+.app-shell__content .reviewActionSheet__archive:is(:active, .is-pressed) {
+  border-color: #9b514c;
+  background: #9b514c;
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-shell__content .reviewActionSheet button {
+    transition:
+      background-color 90ms ease,
+      border-color 90ms ease,
+      color 90ms ease;
+  }
 }
 
 @media (min-width: 768px) {

@@ -178,6 +178,8 @@ body {
 .deadline-input-fields__toggle {
   grid-template-columns: auto 1fr;
   align-items: center;
+  font-size: 1.0625rem;
+  font-weight: 700;
 }
 
 .deadline-input-fields__toggle input {
@@ -187,25 +189,28 @@ body {
 }
 
 .deadline-input-fields__input-with-picker {
-  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .deadline-input-fields__input-with-picker input {
-  padding-right: 3.25rem;
+  min-width: 0;
+  padding-right: 0.75rem;
+  font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums;
 }
 
-.deadline-input-fields__picker-button {
-  position: absolute;
-  top: 50%;
-  right: 0.25rem;
-  width: 2.5rem;
-  min-width: 2.5rem;
-  min-height: 2.5rem;
+.app-shell__content .deadline-input-fields__picker-button {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
-  transform: translateY(-50%);
-  border: 0;
-  background: transparent;
-  color: #1d5a4b;
+  border: 1px solid #b8c8bc;
+  border-radius: 0.55rem;
+  background: #fff;
+  color: #285c50;
 }
 
 .deadline-input-fields__picker-button svg {
@@ -219,12 +224,22 @@ body {
 }
 
 .deadline-input-fields__native-picker {
-  position: absolute;
+  position: fixed;
   width: 1px;
   height: 1px;
   overflow: hidden;
   opacity: 0;
   pointer-events: none;
+}
+
+.deadline-input-fields > label[for$="-time-digits"] {
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.deadline-input-fields > p {
+  font-size: 0.9375rem;
+  line-height: 1.5;
 }
 
 .app-shell__content button {
