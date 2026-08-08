@@ -333,11 +333,27 @@ body {
   margin-top: 0;
 }
 
+.task-detail__content-actions,
+.task-detail__single-action {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.task-detail__status-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .app-shell__content .task-detail__actions button {
   width: 100%;
   min-width: 0;
   padding-inline: 0.5rem;
   text-align: center;
+}
+
+.app-shell__content .task-detail__status-actions button {
+  padding-inline: 0.25rem;
+  font-size: 0.875rem;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .app-shell__content .task-detail__content-save,
@@ -404,8 +420,18 @@ body {
   color: #fff;
 }
 
+@media (max-width: 359px) {
+  .task-detail__status-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .task-detail__status-actions .task-detail__archive {
+    grid-column: 1 / -1;
+  }
+}
+
 .app-shell__content .task-detail__reopen {
-  margin-top: -0.25rem;
+  margin-top: 0;
 }
 
 .app-shell__content button {

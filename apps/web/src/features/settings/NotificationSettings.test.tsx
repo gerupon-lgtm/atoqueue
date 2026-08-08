@@ -227,6 +227,23 @@ describe("NotificationSettings", () => {
       ),
     ).toBeTruthy();
   });
+
+  it("keeps timing changes separate from the browser notification setup action", async () => {
+    render(<NotificationSettings repository={memory()} />);
+
+    const saveTiming = await screen.findByRole("button", {
+      name: "通知タイミングを保存",
+    });
+    const configure = screen.getByRole("button", { name: "通知を設定する" });
+
+    expect(saveTiming.closest(".notification-settings__timing")).not.toBeNull();
+    expect(
+      configure.closest(".notification-settings__device-setup"),
+    ).not.toBeNull();
+    expect(
+      saveTiming.closest(".notification-settings__device-setup"),
+    ).toBeNull();
+  });
 });
 
 function memory(

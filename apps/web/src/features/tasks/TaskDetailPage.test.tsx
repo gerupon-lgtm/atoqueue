@@ -274,4 +274,32 @@ describe("TaskDetailPage", () => {
       "deadline-input-fields__toggle",
     );
   });
+
+  it("keeps content, deadline, and status actions in deliberate button groups", async () => {
+    const { repository } = repositoryWithTask();
+    render(
+      <TaskDetailPage
+        now={() => now}
+        repository={repository}
+        taskId="task-1"
+      />,
+    );
+
+    await screen.findByDisplayValue("牛乳を買う");
+    expect(
+      screen
+        .getByRole("button", { name: "内容を保存" })
+        .closest(".task-detail__content-actions"),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "期限を保存" })
+        .closest(".task-detail__deadline-actions"),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "完了" })
+        .closest(".task-detail__status-actions"),
+    ).not.toBeNull();
+  });
 });

@@ -11,14 +11,29 @@
 .notification-settings__timing {
   display: grid;
   gap: 0.625rem;
-  padding: 0.875rem;
-  border: 1px solid #c6d0c8;
-  border-radius: 0.75rem;
-  background: #fffdf8;
+  padding: 0;
 }
 
 .notification-settings__timing > h2,
 .notification-settings__timing > p {
+  margin: 0;
+}
+
+.notification-settings__timing > button,
+.notification-settings__device-setup > button {
+  justify-self: start;
+  margin: 0;
+}
+
+.notification-settings__device-setup {
+  display: grid;
+  gap: 0.625rem;
+  margin-top: 0.125rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid #c6d0c8;
+}
+
+.notification-settings__device-setup > p {
   margin: 0;
 }
 

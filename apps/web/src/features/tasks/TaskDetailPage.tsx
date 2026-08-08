@@ -219,16 +219,18 @@ export function TaskDetailPage({
             <option value="other">その他</option>
           </select>
         </label>
-        <button
-          className="task-detail__content-save"
-          style={touchTarget}
-          type="button"
-          onClick={() =>
-            void change({ type: "edit", title, category: category || null })
-          }
-        >
-          内容を保存
-        </button>
+        <div className="task-detail__actions task-detail__content-actions">
+          <button
+            className="task-detail__content-save"
+            style={touchTarget}
+            type="button"
+            onClick={() =>
+              void change({ type: "edit", title, category: category || null })
+            }
+          >
+            内容を保存
+          </button>
+        </div>
       </section>
       <section
         className="task-detail__section"
@@ -249,7 +251,7 @@ export function TaskDetailPage({
           timeEnabled={dueTimeEnabled}
         />
         {task.status === "active" ? (
-          <div className="task-detail__actions">
+          <div className="task-detail__actions task-detail__deadline-actions">
             <button
               className="task-detail__deadline-save"
               style={touchTarget}
@@ -275,7 +277,7 @@ export function TaskDetailPage({
           aria-labelledby="task-detail-status-heading"
         >
           <h2 id="task-detail-status-heading">状態</h2>
-          <div className="task-detail__actions">
+          <div className="task-detail__actions task-detail__status-actions">
             <button
               className="task-detail__complete"
               style={touchTarget}
@@ -303,14 +305,16 @@ export function TaskDetailPage({
           </div>
         </section>
       ) : (
-        <button
-          className="task-detail__reopen"
-          style={touchTarget}
-          type="button"
-          onClick={() => void change({ type: "reopen" })}
-        >
-          再開
-        </button>
+        <div className="task-detail__actions task-detail__single-action">
+          <button
+            className="task-detail__reopen"
+            style={touchTarget}
+            type="button"
+            onClick={() => void change({ type: "reopen" })}
+          >
+            再開
+          </button>
+        </div>
       )}
       <h2>操作履歴</h2>
       <ActionHistoryList

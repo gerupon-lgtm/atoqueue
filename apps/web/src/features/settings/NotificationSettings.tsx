@@ -255,51 +255,54 @@ export function NotificationSettings({
           通知タイミングを保存
         </button>
       </section>
-      <button
-        disabled={busy || state === "denied"}
-        onClick={() => void configure()}
-        type="button"
-      >
-        通知を設定する
-      </button>
-      <p className="notification-settings__setup-note">
-        通知を受けるには、このボタンを最初に一度押して端末登録を完了する必要があります。
-      </p>
-      {state === "granted" ? <p role="status">通知を設定しました。</p> : null}
-      {state === "granted" && hasRegisteredDevice ? (
-        <>
-          <p className="notification-settings__device-status">
-            この端末は通知サービスに登録済みです。
-          </p>
-          {registeredAt && timeZone ? (
-            <p
-              aria-label="通知の端末登録日時"
-              className="notification-settings__device-status"
-            >
-              通知の端末登録日時: {formatLocalDateTime(registeredAt, timeZone)}
+      <div className="notification-settings__device-setup">
+        <button
+          disabled={busy || state === "denied"}
+          onClick={() => void configure()}
+          type="button"
+        >
+          通知を設定する
+        </button>
+        <p className="notification-settings__setup-note">
+          通知を受けるには、このボタンを最初に一度押して端末登録を完了する必要があります。
+        </p>
+        {state === "granted" ? <p role="status">通知を設定しました。</p> : null}
+        {state === "granted" && hasRegisteredDevice ? (
+          <>
+            <p className="notification-settings__device-status">
+              この端末は通知サービスに登録済みです。
             </p>
-          ) : null}
-        </>
-      ) : null}
-      {state === "denied" ? (
-        <p role="alert">ブラウザの設定から通知を許可してください。</p>
-      ) : null}
-      {state === "unavailable" ? (
-        <p role="alert">
-          このブラウザでは通知を利用できません。アプリを開いて今日の確認を使えます。
-        </p>
-      ) : null}
-      {state === "error" ? (
-        <p role="alert">
-          通知の設定を完了できませんでした。後でもう一度お試しください。
-        </p>
-      ) : null}
-      {state === "stale" ? (
-        <p role="alert">通知を再設定してください。</p>
-      ) : null}
-      {state === "diagnostic_error" ? (
-        <p role="alert">{errorMessage(errorReason)}</p>
-      ) : null}
+            {registeredAt && timeZone ? (
+              <p
+                aria-label="通知の端末登録日時"
+                className="notification-settings__device-status"
+              >
+                通知の端末登録日時:{" "}
+                {formatLocalDateTime(registeredAt, timeZone)}
+              </p>
+            ) : null}
+          </>
+        ) : null}
+        {state === "denied" ? (
+          <p role="alert">ブラウザの設定から通知を許可してください。</p>
+        ) : null}
+        {state === "unavailable" ? (
+          <p role="alert">
+            このブラウザでは通知を利用できません。アプリを開いて今日の確認を使えます。
+          </p>
+        ) : null}
+        {state === "error" ? (
+          <p role="alert">
+            通知の設定を完了できませんでした。後でもう一度お試しください。
+          </p>
+        ) : null}
+        {state === "stale" ? (
+          <p role="alert">通知を再設定してください。</p>
+        ) : null}
+        {state === "diagnostic_error" ? (
+          <p role="alert">{errorMessage(errorReason)}</p>
+        ) : null}
+      </div>
       <section
         className="notification-settings__device-check"
         aria-labelledby="device-check-title"
