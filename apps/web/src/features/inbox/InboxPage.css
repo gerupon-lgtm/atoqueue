@@ -1,8 +1,8 @@
 .inbox-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.5rem;
-  width: min(100%, 18rem);
+  width: 100%;
 }
 
 .app-shell__content .inbox-tabs__tab {
@@ -22,4 +22,21 @@
   color: #285c50;
   font-size: 0.875rem;
   line-height: 1.4;
+}
+
+.inbox-item__unneeded-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+
+.app-shell__content .inbox-item__unneeded-actions button {
+  width: 100%;
+  text-align: center;
+}
+
+.app-shell__content .inbox-item__delete {
+  border-color: #a75b52;
+  background: #f4d8d4;
+  color: #6f211b;
 }

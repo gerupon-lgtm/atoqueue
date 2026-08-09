@@ -12,6 +12,7 @@ import {
   createCapture,
   createEmptySnapshot,
   markAsNote,
+  markAsUnneeded,
   type AppRepository,
 } from "../../../../../packages/domain/src";
 import { InboxPage } from "./InboxPage";
@@ -81,8 +82,139 @@ function repositoryWithNotes(): AppRepository {
   };
 }
 
+function repositoryWithAllClassifications(): AppRepository {
+  let snapshot = createEmptySnapshot({
+    appVersion: "0.1.0",
+    localDeviceId: "device-1",
+    timeZone: "Asia/Tokyo",
+    now,
+  });
+  snapshot = createCapture(
+    snapshot,
+    "未整理の記録",
+    "2026-08-01T09:00:00.000Z",
+    "capture-unclassified",
+  );
+  snapshot = createCapture(
+    snapshot,
+    "メモの記録",
+    "2026-08-02T09:00:00.000Z",
+    "capture-note",
+  );
+  snapshot = markAsNote({ snapshot, captureId: "capture-note", now });
+  snapshot = createCapture(
+    snapshot,
+    "不要な記録",
+    "2026-08-03T09:00:00.000Z",
+    "capture-unneeded",
+  );
+  snapshot = markAsUnneeded({ snapshot, captureId: "capture-unneeded", now });
+  snapshot = createCapture(
+    snapshot,
+    "タスクの記録",
+    "2026-08-04T09:00:00.000Z",
+    "capture-task",
+  );
+  snapshot.captures = snapshot.captures.map((capture) =>
+    capture.id === "capture-task"
+      ? {
+          ...capture,
+          classification: "task",
+          linkedTaskId: "task-1",
+          classifiedAt: now,
+        }
+      : capture,
+  );
+
+  return {
+    load: vi.fn().mockImplementation(async () => snapshot),
+    save: vi.fn().mockImplementation(async (next) => {
+      snapshot = next;
+    }),
+    loadDraft: vi.fn().mockResolvedValue(""),
+    saveDraft: vi.fn().mockResolvedValue(undefined),
+    clearDraft: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe("InboxPage", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("F-004 offers all four capture-history tabs and starts with unclassified", async () => {
+    render(<InboxPage repository={repositoryWithCaptures()} />);
+
+    expect(await screen.findByRole("tab", { name: "すべて" })).toBeTruthy();
+    expect(
+      screen.getByRole("tab", { name: "未整理" }).getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(screen.getByRole("tab", { name: "メモ" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "不要" })).toBeTruthy();
+  });
+
+  it("F-004 shows every capture classification once in the all tab", async () => {
+    render(<InboxPage repository={repositoryWithAllClassifications()} />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "すべて" }));
+
+    const items = await screen.findAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      expect.stringContaining("タスクの記録"),
+      expect.stringContaining("不要な記録"),
+      expect.stringContaining("メモの記録"),
+      expect.stringContaining("未整理の記録"),
+    ]);
+  });
+
+  it("F-006 opens a task-classified capture through its linked task", async () => {
+    const onTaskOpen = vi.fn();
+    render(
+      <InboxPage
+        onTaskOpen={onTaskOpen}
+        repository={repositoryWithAllClassifications()}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("tab", { name: "すべて" }));
+    fireEvent.click(screen.getByRole("button", { name: "タスクを開く" }));
+
+    expect(onTaskOpen).toHaveBeenCalledWith("task-1");
+  });
+
+  it("F-006 restores an unneeded capture and synchronizes its rebuilt reminders", async () => {
+    const repository = repositoryWithAllClassifications();
+    const sync = vi.fn().mockResolvedValue(undefined);
+    render(<InboxPage now={() => now} repository={repository} sync={sync} />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "不要" }));
+    fireEvent.click(screen.getByRole("button", { name: "未整理に戻す" }));
+
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect(sync).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("不要な記録")).toBeNull();
+  });
+
+  it("F-006 permanently deletes an unneeded capture only after confirmation", async () => {
+    const repository = repositoryWithAllClassifications();
+    const confirm = vi
+      .fn()
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    const sync = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("confirm", confirm);
+    render(<InboxPage now={() => now} repository={repository} sync={sync} />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "不要" }));
+    fireEvent.click(screen.getByRole("button", { name: "完全削除" }));
+    expect(repository.save).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "完全削除" }));
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect(sync).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("不要な記録")).toBeNull();
+  });
 
   it("does not leave an empty list card below the inbox empty state", async () => {
     const empty = createEmptySnapshot({
@@ -145,6 +277,44 @@ describe("InboxPage", () => {
 
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
     expect(screen.queryByText("新しい記録")).toBeNull();
+  });
+
+  it("F-014 saves an unneeded classification before immediately synchronizing its cancellation", async () => {
+    const repository = repositoryWithCaptures();
+    const sync = vi.fn().mockResolvedValue(undefined);
+    render(<InboxPage now={() => now} repository={repository} sync={sync} />);
+
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "不要" }))[0]!,
+    );
+
+    await waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
+    expect(repository.save).toHaveBeenCalledTimes(1);
+    expect(
+      (repository.save as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
+    ).toBeLessThan(sync.mock.invocationCallOrder[0]!);
+  });
+
+  it("F-014 keeps the unneeded classification and reports a queued cancellation when sync fails", async () => {
+    const repository = repositoryWithCaptures();
+    const sync = vi.fn().mockRejectedValue(new Error("offline"));
+    render(<InboxPage now={() => now} repository={repository} sync={sync} />);
+
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "不要" }))[0]!,
+    );
+
+    expect((await screen.findByRole("status")).textContent).toBe(
+      "不要にしました。通知の取消は送信待ちです。",
+    );
+    expect(
+      (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].captures,
+    ).toContainEqual(
+      expect.objectContaining({
+        id: "capture-new",
+        classification: "unneeded",
+      }),
+    );
   });
 
   it("F-004 persists an inline edit through the repository without changing classification", async () => {
@@ -211,7 +381,7 @@ describe("InboxPage", () => {
     ).toEqual(["unclassified", "note"]);
   });
 
-  it("F-006 shows notes oldest first and routes a chosen note to the task candidate", async () => {
+  it("F-006 shows notes newest first and routes a chosen note to the task candidate", async () => {
     const onTaskCandidate = vi.fn();
     render(
       <InboxPage
@@ -224,12 +394,12 @@ describe("InboxPage", () => {
 
     const items = await screen.findAllByRole("listitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      expect.stringContaining("最も古いメモ"),
       expect.stringContaining("新しいメモ"),
+      expect.stringContaining("最も古いメモ"),
     ]);
     fireEvent.click(
       screen.getAllByRole("button", { name: "タスクにする" })[0]!,
     );
-    expect(onTaskCandidate).toHaveBeenCalledWith("note-old");
+    expect(onTaskCandidate).toHaveBeenCalledWith("note-new");
   });
 });
