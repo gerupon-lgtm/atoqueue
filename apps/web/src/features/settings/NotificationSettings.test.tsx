@@ -212,7 +212,7 @@ describe("NotificationSettings", () => {
     );
   });
 
-  it("shows the active time zone and explains the five-minute delivery check", async () => {
+  it("shows the active time zone and explains that delivery time is not guaranteed", async () => {
     render(<NotificationSettings repository={memory()} />);
 
     expect(
@@ -220,6 +220,18 @@ describe("NotificationSettings", () => {
     ).toContain("Asia/Tokyo");
     expect(
       screen.getByText(/通知サーバーは最大5分ごとに配送対象を確認します/),
+    ).toBeTruthy();
+    expect(screen.getByText(/通知時刻は目安です/)).toBeTruthy();
+    expect(
+      screen.getByText(/指定した時刻どおりの到達は保証できません/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /端末やOS・ブラウザの状態、省電力設定、通信状態、集中モード/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/アプリを開いたときの確認も併用してください/),
     ).toBeTruthy();
     expect(
       screen.getByText(
