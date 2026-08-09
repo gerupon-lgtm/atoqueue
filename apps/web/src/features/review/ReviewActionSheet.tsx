@@ -106,7 +106,7 @@ export function ReviewActionSheet({
         onClick={() => answer("archive")}
         type="button"
       >
-        不要
+        アーカイブ
       </button>
     </div>
   );

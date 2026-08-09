@@ -9,7 +9,7 @@ const actionLabels = {
   task_rescheduled: "期限変更",
   task_marked_no_due: "期限なし",
   task_dismissed: "見送り",
-  task_archived: "不要",
+  task_archived: "アーカイブ",
 } as const;
 
 export function ReviewResultPage({ repository }: ReviewResultPageProps) {
@@ -47,5 +47,9 @@ export function ReviewResultPage({ repository }: ReviewResultPageProps) {
 }
 
 function statusLabel(status: "active" | "completed" | "archived"): string {
-  return status === "completed" ? "完了" : status === "archived" ? "不要" : "対応中";
+  return status === "completed"
+    ? "完了"
+    : status === "archived"
+      ? "アーカイブ"
+      : "対応中";
 }

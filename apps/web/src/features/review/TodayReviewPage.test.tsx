@@ -120,6 +120,8 @@ describe("TodayReviewPage", () => {
       screen.getByTestId("review-progress").closest(".reviewTaskCard"),
     ).not.toBeNull();
     expect(screen.getByText("タスク one")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "アーカイブ" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "不要" })).toBeNull();
   });
 
   it("F-012 advances immediately after an answer, then lets the previous task be answered again", async () => {

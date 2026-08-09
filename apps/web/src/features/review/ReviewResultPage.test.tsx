@@ -14,11 +14,13 @@ function repositoryWithResult(): AppRepository {
     tasks: [
       { id: "one", sourceCaptureId: "capture-one", title: "タスク one", status: "completed", dueMode: "none", nextReviewAt: now, undecidedCount: 0, dismissCount: 0, postponeCount: 0, createdAt: now, updatedAt: now, completedAt: now, revision: 2 },
       { id: "two", sourceCaptureId: "capture-two", title: "タスク two", status: "active", dueMode: "none", nextReviewAt: now, undecidedCount: 0, dismissCount: 0, postponeCount: 0, createdAt: now, updatedAt: now, revision: 2 },
+      { id: "three", sourceCaptureId: "capture-three", title: "タスク three", status: "archived", dueMode: "none", nextReviewAt: now, undecidedCount: 0, dismissCount: 0, postponeCount: 0, createdAt: now, updatedAt: now, archivedAt: now, revision: 2 },
     ],
-    reviewSessions: [{ id: "session-1", localDate: "2026-08-03", orderedTaskIds: ["one", "two"], currentIndex: 2, visitedTaskIds: ["one", "two"], answeredTaskIds: ["one", "two"], actionEventIds: ["event-1", "event-2"], startedAt: now, updatedAt: now, completedAt: now }],
+    reviewSessions: [{ id: "session-1", localDate: "2026-08-03", orderedTaskIds: ["one", "two", "three"], currentIndex: 3, visitedTaskIds: ["one", "two", "three"], answeredTaskIds: ["one", "two", "three"], actionEventIds: ["event-1", "event-2", "event-3"], startedAt: now, updatedAt: now, completedAt: now }],
     actionHistory: [
       { id: "event-1", entityType: "task", entityId: "one", action: "task_completed", occurredAt: now },
       { id: "event-2", entityType: "task", entityId: "two", action: "task_marked_no_due", occurredAt: now },
+      { id: "event-3", entityType: "task", entityId: "three", action: "task_archived", occurredAt: now },
     ],
   };
   return { load: async () => snapshot, save: async (next) => { snapshot = next; }, loadDraft: async () => "", saveDraft: async () => undefined, clearDraft: async () => undefined };
@@ -32,6 +34,8 @@ describe("ReviewResultPage", () => {
 
     expect(await screen.findByText("完了: 1件")).toBeTruthy();
     expect(screen.getByText("期限なし: 1件")).toBeTruthy();
+    expect(screen.getByText("アーカイブ: 1件")).toBeTruthy();
+    expect(screen.getByText("タスク three — アーカイブ")).toBeTruthy();
     expect(screen.getByRole("link", { name: "タスク oneを修正" }).getAttribute("href")).toBe("/tasks/one");
     expect(screen.getByRole("link", { name: "タスク twoを修正" }).getAttribute("href")).toBe("/tasks/two");
     expect(screen.getByRole("link", { name: "タスク一覧を見る" }).getAttribute("href")).toBe("/tasks");
