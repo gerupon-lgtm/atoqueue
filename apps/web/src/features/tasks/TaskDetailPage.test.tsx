@@ -131,6 +131,19 @@ describe("TaskDetailPage", () => {
     expect(getComputedStyle(control).minHeight).toBe("44px");
   });
 
+  it("keeps a removed custom category selectable as a historical label", async () => {
+    const { repository } = repositoryWithTask({ category: "旧分類" });
+    render(
+      <TaskDetailPage now={() => now} repository={repository} taskId="task-1" />,
+    );
+
+    const category = await screen.findByLabelText("カテゴリ");
+    expect((category as HTMLSelectElement).value).toBe("旧分類");
+    expect(
+      screen.getByRole("option", { name: "旧分類（過去）" }),
+    ).toBeTruthy();
+  });
+
   it("F-015 shows source, current/due/review state, derived neglect reason, and chronological history", async () => {
     const { repository } = repositoryWithTask();
     render(

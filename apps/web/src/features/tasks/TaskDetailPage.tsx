@@ -18,6 +18,7 @@ import {
   dateFromDigits,
   timeFromDigits,
 } from "./DeadlineInputFields";
+import { taskCategoryOptions } from "./task-category-options";
 
 const defaultNow = () => new Date().toISOString();
 
@@ -138,6 +139,7 @@ export function TaskDetailPage({
   const source = snapshot.captures.find(
     (capture) => capture.id === task.sourceCaptureId,
   );
+  const categoryOptions = taskCategoryOptions(snapshot);
   const applyDue = async (type: "reschedule" | "no_due") => {
     if (type === "no_due")
       return change(
@@ -259,10 +261,11 @@ export function TaskDetailPage({
             }}
           >
             <option value="">なし</option>
-            <option value="work">仕事</option>
-            <option value="home">家</option>
-            <option value="shopping">買い物</option>
-            <option value="other">その他</option>
+            {categoryOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </label>
         <div className="task-detail__actions task-detail__content-actions">

@@ -55,9 +55,10 @@ function repository(): AppRepository {
       task("なし"),
       task("明日", { dueMode: "scheduled", dueAt: "2026-08-04T23:59:00.000Z" }),
       task("完了済み", { status: "completed", completedAt: now }),
-      task("保管済み", { status: "archived", archivedAt: now }),
+      task("保管済み", { status: "archived", archivedAt: now, category: "旧分類" }),
     ],
   };
+  snapshot.settings.customTaskCategories = ["冷蔵庫"];
   return {
     load: async () => snapshot,
     save: async () => undefined,
@@ -169,6 +170,18 @@ describe("TaskListPage", () => {
     expect(screen.getByLabelText("検索").closest("label")?.classList).toContain(
       "task-list__search",
     );
+  });
+
+  it("offers active custom and historical task categories as filters", async () => {
+    render(
+      <MemoryRouter>
+        <TaskListPage now={() => now} repository={repository()} />
+      </MemoryRouter>,
+    );
+
+    await screen.findByLabelText("カテゴリ");
+    expect(screen.getByRole("option", { name: "冷蔵庫" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "旧分類（過去）" })).toBeTruthy();
   });
 
   it("F-014 uses one captured clock value for the list, overdue CTA, and due badges", async () => {

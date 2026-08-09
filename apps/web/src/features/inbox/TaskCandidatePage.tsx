@@ -15,6 +15,10 @@ import {
   dateFromDigits,
   timeFromDigits,
 } from "../tasks/DeadlineInputFields";
+import {
+  taskCategoryLabel,
+  taskCategoryOptions,
+} from "../tasks/task-category-options";
 
 export interface TaskCandidatePageProps {
   repository: AppRepository;
@@ -48,6 +52,10 @@ export function TaskCandidatePage({
   const [dueTime, setDueTime] = useState("");
   const [dueTimeEnabled, setDueTimeEnabled] = useState(false);
   const [defaultDeadlineTime, setDefaultDeadlineTime] = useState("23:59");
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<
+    ReturnType<typeof taskCategoryOptions>
+  >([]);
   const [error, setError] = useState<string>();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -65,7 +73,10 @@ export function TaskCandidatePage({
         ) {
           throw new Error("Capture is unavailable.");
         }
-        const suggestion = generateTaskCandidate(capture.body);
+        const suggestion = generateTaskCandidate(
+          capture.body,
+          snapshot.settings.customTaskCategories,
+        );
         if (current) {
           setCaptureBody(capture.body);
           setCaptureCreatedAt(capture.createdAt);
@@ -77,6 +88,8 @@ export function TaskCandidatePage({
           setDefaultDeadlineTime(
             snapshot.settings.defaultDeadlineTime ?? "23:59",
           );
+          setCustomCategories(snapshot.settings.customTaskCategories);
+          setCategoryOptions(taskCategoryOptions(snapshot).filter(({ historical }) => !historical));
         }
       })
       .catch(() => {
@@ -154,7 +167,7 @@ export function TaskCandidatePage({
     }
   }
 
-  const categoryCandidate = generateTaskCandidate(title).category;
+  const categoryCandidate = generateTaskCandidate(title, customCategories).category;
 
   return (
     <section aria-labelledby="task-candidate-title">
@@ -174,7 +187,7 @@ export function TaskCandidatePage({
           value={title}
         />
         {categoryCandidate ? (
-          <p>カテゴリ候補: {categoryLabel(categoryCandidate)}</p>
+          <p>カテゴリ候補: {taskCategoryLabel(categoryCandidate)}</p>
         ) : null}
         <label htmlFor="task-category">カテゴリ</label>
         <select
@@ -185,10 +198,11 @@ export function TaskCandidatePage({
           value={category}
         >
           <option value="">選択しない</option>
-          <option value="work">仕事</option>
-          <option value="home">家</option>
-          <option value="shopping">買い物</option>
-          <option value="other">その他</option>
+          {categoryOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
         <label htmlFor="task-due">期限</label>
         <p className="task-candidate__due-help">
@@ -293,14 +307,6 @@ function defaultCreateId(): string {
 function defaultConfirmPastDate(date: string): boolean {
   return globalThis.confirm(
     `${date} は過去の日付です。この期限でタスクを作成しますか？`,
-  );
-}
-
-function categoryLabel(category: NonNullable<Task["category"]>): string {
-  return (
-    { work: "仕事", home: "家", shopping: "買い物", other: "その他" }[
-      category
-    ] ?? category
   );
 }
 

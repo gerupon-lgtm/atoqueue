@@ -131,6 +131,35 @@ describe("TaskCandidatePage", () => {
     });
   });
 
+  it("suggests and offers a device-local exact-match category", async () => {
+    const snapshot = createCapture(
+      createEmptySnapshot({
+        appVersion: "mvp-1.5.0",
+        localDeviceId: "device-1",
+        timeZone: "Asia/Tokyo",
+        now,
+      }),
+      "冷蔵庫の豆腐",
+      now,
+      "capture-1",
+    );
+    snapshot.settings.customTaskCategories = ["冷蔵庫"];
+    const repository: AppRepository = {
+      load: vi.fn().mockResolvedValue(snapshot),
+      save: vi.fn().mockResolvedValue(undefined),
+      loadDraft: vi.fn().mockResolvedValue(""),
+      saveDraft: vi.fn().mockResolvedValue(undefined),
+      clearDraft: vi.fn().mockResolvedValue(undefined),
+    };
+
+    render(<TaskCandidatePage captureId="capture-1" repository={repository} />);
+
+    expect(await screen.findByText("カテゴリ候補: 冷蔵庫")).toBeTruthy();
+    expect((screen.getByLabelText("カテゴリ") as HTMLSelectElement).value).toBe(
+      "冷蔵庫",
+    );
+  });
+
   it("F-006 changes the capture to a memo only after メモにする and returns", async () => {
     const repository = repositoryWithCapture();
     const onReturn = vi.fn();

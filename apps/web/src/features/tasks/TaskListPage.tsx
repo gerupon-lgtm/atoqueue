@@ -10,6 +10,7 @@ import {
   type TaskTab,
 } from "../../../../../packages/domain/src";
 import { formatLocalDateTime } from "../../presentation/format-local-date-time";
+import { taskCategoryOptions } from "./task-category-options";
 
 export interface TaskListPageProps {
   repository: AppRepository;
@@ -65,6 +66,7 @@ export function TaskListPage({
   }, [category, due, now, search, snapshot, tab]);
 
   if (!snapshot || !display) return <p>読み込み中です…</p>;
+  const categoryOptions = taskCategoryOptions(snapshot);
   return (
     <section aria-labelledby="task-list-title" className="task-list">
       <h1 id="task-list-title">タスク</h1>
@@ -119,10 +121,11 @@ export function TaskListPage({
             }
           >
             <option value="">すべて</option>
-            <option value="work">仕事</option>
-            <option value="home">家</option>
-            <option value="shopping">買い物</option>
-            <option value="other">その他</option>
+            {categoryOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </label>
         <label className="task-list__search">
