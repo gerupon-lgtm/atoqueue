@@ -119,4 +119,76 @@ describe("notification scheduling policy", () => {
       },
     ]);
   });
+
+  it("keeps the initial reminder when it is earlier than the task deadline", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask({
+        dueAt: "2026-08-08T10:30:00.000Z",
+        nextReviewAt: "2026-08-08T10:30:00.000Z",
+      }),
+      settings,
+      now,
+    });
+
+    expect(schedules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "initial",
+          scheduledAt: "2026-08-08T10:00:00.000Z",
+        }),
+      ]),
+    );
+  });
+
+  it("omits an initial reminder at the deadline so only the deadline-time reminder remains", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask({
+        dueAt: "2026-08-08T10:00:00.000Z",
+        nextReviewAt: "2026-08-08T10:00:00.000Z",
+      }),
+      settings,
+      now,
+    });
+
+    expect(schedules).toEqual([
+      {
+        kind: "review",
+        scheduledAt: "2026-08-08T10:00:00.000Z",
+        notificationType: "deadline_review",
+      },
+    ]);
+  });
+
+  it("omits an initial reminder later than the task deadline", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask({
+        dueAt: "2026-08-08T09:30:00.000Z",
+        nextReviewAt: "2026-08-08T09:30:00.000Z",
+      }),
+      settings,
+      now,
+    });
+
+    expect(schedules.map((schedule) => schedule.kind)).toEqual(["review"]);
+  });
+
+  it.each(["none", "unset"] as const)(
+    "keeps the initial reminder for a task with due mode %s",
+    (dueMode) => {
+      const schedules = planNotificationSchedules({
+        task: scheduledTask({
+          dueMode,
+          dueAt: undefined,
+          nextReviewAt: "2026-08-11T09:00:00.000Z",
+        }),
+        settings,
+        now,
+      });
+
+      expect(schedules.map((schedule) => schedule.kind)).toEqual([
+        "initial",
+        "review",
+      ]);
+    },
+  );
 });

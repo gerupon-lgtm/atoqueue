@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEmptySnapshot } from "./repository";
-import { rebuildGlobalNotificationSchedules, rebuildInboxReminderNotifications, rebuildMemoReviewNotifications, queueTaskNotifications } from "./notification-queue";
+import { rebuildActiveTaskNotifications, rebuildGlobalNotificationSchedules, rebuildInboxReminderNotifications, rebuildMemoReviewNotifications, queueTaskNotifications } from "./notification-queue";
 import type { Task } from "./model";
 
 const now = "2026-08-08T09:00:00.000Z";
@@ -186,6 +186,62 @@ describe("anonymous notification queue", () => {
         expect.objectContaining({ operation: "cancel", reminderId: active.reminderMap[0]?.reminderId }),
         expect.objectContaining({ operation: "cancel", reminderId: active.reminderMap[1]?.reminderId }),
         expect.objectContaining({ operation: "cancel", reminderId: active.reminderMap[2]?.reminderId }),
+      ]),
+    );
+  });
+
+  it("cancels an existing initial reminder when a changed deadline moves before it", () => {
+    const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
+    snapshot.settings.notificationEnabled = true;
+    const active = queueTaskNotifications({ snapshot, task: task(), now, createId: ids() });
+    const initial = active.reminderMap.find((entry) => entry.kind === "initial");
+    expect(initial).toBeDefined();
+
+    const queued = queueTaskNotifications({
+      snapshot: { ...snapshot, reminderMap: active.reminderMap },
+      task: task({
+        dueAt: "2026-08-08T09:30:00.000Z",
+        nextReviewAt: "2026-08-08T09:30:00.000Z",
+        revision: 2,
+      }),
+      now,
+      createId: ids(),
+    });
+
+    expect(queued.reminderMap.some((entry) => entry.kind === "initial")).toBe(false);
+    expect(queued.notificationOutbox).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operation: "cancel",
+          reminderId: initial?.reminderId,
+        }),
+      ]),
+    );
+  });
+
+  it("cancels an existing initial reminder when a timing setting moves it to the deadline", () => {
+    const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
+    snapshot.settings.notificationEnabled = true;
+    const activeTask = task();
+    const active = queueTaskNotifications({ snapshot, task: activeTask, now, createId: ids() });
+    const initial = active.reminderMap.find((entry) => entry.kind === "initial");
+    expect(initial).toBeDefined();
+    snapshot.settings.initialReminderDelayMinutes = 360;
+    snapshot.tasks = [activeTask];
+
+    const rebuilt = rebuildActiveTaskNotifications({
+      snapshot: { ...snapshot, reminderMap: active.reminderMap },
+      now,
+      createId: ids(),
+    });
+
+    expect(rebuilt.reminderMap.some((entry) => entry.kind === "initial")).toBe(false);
+    expect(rebuilt.notificationOutbox).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operation: "cancel",
+          reminderId: initial?.reminderId,
+        }),
       ]),
     );
   });

@@ -1333,6 +1333,14 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 
 **Open assumption:** Whether same-timestamp generic notifications should be coalesced is retained as 【想定】 until pilot feedback confirms the preferred behavior.
 
+### 2026-08-09 implementation follow-up: initial reminder deadline boundary
+
+- 【確定】`initial` は期限ありタスクの期限より前に到来する場合だけ作る。同時刻または期限後なら省略し、期限時の `review` を残す。
+- 【確定】期限なし・期限未設定タスクの `initial` は従来どおり作る。
+- 【確定】期限または初回通知設定の変更で不要になった既存 `initial` は、全予約再計算時に取消Outboxへ積む。
+- 検証は予定生成の境界、期限変更、設定変更、期限なし・期限未設定をドメインテストで固定する。API・PostgreSQL・Push payloadの契約は変更しない。
+- 実装結果: 上記境界をドメインテストでREDから確認して実装し、Web・Domain・Contracts 349件、API通常70件、Chromium E2E 27件、型検査、Lint、直接ビルドを通過した。表示バージョンを `mvp-1.0.1` へ更新した。
+
 ## Follow-up: mobile UI, deadline time, and first-use guidance（2026-08-08）
 
 **Requirements:** F-002, F-006, F-007, F-013, F-018, NF-008, NF-010, NF-012

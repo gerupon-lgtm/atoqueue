@@ -33,7 +33,11 @@ export function planNotificationSchedules(input: {
       input.task.createdAt,
       input.settings.initialReminderDelayMinutes ?? 60,
     );
-    if (initialAt > input.now) {
+    const isBeforeDeadline =
+      input.task.dueMode !== "scheduled" ||
+      !input.task.dueAt ||
+      initialAt < input.task.dueAt;
+    if (initialAt > input.now && isBeforeDeadline) {
       schedules.push({
         kind: "initial",
         scheduledAt: initialAt,
