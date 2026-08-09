@@ -131,6 +131,63 @@ export function markNoteAsUnneeded(input: ClassifyCaptureInput): AppSnapshot {
   return classifyWithoutTask(input, "unneeded", "note");
 }
 
+export function restoreUnneededCapture(input: ClassifyCaptureInput): AppSnapshot {
+  const capture = getClassifiableCapture(
+    input.snapshot,
+    input.captureId,
+    "unneeded",
+  );
+  const updatedCapture: Capture = {
+    id: capture.id,
+    body: capture.body,
+    classification: "unclassified",
+    createdAt: capture.createdAt,
+    updatedAt: input.now,
+  };
+  const global = rebuildGlobalNotificationSchedules({
+    snapshot: {
+      ...input.snapshot,
+      captures: replaceCapture(input.snapshot, updatedCapture),
+    },
+    now: input.now,
+  });
+
+  return {
+    ...input.snapshot,
+    captures: replaceCapture(input.snapshot, updatedCapture),
+    notificationOutbox: global.notificationOutbox,
+    reminderMap: global.reminderMap,
+    actionHistory: [
+      ...input.snapshot.actionHistory,
+      captureClassificationEvent(updatedCapture, input.now),
+    ],
+    savedAt: input.now,
+  };
+}
+
+export function deleteUnneededCapture(input: ClassifyCaptureInput): AppSnapshot {
+  getClassifiableCapture(input.snapshot, input.captureId, "unneeded");
+  const captures = input.snapshot.captures.filter(
+    (capture) => capture.id !== input.captureId,
+  );
+  const global = rebuildGlobalNotificationSchedules({
+    snapshot: { ...input.snapshot, captures },
+    now: input.now,
+  });
+
+  return {
+    ...input.snapshot,
+    captures,
+    notificationOutbox: global.notificationOutbox,
+    reminderMap: global.reminderMap,
+    actionHistory: input.snapshot.actionHistory.filter(
+      (event) =>
+        !(event.entityType === "capture" && event.entityId === input.captureId),
+    ),
+    savedAt: input.now,
+  };
+}
+
 function classifyWithoutTask(
   input: ClassifyCaptureInput,
   classification: "note" | "unneeded",
@@ -168,7 +225,7 @@ function classifyWithoutTask(
 function getClassifiableCapture(
   snapshot: AppSnapshot,
   captureId: string,
-  classification: "unclassified" | "note",
+  classification: Capture["classification"],
 ): Capture {
   const capture = snapshot.captures.find((candidate) => candidate.id === captureId);
   if (!capture) throw new Error("Capture not found.");
@@ -182,7 +239,7 @@ function replaceCapture(snapshot: AppSnapshot, updated: Capture): Capture[] {
 
 function captureClassificationEvent(capture: Capture, now: string) {
   return {
-    id: `${capture.id}:capture_classified`,
+    id: `${capture.id}:capture_classified:${now}`,
     entityType: "capture" as const,
     entityId: capture.id,
     action: "capture_classified" as const,

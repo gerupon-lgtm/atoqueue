@@ -4,10 +4,12 @@ import {
   confirmTask,
   createCapture,
   createEmptySnapshot,
+  deleteUnneededCapture,
   markAsNote,
   markNoteAsUnneeded,
   markAsUnneeded,
   promoteNoteToTask,
+  restoreUnneededCapture,
   resolveDueChoice,
   suggestClassification,
   type LocalCalendar,
@@ -240,5 +242,83 @@ describe("classification", () => {
     expect(next.notificationOutbox).toEqual(expect.arrayContaining([
       expect.objectContaining({ operation: "cancel" }),
     ]));
+  });
+
+  it("F-006 restores an unneeded capture to the inbox and rebuilds its reminder series", () => {
+    const unneeded = markAsUnneeded({
+      snapshot: snapshotWithCapture(),
+      captureId: "capture-1",
+      now,
+    });
+    const restoredAt = "2026-08-03T10:00:00.000Z";
+
+    const next = restoreUnneededCapture({
+      snapshot: unneeded,
+      captureId: "capture-1",
+      now: restoredAt,
+    });
+
+    expect(next.captures[0]).toEqual({
+      id: "capture-1",
+      body: "牛乳を買う",
+      classification: "unclassified",
+      createdAt: now,
+      updatedAt: restoredAt,
+    });
+    expect(next.reminderMap).toEqual(expect.arrayContaining([
+      expect.objectContaining({ scope: "inbox", kind: "capture_initial" }),
+    ]));
+    expect(next.actionHistory.at(-1)).toMatchObject({
+      action: "capture_classified",
+      after: { classification: "unclassified" },
+    });
+  });
+
+  it("F-006 permanently deletes an unneeded capture and only its capture history", () => {
+    const unneeded = markAsUnneeded({
+      snapshot: snapshotWithCapture(),
+      captureId: "capture-1",
+      now,
+    });
+    unneeded.actionHistory.push({
+      id: "other:capture_created",
+      entityType: "capture",
+      entityId: "other",
+      action: "capture_created",
+      occurredAt: now,
+    });
+
+    const next = deleteUnneededCapture({
+      snapshot: unneeded,
+      captureId: "capture-1",
+      now: "2026-08-03T10:00:00.000Z",
+    });
+
+    expect(next.captures).toEqual([]);
+    expect(next.actionHistory).toEqual([
+      expect.objectContaining({ entityId: "other" }),
+    ]);
+    expect(next.reminderMap.some((entry) => entry.scope === "inbox")).toBe(false);
+  });
+
+  it("F-014 cancels every inbox reservation when the last unresolved capture becomes unneeded", () => {
+    const next = markAsUnneeded({
+      snapshot: snapshotWithCapture(),
+      captureId: "capture-1",
+      now,
+    });
+
+    expect(next.reminderMap.some((entry) => entry.scope === "inbox")).toBe(false);
+    expect(next.notificationOutbox).toHaveLength(4);
+    expect(next.notificationOutbox.every((item) => item.operation === "cancel")).toBe(true);
+  });
+
+  it("F-006 only restores or deletes captures already marked unneeded", () => {
+    const snapshot = snapshotWithCapture();
+
+    expect(() => restoreUnneededCapture({ snapshot, captureId: "capture-1", now }))
+      .toThrow(AlreadyClassifiedError);
+    expect(() => deleteUnneededCapture({ snapshot, captureId: "capture-1", now }))
+      .toThrow(AlreadyClassifiedError);
   });
 });
