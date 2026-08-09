@@ -1,6 +1,6 @@
 .reviewHeader {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 0.375rem;
   width: 100%;
@@ -9,7 +9,8 @@
   box-sizing: border-box;
 }
 
-.app-shell__content .reviewHeader__previous {
+.app-shell__content .reviewHeader__previous,
+.app-shell__content .reviewHeader__next {
   justify-self: end;
   min-height: 44px;
   padding: 0.375rem 0.5rem;
@@ -17,6 +18,24 @@
   line-height: 1.2;
   letter-spacing: 0;
   white-space: nowrap;
+}
+
+@media (max-width: 359px) {
+  .reviewHeader__title {
+    font-size: 1.45rem;
+  }
+
+  .app-shell__content .reviewHeader__previous,
+  .app-shell__content .reviewHeader__next {
+    padding-inline: 0.35rem;
+    font-size: 0.75rem;
+  }
+}
+
+.app-shell__content .reviewHeader__next {
+  border-color: #b8c8bc;
+  background: #fffdf8;
+  color: #285c50;
 }
 .reviewHeader__title {
   justify-self: start;

@@ -273,6 +273,29 @@ describe("review task actions", () => {
     expect(next.notificationOutbox[0]).toMatchObject({ notificationType: "unset_due_review" });
   });
 
+  it("keeps an earlier skipped task open when the last visible task is answered", () => {
+    const initial = snapshotWithSession([task("first"), task("second")]);
+    const skipped = {
+      ...initial,
+      reviewSessions: [{ ...initial.reviewSessions[0]!, currentIndex: 1 }],
+    };
+
+    const next = answerReview({
+      snapshot: skipped,
+      sessionId: "session-1",
+      answer: "dismiss",
+      now,
+      calendar,
+      idFactory: (kind) => `${kind}-id`,
+    });
+
+    expect(next.reviewSessions[0]).toMatchObject({
+      currentIndex: 0,
+      answeredTaskIds: ["second"],
+    });
+    expect(next.reviewSessions[0]?.completedAt).toBeUndefined();
+  });
+
   it("F-014 cancels every anonymous reminder for a completed task without exposing task data", () => {
     const initial = snapshotWithSession([task("task-1", { dueAt: "2026-08-10T23:59:00.000Z", nextReviewAt: "2026-08-10T23:59:00.000Z" })]);
     initial.settings.notificationEnabled = true;

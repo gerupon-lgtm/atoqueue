@@ -1,6 +1,10 @@
 import { resolveDueChoice, type DueResolution } from "./due-date";
 import { calculateNextReview } from "./reminder-policy";
-import { findNextReviewIndex, type ReviewCalendar } from "./review-session";
+import {
+  findNextReviewIndex,
+  findNextUnansweredReviewIndex,
+  type ReviewCalendar,
+} from "./review-session";
 import type { ActionEvent, AppSnapshot, ReviewSession, Task } from "./model";
 import { queueTaskNotifications } from "./notification-queue";
 export { notificationTypeForTask } from "./notification-schedule";
@@ -114,7 +118,11 @@ export function answerReview(input: AnswerReviewInput): AppSnapshot {
   });
   const answeredTaskIds = unique([...session.answeredTaskIds, task.id]);
   const visitedTaskIds = unique([...session.visitedTaskIds, task.id]);
-  const nextIndex = findNextReviewIndex({ ...session, answeredTaskIds }, tasks, currentIndex + 1);
+  const nextIndex = findNextUnansweredReviewIndex(
+    { ...session, answeredTaskIds },
+    tasks,
+    currentIndex + 1,
+  );
   const updatedSession: ReviewSession = {
     ...session,
     currentIndex: nextIndex,

@@ -4,7 +4,9 @@ import {
   calculateNeglectLevel,
   choosePrompt,
   currentReviewTask,
+  goToNextTask,
   goToPreviousTask,
+  refreshReviewSession,
   resolveDueChoice,
   startReviewSession,
   type AppRepository,
@@ -60,18 +62,35 @@ export function TodayReviewPage({
         const unfinished = [...loaded.reviewSessions]
           .reverse()
           .find((candidate) => !candidate.completedAt);
+        const timestamp = now();
         if (
           unfinished &&
           unfinished.orderedTaskIds.length > 0 &&
           currentReviewTask({ session: unfinished, tasks: loaded.tasks })
         ) {
+          const refreshed = refreshReviewSession({
+            session: unfinished,
+            now: timestamp,
+            calendar: selectedCalendar,
+            tasks: loaded.tasks,
+          });
+          const next =
+            refreshed === unfinished
+              ? loaded
+              : {
+                  ...loaded,
+                  reviewSessions: loaded.reviewSessions.map((candidate) =>
+                    candidate.id === unfinished.id ? refreshed : candidate,
+                  ),
+                  savedAt: timestamp,
+                };
+          if (next !== loaded) await repository.save(next);
           if (active) {
-            setSnapshot(loaded);
-            setSession(unfinished);
+            setSnapshot(next);
+            setSession(refreshed);
           }
           return;
         }
-        const timestamp = now();
         const started = startReviewSession({
           sessionId: createId(),
           now: timestamp,
@@ -186,6 +205,30 @@ export function TodayReviewPage({
     }
   }
 
+  async function nextTask(): Promise<void> {
+    if (!snapshot || !session || session.orderedTaskIds.length < 2 || isSaving)
+      return;
+    setIsSaving(true);
+    try {
+      const timestamp = now();
+      const updated = goToNextTask(session, snapshot.tasks, timestamp);
+      const next = {
+        ...snapshot,
+        reviewSessions: snapshot.reviewSessions.map((candidate) =>
+          candidate.id === session.id ? updated : candidate,
+        ),
+        savedAt: timestamp,
+      };
+      await repository.save(next);
+      setSnapshot(next);
+      setSession(updated);
+    } catch {
+      setError("次のタスクへ進めませんでした。もう一度お試しください。");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   if (error && !snapshot) return <p role="alert">{error}</p>;
   if (!snapshot || !session) return <p>読み込んでいます…</p>;
 
@@ -239,6 +282,16 @@ export function TodayReviewPage({
             type="button"
           >
             前のタスク
+          </button>
+        ) : null}
+        {session.orderedTaskIds.length > 1 ? (
+          <button
+            className="reviewHeader__next"
+            disabled={isSaving}
+            onClick={() => void nextTask()}
+            type="button"
+          >
+            次のタスク
           </button>
         ) : null}
       </header>
