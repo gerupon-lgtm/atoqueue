@@ -1,4 +1,10 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import {
+  createLocalCalendar,
+  listTasks,
+  type AppRepository,
+} from "../../../../packages/domain/src";
 import "./AppShell.css";
 
 type NavigationItem = {
@@ -16,7 +22,42 @@ const navigation: NavigationItem[] = [
   { to: "/settings", label: "設定", icon: "settings" },
 ];
 
-export function AppShell() {
+export interface AppShellProps {
+  repository?: AppRepository;
+  now?: () => string;
+}
+
+export function AppShell({
+  repository,
+  now = () => new Date().toISOString(),
+}: AppShellProps) {
+  const location = useLocation();
+  const [overdueCount, setOverdueCount] = useState(0);
+
+  useEffect(() => {
+    let current = true;
+    if (!repository) return;
+    void repository.load().then((snapshot) => {
+      if (!current) return;
+      const timestamp = now();
+      setOverdueCount(
+        listTasks(
+          snapshot.tasks,
+          {
+            tab: "active",
+            due: "overdue",
+            now: timestamp,
+            calendar: createLocalCalendar(snapshot.settings.timeZone),
+          },
+          snapshot.captures,
+        ).length,
+      );
+    });
+    return () => {
+      current = false;
+    };
+  }, [location.key, now, repository]);
+
   return (
     <div className="app-shell">
       <nav className="app-shell__navigation" aria-label="主要ナビゲーション">
@@ -32,6 +73,14 @@ export function AppShell() {
               <NavigationIcon name={icon} />
             </span>
             <span className="app-shell__nav-label">{label}</span>
+            {to === "/tasks" && overdueCount > 0 ? (
+              <span
+                aria-label={`期限超過のタスク: ${overdueCount}件`}
+                className="app-shell__nav-badge"
+              >
+                {overdueCount}
+              </span>
+            ) : null}
           </NavLink>
         ))}
       </nav>

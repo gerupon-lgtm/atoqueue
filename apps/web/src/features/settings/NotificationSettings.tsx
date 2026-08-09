@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   rebuildActiveTaskNotifications,
+  rebuildGlobalNotificationSchedules,
   type AppRepository,
 } from "../../../../../packages/domain/src";
 import { NotificationApi } from "../../infrastructure/notifications/notification-api";
@@ -40,6 +41,17 @@ export function NotificationSettings({
   const [initialDelay, setInitialDelay] = useState("60");
   const [deadlineLead, setDeadlineLead] = useState("60");
   const [defaultDeadlineTime, setDefaultDeadlineTime] = useState("2359");
+  const [inboxReminderFrequency, setInboxReminderFrequency] = useState<
+    "none" | "gentle" | "prompt"
+  >("gentle");
+  const [memoReviewFrequency, setMemoReviewFrequency] = useState<
+    "none" | "weekly" | "monthly"
+  >("weekly");
+  const [savedFrequencies, setSavedFrequencies] = useState({
+    inbox: "gentle" as "none" | "gentle" | "prompt",
+    memo: "weekly" as "none" | "weekly" | "monthly",
+  });
+  const [syncStatus, setSyncStatus] = useState<"success" | "error">();
   const defaultDeadlineTimePicker = useRef<HTMLInputElement>(null);
   const [hasRegisteredDevice, setHasRegisteredDevice] = useState(false);
   const [registeredAt, setRegisteredAt] = useState<string>();
@@ -76,6 +88,12 @@ export function NotificationSettings({
       setDefaultDeadlineTime(
         (snapshot.settings.defaultDeadlineTime ?? "23:59").replace(":", ""),
       );
+      setInboxReminderFrequency(snapshot.settings.inboxReminderFrequency);
+      setMemoReviewFrequency(snapshot.settings.memoReviewFrequency);
+      setSavedFrequencies({
+        inbox: snapshot.settings.inboxReminderFrequency,
+        memo: snapshot.settings.memoReviewFrequency,
+      });
     });
     return () => {
       active = false;
@@ -145,13 +163,69 @@ export function NotificationSettings({
         now: savedAt,
       });
       await repository.save({ ...updated, ...delivery, savedAt });
-      void flushNotifications?.();
+      await synchronizeNotifications();
     } catch {
       setState("error");
     } finally {
       setBusy(false);
     }
   }
+
+  async function saveReviewFrequencies(): Promise<void> {
+    setBusy(true);
+    try {
+      const snapshot = await repository.load();
+      const updated = {
+        ...snapshot,
+        settings: {
+          ...snapshot.settings,
+          inboxReminderFrequency,
+          memoReviewFrequency,
+        },
+      };
+      const savedAt = new Date().toISOString();
+      const taskDelivery = rebuildActiveTaskNotifications({
+        snapshot: updated,
+        now: savedAt,
+      });
+      const globalDelivery = rebuildGlobalNotificationSchedules({
+        snapshot: { ...updated, ...taskDelivery },
+        now: savedAt,
+      });
+      await repository.save({
+        ...updated,
+        ...taskDelivery,
+        ...globalDelivery,
+        savedAt,
+      });
+      setSavedFrequencies({ inbox: inboxReminderFrequency, memo: memoReviewFrequency });
+      await synchronizeNotifications();
+    } catch {
+      setState("error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function synchronizeNotifications(): Promise<void> {
+    setSyncStatus(undefined);
+    try {
+      await flushNotifications?.();
+      setSyncStatus("success");
+    } catch {
+      setSyncStatus("error");
+    }
+  }
+
+  async function retryNotificationSync(): Promise<void> {
+    setBusy(true);
+    await synchronizeNotifications();
+    setBusy(false);
+  }
+
+  const reviewFrequenciesDirty =
+    inboxReminderFrequency !== savedFrequencies.inbox ||
+    memoReviewFrequency !== savedFrequencies.memo;
 
   return (
     <section
@@ -253,6 +327,67 @@ export function NotificationSettings({
         </div>
         <button disabled={busy} onClick={() => void saveTiming()} type="button">
           通知タイミングを保存
+        </button>
+      </section>
+      <section
+        className={`notification-settings__review-frequency${reviewFrequenciesDirty ? " is-dirty" : ""}`}
+        aria-labelledby="notification-review-frequency-title"
+      >
+        <h2 id="notification-review-frequency-title">確認頻度</h2>
+        <label htmlFor="inbox-reminder-frequency">未整理の受信箱の確認頻度</label>
+        <select
+          id="inbox-reminder-frequency"
+          value={inboxReminderFrequency}
+          onChange={(event) =>
+            setInboxReminderFrequency(
+              event.target.value as "none" | "gentle" | "prompt",
+            )
+          }
+        >
+          <option value="none">通知しない</option>
+          <option value="gentle">ゆるやかに確認する</option>
+          <option value="prompt">こまめに確認する</option>
+        </select>
+        <label htmlFor="memo-review-frequency">メモの見直し頻度</label>
+        <select
+          id="memo-review-frequency"
+          value={memoReviewFrequency}
+          onChange={(event) =>
+            setMemoReviewFrequency(
+              event.target.value as "none" | "weekly" | "monthly",
+            )
+          }
+        >
+          <option value="none">通知しない</option>
+          <option value="weekly">毎週</option>
+          <option value="monthly">毎月</option>
+        </select>
+        {reviewFrequenciesDirty ? (
+          <p className="notification-settings__unsaved" role="status">
+            変更を保存してください
+          </p>
+        ) : null}
+        {syncStatus === "success" ? (
+          <p role="status">通知の同期が完了しました。</p>
+        ) : null}
+        {syncStatus === "error" ? (
+          <>
+            <p role="alert">通知の同期に失敗しました。再試行できます。</p>
+            <button
+              disabled={busy}
+              onClick={() => void retryNotificationSync()}
+              type="button"
+            >
+              通知の同期を再試行
+            </button>
+          </>
+        ) : null}
+        <button
+          disabled={busy || !reviewFrequenciesDirty}
+          onClick={() => void saveReviewFrequencies()}
+          type="button"
+        >
+          確認頻度を保存
         </button>
       </section>
       <div className="notification-settings__device-setup">

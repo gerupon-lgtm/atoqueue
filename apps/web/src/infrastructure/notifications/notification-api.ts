@@ -100,6 +100,7 @@ export class NotificationApi {
       deviceId: credentials.deviceId,
       scheduledAt: item.scheduledAt,
       notificationType: item.notificationType,
+      ...(item.repeatCadence ? { repeatCadence: item.repeatCadence } : {}),
     });
     ReminderResponseSchema.parse(
       await this.request(`/v1/reminders/${item.reminderId}`, {

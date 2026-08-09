@@ -31,11 +31,11 @@ function repositoryContract(
   describe(_name, () => {
     afterEach(() => window.localStorage.clear());
 
-    it("returns an empty version 6 snapshot when storage is missing", async () => {
+    it("returns an empty version 7 snapshot when storage is missing", async () => {
       const snapshot = await createRepository().load();
 
       expect(snapshot).toMatchObject({
-        schemaVersion: 6,
+        schemaVersion: 7,
         captures: [],
         tasks: [],
         actionHistory: [],
@@ -97,7 +97,7 @@ function repositoryContract(
     });
 
     it("rejects a future schema version without overwriting it", async () => {
-      const stored = JSON.stringify({ schemaVersion: 7 });
+      const stored = JSON.stringify({ schemaVersion: 8 });
       window.localStorage.setItem(DATA_KEY, stored);
 
       await expect(createRepository().load()).rejects.toBeInstanceOf(
@@ -150,7 +150,7 @@ describe("LocalStorageRepository persistence failures", () => {
   });
 
   it("preserves an unknown existing schema version when save is attempted", async () => {
-    const existing = JSON.stringify({ schemaVersion: 7 });
+    const existing = JSON.stringify({ schemaVersion: 8 });
     window.localStorage.setItem(DATA_KEY, existing);
 
     await expect(
@@ -252,7 +252,7 @@ describe("LocalStorageRepository persistence failures", () => {
 
 function sampleSnapshot(): AppSnapshot {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     appVersion: "0.1.0",
     device: {
       localDeviceId: "device-1",
@@ -266,6 +266,9 @@ function sampleSnapshot(): AppSnapshot {
       deadlineReminderLeadMinutes: 60,
       defaultDeadlineTime: "23:59",
       weeklyReviewDay: 0,
+      inboxReminderFrequency: "none",
+      memoReviewFrequency: "none",
+      enterSavesCapture: true,
     },
     captures: [],
     tasks: [],

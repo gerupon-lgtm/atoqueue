@@ -58,7 +58,136 @@ function snapshotWithReviewActionOwnership(): Record<string, unknown> {
 }
 
 describe("domain repository model", () => {
-  it("creates a version 6 empty snapshot from the supplied device context", () => {
+  it("creates new snapshots with gentle inbox reminders, weekly memo reviews, and Enter save enabled", () => {
+    const params = {
+      appVersion: "0.1.0",
+      localDeviceId: "device-1",
+      timeZone: "Asia/Tokyo",
+      now: "2026-08-09T00:00:00.000Z",
+    };
+
+    expect(createEmptySnapshot(params).settings).toMatchObject({
+      inboxReminderFrequency: "gentle",
+      memoReviewFrequency: "weekly",
+      enterSavesCapture: true,
+    });
+  });
+
+  it("migrates a v6 snapshot without adding surprise recurring notifications", () => {
+    const v6: unknown = {
+      ...createEmptySnapshot({
+        appVersion: "0.1.0",
+        localDeviceId: "device-1",
+        timeZone: "Asia/Tokyo",
+        now: "2026-08-09T00:00:00.000Z",
+      }),
+      schemaVersion: 6,
+      settings: {
+        locale: "ja-JP",
+        timeZone: "Asia/Tokyo",
+        notificationEnabled: false,
+        initialReminderDelayMinutes: 60,
+        deadlineReminderLeadMinutes: 60,
+        defaultDeadlineTime: "23:59",
+        weeklyReviewDay: 0,
+      },
+    };
+
+    expect(migrateSnapshot(v6)).toMatchObject({
+      schemaVersion: 7,
+      settings: {
+        inboxReminderFrequency: "none",
+        memoReviewFrequency: "none",
+        enterSavesCapture: true,
+      },
+    });
+  });
+
+  it("accepts a global reminder scope only when it is the sole reminder-map owner", () => {
+    const v7: unknown = {
+      ...createEmptySnapshot({
+        appVersion: "0.1.0",
+        localDeviceId: "device-1",
+        timeZone: "Asia/Tokyo",
+        now: "2026-08-09T00:00:00.000Z",
+      }),
+      schemaVersion: 7,
+      settings: {
+        locale: "ja-JP",
+        timeZone: "Asia/Tokyo",
+        notificationEnabled: false,
+        initialReminderDelayMinutes: 60,
+        deadlineReminderLeadMinutes: 60,
+        defaultDeadlineTime: "23:59",
+        weeklyReviewDay: 0,
+        inboxReminderFrequency: "none",
+        memoReviewFrequency: "none",
+        enterSavesCapture: true,
+      },
+      reminderMap: [
+        {
+          reminderId: "reminder-1",
+          scope: "inbox",
+          taskRevision: 0,
+          createdAt: "2026-08-09T00:00:00.000Z",
+        },
+      ],
+    };
+
+    expect(migrateSnapshot(v7).reminderMap).toMatchObject([
+      { scope: "inbox" },
+    ]);
+  });
+
+  it.each([
+    [{}, "no owner"],
+    [{ taskId: "task-1", captureId: "capture-1" }, "two local owners"],
+    [{ scope: "memo", taskId: "task-1" }, "a scope and task owner"],
+    [{ scope: "memo", captureId: "capture-1" }, "a scope and capture owner"],
+    [{ scope: 1, taskId: "task-1" }, "an invalid scope and task owner"],
+    [{ scope: "inbox", taskId: 1 }, "a scope and non-string task owner"],
+    [
+      { scope: "memo", captureId: 1 },
+      "a scope and non-string capture owner",
+    ],
+  ] as const)(
+    "rejects a reminder-map entry with %s",
+    (owner, _reason) => {
+      const v7: unknown = {
+        ...createEmptySnapshot({
+          appVersion: "0.1.0",
+          localDeviceId: "device-1",
+          timeZone: "Asia/Tokyo",
+          now: "2026-08-09T00:00:00.000Z",
+        }),
+        schemaVersion: 7,
+        settings: {
+          locale: "ja-JP",
+          timeZone: "Asia/Tokyo",
+          notificationEnabled: false,
+          initialReminderDelayMinutes: 60,
+          deadlineReminderLeadMinutes: 60,
+          defaultDeadlineTime: "23:59",
+          weeklyReviewDay: 0,
+          inboxReminderFrequency: "none",
+          memoReviewFrequency: "none",
+          enterSavesCapture: true,
+        },
+        reminderMap: [
+          {
+            reminderId: "reminder-1",
+            taskRevision: 0,
+            createdAt: "2026-08-09T00:00:00.000Z",
+            ...owner,
+          },
+        ],
+      };
+
+      expect(() => migrateSnapshot(v7)).toThrow(CorruptDataError);
+    },
+  );
+
+  it("creates a version 7 empty snapshot from the supplied device context", () => {
     expect(
       createEmptySnapshot({
         appVersion: "0.1.0",
@@ -67,7 +196,7 @@ describe("domain repository model", () => {
         now: "2026-08-03T00:00:00.000Z",
       }),
     ).toMatchObject({
-      schemaVersion: 6,
+      schemaVersion: 7,
       appVersion: "0.1.0",
       device: {
         localDeviceId: "device-1",
@@ -111,7 +240,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v4)).toMatchObject({
-      schemaVersion: 6,
+      schemaVersion: 7,
       settings: { defaultDeadlineTime: "23:59" },
     });
   });
@@ -136,7 +265,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v2)).toMatchObject({
-      schemaVersion: 6,
+      schemaVersion: 7,
       settings: {
         initialReminderDelayMinutes: 60,
         deadlineReminderLeadMinutes: 60,
@@ -165,13 +294,13 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v3)).toMatchObject({
-      schemaVersion: 6,
+      schemaVersion: 7,
       settings: { onboardingCompletedAt: "2026-08-03T00:00:00.000Z" },
     });
   });
 
   it("rejects a stored future schema version", () => {
-    expect(() => migrateSnapshot({ schemaVersion: 7 })).toThrow(
+    expect(() => migrateSnapshot({ schemaVersion: 8 })).toThrow(
       UnsupportedSchemaVersionError,
     );
   });
@@ -200,7 +329,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v1)).toMatchObject({
-      schemaVersion: 6,
+      schemaVersion: 7,
       reviewSessions: [{ id: "session-1", actionEventIds: [] }],
     });
   });
@@ -299,7 +428,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v1)).toMatchObject({
-      schemaVersion: 6,
+      schemaVersion: 7,
       reviewSessions: [
         {
           orderedTaskIds: ["task-1", "task-2"],

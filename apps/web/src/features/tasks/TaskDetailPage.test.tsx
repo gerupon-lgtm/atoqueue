@@ -94,7 +94,7 @@ describe("TaskDetailPage", () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 
-  it("returns to the task list from the correction screen", async () => {
+  it("F-015 returns to the task list from the right-side correction header action", async () => {
     const { repository } = repositoryWithTask();
     const onReturn = vi.fn();
     render(
@@ -107,12 +107,14 @@ describe("TaskDetailPage", () => {
     );
 
     await screen.findByDisplayValue("牛乳を買う");
-    fireEvent.click(screen.getByRole("button", { name: /タスク一覧に戻る/ }));
+    const control = screen.getByRole("button", { name: "タスク一覧" });
+    expect(control.textContent).not.toContain("←");
+    fireEvent.click(control);
 
     expect(onReturn).toHaveBeenCalledTimes(1);
   });
 
-  it("gives the in-context return action the same 44px touch target as other actions", async () => {
+  it("gives the arrowless in-context task-list action the same 44px touch target as other actions", async () => {
     const { repository } = repositoryWithTask();
     render(
       <TaskDetailPage
@@ -124,7 +126,7 @@ describe("TaskDetailPage", () => {
     );
 
     const control = await screen.findByRole("button", {
-      name: /タスク一覧に戻る/,
+      name: "タスク一覧",
     });
     expect(getComputedStyle(control).minHeight).toBe("44px");
   });

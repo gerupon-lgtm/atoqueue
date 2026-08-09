@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createCapture,
   createEmptySnapshot,
+  markAsNote,
   type AppRepository,
 } from "../../../../../packages/domain/src";
 import { InboxPage } from "./InboxPage";
@@ -42,6 +43,26 @@ function repositoryWithCaptures(): AppRepository {
     save: vi.fn().mockImplementation(async (next) => {
       snapshot = next;
     }),
+    loadDraft: vi.fn().mockResolvedValue(""),
+    saveDraft: vi.fn().mockResolvedValue(undefined),
+    clearDraft: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function repositoryWithNotes(): AppRepository {
+  let snapshot = createEmptySnapshot({
+    appVersion: "0.1.0",
+    localDeviceId: "device-1",
+    timeZone: "Asia/Tokyo",
+    now,
+  });
+  snapshot = createCapture(snapshot, "新しいメモ", "2026-08-02T09:00:00.000Z", "note-new");
+  snapshot = createCapture(snapshot, "最も古いメモ", "2026-08-01T09:00:00.000Z", "note-old");
+  snapshot = markAsNote({ snapshot, captureId: "note-new", now });
+  snapshot = markAsNote({ snapshot, captureId: "note-old", now });
+  return {
+    load: vi.fn().mockImplementation(async () => snapshot),
+    save: vi.fn().mockImplementation(async (next) => { snapshot = next; }),
     loadDraft: vi.fn().mockResolvedValue(""),
     saveDraft: vi.fn().mockResolvedValue(undefined),
     clearDraft: vi.fn().mockResolvedValue(undefined),
@@ -130,5 +151,20 @@ describe("InboxPage", () => {
         (capture: { classification: string }) => capture.classification,
       ),
     ).toEqual(["unclassified", "note"]);
+  });
+
+  it("F-006 shows notes oldest first and routes a chosen note to the task candidate", async () => {
+    const onTaskCandidate = vi.fn();
+    render(<InboxPage onTaskCandidate={onTaskCandidate} repository={repositoryWithNotes()} />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "メモ" }));
+
+    const items = await screen.findAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      expect.stringContaining("最も古いメモ"),
+      expect.stringContaining("新しいメモ"),
+    ]);
+    fireEvent.click(screen.getAllByRole("button", { name: "タスクにする" })[0]!);
+    expect(onTaskCandidate).toHaveBeenCalledWith("note-old");
   });
 });

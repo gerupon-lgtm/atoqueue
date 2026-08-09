@@ -16,16 +16,29 @@ async function register(app: ReturnType<typeof buildApp>, endpoint = subscriptio
   return response.json() as { deviceId: string; deviceSecret: string };
 }
 
-function upsertRequest(device: { deviceId: string; deviceSecret: string }, reminderId: string, key: string, scheduledAt = "2026-08-06T09:00:00.000Z") {
+function upsertRequest(device: { deviceId: string; deviceSecret: string }, reminderId: string, key: string, scheduledAt = "2026-08-06T09:00:00.000Z", repeatCadence?: "weekly" | "monthly") {
   return {
     method: "PUT" as const,
     url: `/v1/reminders/${reminderId}`,
     headers: { authorization: `Bearer ${device.deviceSecret}`, "idempotency-key": key },
-    payload: { deviceId: device.deviceId, scheduledAt, notificationType: "task_review" },
+    payload: { deviceId: device.deviceId, scheduledAt, notificationType: "task_review", ...(repeatCadence ? { repeatCadence } : {}) },
   };
 }
 
 describe("reminder routes", () => {
+  it("returns the requested weekly cadence without accepting private ownership fields", async () => {
+    const reminders = new InMemoryReminderRepository();
+    const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: reminders, now: testNow });
+    const device = await register(app);
+    const created = await app.inject(upsertRequest(device, randomUUID(), "weekly-1", undefined, "weekly"));
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ repeatCadence: "weekly" });
+    const rejected = await app.inject({ ...upsertRequest(device, randomUUID(), "private-1"), payload: { ...upsertRequest(device, randomUUID(), "private-1").payload, owner: "SECRET_OWNER" } });
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.body).not.toContain("SECRET_OWNER");
+    await app.close();
+  });
+
   it("creates and fully replaces an authenticated device reminder without storing task data", async () => {
     const reminders = new InMemoryReminderRepository();
     const app = buildApp({ version: "0.1.0", repository: new InMemoryDeviceRepository(), reminderRepository: reminders, now: testNow });

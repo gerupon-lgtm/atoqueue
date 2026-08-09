@@ -195,7 +195,11 @@ export function TodayReviewPage({
   if (!task) {
     return (
       <section aria-labelledby="today-review-title">
-        <h1 id="today-review-title">今日の確認</h1>
+        <header className="reviewHeader" data-testid="review-header">
+          <h1 className="reviewHeader__title" id="today-review-title">
+            今日の確認
+          </h1>
+        </header>
         <p>
           今日確認するものはありません。記録したことは受信箱やタスク一覧からいつでも見直せます
         </p>
@@ -224,22 +228,26 @@ export function TodayReviewPage({
   return (
     <section aria-labelledby="today-review-title">
       <header className="reviewHeader" data-testid="review-header">
+        <h1 className="reviewHeader__title" id="today-review-title">
+          今日の確認
+        </h1>
         <button
           className="reviewHeader__previous"
           disabled={isSaving || session.currentIndex === 0}
           onClick={() => void previous()}
           type="button"
         >
-          ← 前のタスク
+          前のタスク
         </button>
-        <h1 className="reviewHeader__title" id="today-review-title">
-          今日の確認
-        </h1>
-        <p className="reviewHeader__progress" aria-label="進行状況">
+      </header>
+      <p
+        className="reviewProgress"
+        data-testid="review-progress"
+        aria-label="進行状況"
+      >
           {Math.min(session.currentIndex + 1, session.orderedTaskIds.length)} /{" "}
           {session.orderedTaskIds.length}
-        </p>
-      </header>
+      </p>
       <article aria-label="確認するタスク" className="reviewTaskCard">
         <p>{choosePrompt(level).message}</p>
         <h2>{task.title}</h2>

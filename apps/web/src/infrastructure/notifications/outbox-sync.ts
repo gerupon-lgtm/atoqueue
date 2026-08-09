@@ -3,6 +3,7 @@ import {
   createLocalCalendar,
   notificationTypeForTask,
   planNotificationSchedules,
+  rebuildGlobalNotificationSchedules,
   type AppRepository,
   type AppSnapshot,
   type NotificationOutboxItem,
@@ -87,6 +88,11 @@ function isStale(item: NotificationOutboxItem, snapshot: AppSnapshot): boolean {
   const mapping = snapshot.reminderMap.find((entry) => entry.reminderId === item.reminderId);
   if (!mapping) return true;
   if (mapping.kind === "capture_initial") {
+    if (mapping.scope) {
+      return hasGlobalOwner(snapshot, mapping.scope)
+        ? false
+        : true;
+    }
     return !snapshot.captures.some(
       (capture) =>
         capture.id === mapping.captureId &&
@@ -129,6 +135,10 @@ function registrationFailed(snapshot: AppSnapshot): AppSnapshot {
 
 function reschedule(snapshot: AppSnapshot, item: NotificationOutboxItem, now: string): AppSnapshot {
   const mapping = snapshot.reminderMap.find((entry) => entry.reminderId === item.reminderId);
+  if (mapping?.scope) {
+    const rebuilt = rebuildGlobalNotificationSchedules({ snapshot, now });
+    return { ...snapshot, ...rebuilt };
+  }
   if (mapping?.kind === "capture_initial") {
     const capture = snapshot.captures.find(
       (candidate) =>
@@ -182,7 +192,14 @@ function reschedule(snapshot: AppSnapshot, item: NotificationOutboxItem, now: st
   };
 }
 
-function renewIdempotencyKey(snapshot: AppSnapshot, _item: NotificationOutboxItem, now: string): AppSnapshot {
+function renewIdempotencyKey(snapshot: AppSnapshot, item: NotificationOutboxItem, now: string): AppSnapshot {
+  const failedMapping = snapshot.reminderMap.find(
+    (mapping) => mapping.reminderId === item.reminderId,
+  );
+  if (failedMapping?.scope) {
+    const rebuilt = rebuildGlobalNotificationSchedules({ snapshot, now });
+    return { ...snapshot, ...rebuilt };
+  }
   const active = snapshot.reminderMap.flatMap((mapping) => {
     if (mapping.kind === "capture_initial") {
       const capture = snapshot.captures.find(
@@ -219,4 +236,10 @@ function renewIdempotencyKey(snapshot: AppSnapshot, _item: NotificationOutboxIte
     ...snapshot,
     notificationOutbox: [...snapshot.notificationOutbox.filter((candidate) => candidate.operation === "cancel" || !activeReminderIds.has(candidate.reminderId)), ...active],
   };
+}
+
+function hasGlobalOwner(snapshot: AppSnapshot, scope: "inbox" | "memo"): boolean {
+  return scope === "inbox"
+    ? snapshot.captures.some((capture) => capture.classification === "unclassified")
+    : snapshot.captures.some((capture) => capture.classification === "note");
 }

@@ -64,12 +64,15 @@ function repositoryWithSnapshot(initial: AppSnapshot): AppRepository {
 describe("TodayReviewPage", () => {
   afterEach(cleanup);
 
-  it("F-012 centers 今日の確認 in a three-column header and disables ← 前のタスク on the first item", async () => {
+  it("F-012 places 今日の確認 at the left and an arrowless 前のタスク action at the right", async () => {
     render(<TodayReviewPage calendar={calendar} now={() => now} repository={repositoryWithSession([task("one"), task("two")])} />);
 
     expect(await screen.findByRole("heading", { name: "今日の確認" })).toBeTruthy();
-    expect((screen.getByRole("button", { name: "← 前のタスク" }) as HTMLButtonElement).disabled).toBe(true);
+    const previous = screen.getByRole("button", { name: "前のタスク" }) as HTMLButtonElement;
+    expect(previous.disabled).toBe(true);
+    expect(previous.textContent).not.toContain("←");
     expect(screen.getByTestId("review-header").classList.contains("reviewHeader")).toBe(true);
+    expect(screen.getByTestId("review-progress").classList.contains("reviewProgress")).toBe(true);
     expect(screen.getByText("タスク one")).toBeTruthy();
   });
 
@@ -81,8 +84,8 @@ describe("TodayReviewPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "完了" }));
 
     expect(await screen.findByText("タスク two")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "← 前のタスク" }) as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "← 前のタスク" }));
+    expect((screen.getByRole("button", { name: "前のタスク" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "前のタスク" }));
     expect(await screen.findByText("タスク one")).toBeTruthy();
     expect(screen.getByText("現在: 完了")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "期限なし" }));
@@ -106,9 +109,9 @@ describe("TodayReviewPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "この日付にする" }));
     await screen.findByText("タスク three");
 
-    fireEvent.click(screen.getByRole("button", { name: "← 前のタスク" }));
+    fireEvent.click(screen.getByRole("button", { name: "前のタスク" }));
     await screen.findByText("タスク two");
-    fireEvent.click(screen.getByRole("button", { name: "← 前のタスク" }));
+    fireEvent.click(screen.getByRole("button", { name: "前のタスク" }));
     await screen.findByText("タスク one");
     expect(screen.getByRole("button", { name: "期限なし" })).toBeTruthy();
   });

@@ -11,6 +11,9 @@ const settings: Settings = {
   initialReminderDelayMinutes: 60,
   deadlineReminderLeadMinutes: 60,
   weeklyReviewDay: 0,
+  inboxReminderFrequency: "none",
+  memoReviewFrequency: "none",
+  enterSavesCapture: true,
 };
 
 function scheduledTask(overrides: Partial<Task> = {}): Task {

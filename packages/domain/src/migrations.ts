@@ -25,41 +25,56 @@ export function migrateSnapshot(input: unknown): AppSnapshot {
   if (version === 1) {
     validateSnapshot(snapshot, false);
     return normalizeSnapshot(
-      upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(upgradeV2ToV3(upgradeV1ToV2(snapshot))))),
+      upgradeV6ToV7(
+        upgradeV5ToV6(
+          upgradeV4ToV5(upgradeV3ToV4(upgradeV2ToV3(upgradeV1ToV2(snapshot)))),
+        ),
+      ),
     );
   }
   if (version === 2) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(upgradeV2ToV3(snapshot)))));
+    return normalizeSnapshot(
+      upgradeV6ToV7(
+        upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(upgradeV2ToV3(snapshot)))),
+      ),
+    );
   }
   if (version === 3) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(snapshot))));
+    return normalizeSnapshot(
+      upgradeV6ToV7(upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(snapshot)))),
+    );
   }
   if (version === 4) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV5ToV6(upgradeV4ToV5(snapshot)));
+    return normalizeSnapshot(upgradeV6ToV7(upgradeV5ToV6(upgradeV4ToV5(snapshot))));
   }
   if (version === 5) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV5ToV6(snapshot));
+    return normalizeSnapshot(upgradeV6ToV7(upgradeV5ToV6(snapshot)));
   }
   if (version === 6) {
     validateSnapshot(snapshot, true);
+    return normalizeSnapshot(upgradeV6ToV7(snapshot));
+  }
+  if (version === 7) {
+    validateSnapshot(snapshot, true, true);
     return normalizeSnapshot(snapshot);
   }
   if (typeof version === "number")
     throw new UnsupportedSchemaVersionError(version);
-  throw corrupt("schemaVersion must be 1, 2, 3, 4, 5, or 6");
+  throw corrupt("schemaVersion must be 1, 2, 3, 4, 5, 6, or 7");
 }
 
 function validateSnapshot(
   snapshot: RecordValue,
   requireReviewEventIds: boolean,
+  requireV7Fields = false,
 ): void {
   string(snapshot.appVersion, "appVersion");
   device(snapshot.device);
-  settings(snapshot.settings);
+  settings(snapshot.settings, requireV7Fields);
   entities(snapshot.captures, "captures", capture);
   entities(snapshot.tasks, "tasks", task);
   entities(snapshot.reviewSessions, "reviewSessions", (value, index) =>
@@ -77,7 +92,9 @@ function validateSnapshot(
     "notificationOutbox",
     notificationOutboxItem,
   );
-  entities(snapshot.reminderMap, "reminderMap", reminderMapEntry);
+  entities(snapshot.reminderMap, "reminderMap", (value, index) =>
+    reminderMapEntry(value, index, requireV7Fields),
+  );
   string(snapshot.savedAt, "savedAt");
 }
 
@@ -117,6 +134,9 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
     "defaultDeadlineTime",
     "onboardingCompletedAt",
     "weeklyReviewDay",
+    "inboxReminderFrequency",
+    "memoReviewFrequency",
+    "enterSavesCapture",
   ]);
   if (settingsValue.quietHours !== undefined) {
     normalizedSettings.quietHours = copyKnown(
@@ -203,6 +223,7 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
     "reminderId",
     "taskId",
     "captureId",
+    "scope",
     "kind",
     "taskRevision",
     "createdAt",
@@ -261,7 +282,7 @@ function device(value: unknown): void {
   optionalString(entity.registeredAt, "device.registeredAt");
 }
 
-function settings(value: unknown): void {
+function settings(value: unknown, requireV7Fields: boolean): void {
   const entity = object(value, "settings");
   oneOf(entity.locale, "settings.locale", ["ja-JP"]);
   string(entity.timeZone, "settings.timeZone");
@@ -281,6 +302,19 @@ function settings(value: unknown): void {
   );
   if (entity.weeklyReviewDay !== 0) {
     throw corrupt("settings.weeklyReviewDay must be 0");
+  }
+  if (requireV7Fields) {
+    oneOf(entity.inboxReminderFrequency, "settings.inboxReminderFrequency", [
+      "none",
+      "gentle",
+      "prompt",
+    ]);
+    oneOf(entity.memoReviewFrequency, "settings.memoReviewFrequency", [
+      "none",
+      "weekly",
+      "monthly",
+    ]);
+    boolean(entity.enterSavesCapture, "settings.enterSavesCapture");
   }
   if (entity.quietHours !== undefined) {
     const quietHours = object(entity.quietHours, "settings.quietHours");
@@ -339,6 +373,21 @@ function upgradeV4ToV5(snapshot: RecordValue): RecordValue {
 /** Version 6 adds capture-owned anonymous inbox reminders. */
 function upgradeV5ToV6(snapshot: RecordValue): RecordValue {
   return { ...snapshot, schemaVersion: 6 };
+}
+
+/** Version 7 adds opt-in recurring inbox and memo review preferences. */
+function upgradeV6ToV7(snapshot: RecordValue): RecordValue {
+  const settingsValue = object(snapshot.settings, "settings");
+  return {
+    ...snapshot,
+    schemaVersion: 7,
+    settings: {
+      ...settingsValue,
+      inboxReminderFrequency: "none",
+      memoReviewFrequency: "none",
+      enterSavesCapture: true,
+    },
+  };
 }
 
 function optionalReminderMinutes(value: unknown, name: string): void {
@@ -556,12 +605,26 @@ function notificationOutboxItem(value: unknown, index: number): void {
   numbers(entity, ["taskRevision", "attemptCount"]);
 }
 
-function reminderMapEntry(value: unknown, index: number): void {
+function reminderMapEntry(
+  value: unknown,
+  index: number,
+  allowGlobalScope: boolean,
+): void {
   const entity = object(value, `reminderMap[${index}]`);
   strings(entity, ["reminderId", "createdAt"]);
-  const hasTask = typeof entity.taskId === "string";
-  const hasCapture = typeof entity.captureId === "string";
-  if (hasTask === hasCapture) {
+  const hasTask = entity.taskId !== undefined;
+  const hasCapture = entity.captureId !== undefined;
+  const hasScope = entity.scope !== undefined;
+  if (hasTask) string(entity.taskId, `reminderMap[${index}].taskId`);
+  if (hasCapture)
+    string(entity.captureId, `reminderMap[${index}].captureId`);
+  if (!allowGlobalScope && hasScope) {
+    throw corrupt(`reminderMap[${index}].scope is invalid`);
+  }
+  if (hasScope) {
+    oneOf(entity.scope, `reminderMap[${index}].scope`, ["inbox", "memo"]);
+  }
+  if (Number(hasTask) + Number(hasCapture) + Number(hasScope) !== 1) {
     throw corrupt(`reminderMap[${index}] must have exactly one local owner`);
   }
   number(entity.taskRevision, `reminderMap[${index}].taskRevision`);

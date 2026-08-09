@@ -4,6 +4,7 @@ import {
   createLocalCalendar,
   generateTaskCandidate,
   markAsNote,
+  promoteNoteToTask,
   resolveDueChoice,
   type AppRepository,
   type DueChoice,
@@ -39,6 +40,7 @@ export function TaskCandidatePage({
   const [title, setTitle] = useState("");
   const [captureBody, setCaptureBody] = useState("");
   const [captureCreatedAt, setCaptureCreatedAt] = useState("");
+  const [captureClassification, setCaptureClassification] = useState<"unclassified" | "note">("unclassified");
   const [timeZone, setTimeZone] = useState("Asia/Tokyo");
   const [category, setCategory] = useState<Task["category"] | "">("");
   const [dueType, setDueType] = useState<DueChoice["type"]>("unset");
@@ -57,13 +59,17 @@ export function TaskCandidatePage({
         const capture = snapshot.captures.find(
           (candidate) => candidate.id === captureId,
         );
-        if (!capture || capture.classification !== "unclassified") {
+        if (
+          !capture ||
+          (capture.classification !== "unclassified" && capture.classification !== "note")
+        ) {
           throw new Error("Capture is unavailable.");
         }
         const suggestion = generateTaskCandidate(capture.body);
         if (current) {
           setCaptureBody(capture.body);
           setCaptureCreatedAt(capture.createdAt);
+          setCaptureClassification(capture.classification);
           setTimeZone(snapshot.settings.timeZone);
           setTitle(suggestion.title);
           if (suggestion.dueChoice) setDueType(suggestion.dueChoice.type);
@@ -113,7 +119,7 @@ export function TaskCandidatePage({
         defaultDeadlineTime: snapshot.settings.defaultDeadlineTime ?? "23:59",
       });
       await repository.save(
-        confirmTask({
+        (captureClassification === "note" ? promoteNoteToTask : confirmTask)({
           snapshot,
           captureId,
           taskId: createId(),
@@ -226,13 +232,15 @@ export function TaskCandidatePage({
           タスクにする
         </button>
         <div className="task-candidate__secondary-actions">
-          <button
-            disabled={isSaving}
-            onClick={() => void saveAsNote()}
-            type="button"
-          >
-            メモにする
-          </button>
+          {captureClassification === "unclassified" ? (
+            <button
+              disabled={isSaving}
+              onClick={() => void saveAsNote()}
+              type="button"
+            >
+              メモにする
+            </button>
+          ) : null}
           <button
             disabled={isSaving}
             onClick={() => (onReturn ?? onCompleted)?.()}

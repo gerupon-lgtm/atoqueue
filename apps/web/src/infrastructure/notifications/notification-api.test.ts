@@ -18,6 +18,7 @@ describe("NotificationApi", () => {
         reminderId: "22222222-2222-4222-8222-222222222222",
         status: "pending",
         scheduledAt: "2026-08-04T09:00:00.000Z",
+        repeatCadence: null,
         updatedAt: "2026-08-04T08:00:00.000Z",
       }),
     );
@@ -53,6 +54,42 @@ describe("NotificationApi", () => {
       }),
     );
     expect(fetcher.mock.calls[0][1].body).not.toContain("task title");
+  });
+
+  it("sends only the approved cadence field for a repeating anonymous reminder", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(201, {
+        reminderId: "22222222-2222-4222-8222-222222222222",
+        status: "pending",
+        scheduledAt: "2026-08-04T09:00:00.000Z",
+        repeatCadence: "weekly",
+        updatedAt: "2026-08-04T08:00:00.000Z",
+      }),
+    );
+    const api = new NotificationApi("https://api.example.test", fetcher);
+
+    await api.upsert(
+      {
+        id: "outbox",
+        operation: "upsert",
+        reminderId: "22222222-2222-4222-8222-222222222222",
+        scheduledAt: "2026-08-04T09:00:00.000Z",
+        notificationType: "inbox_review",
+        repeatCadence: "weekly",
+        taskRevision: 0,
+        attemptCount: 0,
+        nextAttemptAt: "2026-08-04T08:00:00.000Z",
+        createdAt: "2026-08-04T08:00:00.000Z",
+      },
+      credentials,
+    );
+
+    expect(JSON.parse(fetcher.mock.calls[0][1].body as string)).toEqual({
+      deviceId: credentials.deviceId,
+      scheduledAt: "2026-08-04T09:00:00.000Z",
+      notificationType: "inbox_review",
+      repeatCadence: "weekly",
+    });
   });
 
   it("reports retry metadata for a rate-limited request", async () => {

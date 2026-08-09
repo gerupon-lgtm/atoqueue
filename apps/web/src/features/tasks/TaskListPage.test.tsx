@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { createEmptySnapshot, type AppRepository, type AppSnapshot, type Task } from "../../../../../packages/domain/src";
@@ -46,5 +46,50 @@ describe("TaskListPage", () => {
     for (const control of document.querySelectorAll<HTMLElement>("select, input, a")) {
       expect(getComputedStyle(control).minHeight).toBe("44px");
     }
+  });
+
+  it("F-014 reveals an overdue CTA without changing the default list, then filters active overdue tasks", async () => {
+    render(<MemoryRouter><TaskListPage now={() => now} repository={repository()} /></MemoryRouter>);
+
+    expect(await screen.findByRole("link", { name: "今日" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "期限超過のタスクを見る" }));
+
+    expect(screen.getByDisplayValue("対応中")).toBeTruthy();
+    expect(screen.getByDisplayValue("期限超過")).toBeTruthy();
+    expect(screen.getByText("期限切れ")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "今日" })).toBeNull();
+  });
+
+  it("F-014 uses one captured clock value for the list, overdue CTA, and due badges", async () => {
+    const snapshot = createEmptySnapshot({
+      appVersion: "0.1.0",
+      localDeviceId: "device-1",
+      timeZone: "UTC",
+      now,
+    });
+    snapshot.tasks = [
+      task("境界のタスク", {
+        dueMode: "scheduled",
+        dueAt: "2026-08-03T09:00:00.000Z",
+      }),
+    ];
+    const repositoryAtBoundary: AppRepository = {
+      load: async () => snapshot,
+      save: async () => undefined,
+      loadDraft: async () => "",
+      saveDraft: async () => undefined,
+      clearDraft: async () => undefined,
+    };
+    let calls = 0;
+    const boundaryClock = () =>
+      calls++ === 0
+        ? "2026-08-03T08:59:59.999Z"
+        : "2026-08-03T09:00:00.001Z";
+
+    render(<MemoryRouter><TaskListPage now={boundaryClock} repository={repositoryAtBoundary} /></MemoryRouter>);
+
+    expect(await screen.findByRole("link", { name: "境界のタスク" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "期限超過のタスクを見る" })).toBeNull();
+    expect(screen.getByLabelText("境界のタスクの期限状態").textContent).toBe("今日が期限");
   });
 });

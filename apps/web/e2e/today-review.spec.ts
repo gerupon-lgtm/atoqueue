@@ -39,10 +39,16 @@ test("processes three tasks one at a time, re-answers a previous task, and shows
   await page.goto("/today");
   await expect(page.getByRole("heading", { name: "今日の確認" })).toBeVisible();
   await expect(page.getByText("確認タスク one")).toBeVisible();
-  await expect(page.getByRole("button", { name: "← 前のタスク" })).toBeDisabled();
+  const previous = page.getByRole("button", { name: "前のタスク" });
+  await expect(previous).toBeDisabled();
   const titleBox = await page.getByRole("heading", { name: "今日の確認" }).boundingBox();
+  const headerBox = await page.getByTestId("review-header").boundingBox();
+  const previousBox = await previous.boundingBox();
   expect(titleBox).not.toBeNull();
-  expect(Math.abs((titleBox!.x + titleBox!.width / 2) - 640)).toBeLessThan(2);
+  expect(headerBox).not.toBeNull();
+  expect(previousBox).not.toBeNull();
+  expect(Math.abs(titleBox!.x - headerBox!.x)).toBeLessThan(2);
+  expect(Math.abs((previousBox!.x + previousBox!.width) - (headerBox!.x + headerBox!.width))).toBeLessThan(2);
 
   await page.getByRole("button", { name: "完了" }).click();
   await expect(page.getByText("確認タスク two")).toBeVisible();
@@ -51,8 +57,8 @@ test("processes three tasks one at a time, re-answers a previous task, and shows
   await page.getByRole("button", { name: "この日付にする" }).click();
   await expect(page.getByText("確認タスク three")).toBeVisible();
 
-  await page.getByRole("button", { name: "← 前のタスク" }).click();
-  await page.getByRole("button", { name: "← 前のタスク" }).click();
+  await page.getByRole("button", { name: "前のタスク" }).click();
+  await page.getByRole("button", { name: "前のタスク" }).click();
   await expect(page.getByText("確認タスク one")).toBeVisible();
   await page.getByRole("button", { name: "期限なし" }).click();
   await expect(page.getByText("確認タスク two")).toBeVisible();

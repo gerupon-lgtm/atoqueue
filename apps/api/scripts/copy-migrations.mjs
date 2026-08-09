@@ -3,8 +3,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const source = resolve(packageRoot, "src/db/migrations/001_initial.sql");
-const destination = resolve(packageRoot, "dist/db/migrations/001_initial.sql");
+const migrations = ["001_initial.sql", "002_recurring_reminders.sql"];
+const destinationDirectory = resolve(packageRoot, "dist/db/migrations");
 
-await mkdir(dirname(destination), { recursive: true });
-await copyFile(source, destination);
+await mkdir(destinationDirectory, { recursive: true });
+await Promise.all(migrations.map((migration) => copyFile(
+  resolve(packageRoot, "src/db/migrations", migration),
+  resolve(destinationDirectory, migration),
+)));

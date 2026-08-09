@@ -5,7 +5,9 @@ import {
   createCapture,
   createEmptySnapshot,
   markAsNote,
+  markNoteAsUnneeded,
   markAsUnneeded,
+  promoteNoteToTask,
   resolveDueChoice,
   suggestClassification,
   type LocalCalendar,
@@ -44,9 +46,12 @@ describe("classification", () => {
     expect(suggestClassification(snapshot.captures[0]!.body)).toBe("task");
     expect(snapshot.captures[0]!.classification).toBe("unclassified");
     expect(snapshot.tasks).toEqual([]);
-    expect(snapshot.notificationOutbox).toHaveLength(1);
+    expect(snapshot.notificationOutbox).toHaveLength(4);
     expect(snapshot.reminderMap).toEqual([
-      expect.objectContaining({ captureId: "capture-1", kind: "capture_initial" }),
+      expect.objectContaining({ scope: "inbox", kind: "capture_initial" }),
+      expect.objectContaining({ scope: "inbox", kind: "capture_initial" }),
+      expect.objectContaining({ scope: "inbox", kind: "capture_initial" }),
+      expect.objectContaining({ scope: "inbox", kind: "capture_initial" }),
     ]);
   });
 
@@ -93,10 +98,8 @@ describe("classification", () => {
       idFactory: (kind, scheduleKind) => `${kind}-${scheduleKind ?? "event"}`,
     });
 
-    expect(next.notificationOutbox).toHaveLength(5);
-    expect(next.notificationOutbox).toEqual(expect.arrayContaining([
-      expect.objectContaining({ operation: "cancel", taskRevision: 0 }),
-    ]));
+    expect(next.notificationOutbox.filter((item) => item.operation === "upsert")).toHaveLength(3);
+    expect(next.notificationOutbox.filter((item) => item.operation === "cancel")).toHaveLength(4);
     expect(next.reminderMap.map((entry) => entry.kind)).toEqual(["initial", "deadline_before", "review"]);
     expect(next.notificationOutbox.filter((item) => item.operation === "upsert" && item.taskRevision === 1).map((item) => ({
       operation: item.operation,
@@ -183,9 +186,59 @@ describe("classification", () => {
       now,
     });
 
-    expect(next.reminderMap).toEqual([]);
+    expect(next.reminderMap).toEqual(expect.arrayContaining([
+      expect.objectContaining({ scope: "memo" }),
+    ]));
     expect(next.notificationOutbox).toEqual(expect.arrayContaining([
       expect.objectContaining({ operation: "cancel", taskRevision: 0 }),
+    ]));
+  });
+
+  it("F-006 promotes a memo only when the user later confirms its task candidate", () => {
+    const noted = markAsNote({
+      snapshot: snapshotWithCapture(),
+      captureId: "capture-1",
+      now,
+    });
+
+    const next = promoteNoteToTask({
+      snapshot: noted,
+      captureId: "capture-1",
+      taskId: "task-1",
+      title: "牛乳を買う",
+      due: resolveDueChoice({ choice: { type: "none" }, now, calendar }),
+      now: "2026-08-03T10:00:00.000Z",
+    });
+
+    expect(next.captures[0]).toMatchObject({
+      classification: "task",
+      linkedTaskId: "task-1",
+    });
+    expect(next.tasks).toEqual([
+      expect.objectContaining({ id: "task-1", sourceCaptureId: "capture-1" }),
+    ]);
+    expect(next.reminderMap.some((entry) => entry.scope === "memo")).toBe(false);
+    expect(next.notificationOutbox).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operation: "cancel", taskRevision: 0 }),
+    ]));
+  });
+
+  it("F-006 marks a memo unneeded and removes its global memo reservations", () => {
+    const noted = markAsNote({
+      snapshot: snapshotWithCapture(),
+      captureId: "capture-1",
+      now,
+    });
+    const next = markNoteAsUnneeded({
+      snapshot: noted,
+      captureId: "capture-1",
+      now: "2026-08-03T10:00:00.000Z",
+    });
+
+    expect(next.captures[0]!.classification).toBe("unneeded");
+    expect(next.reminderMap.some((entry) => entry.scope === "memo")).toBe(false);
+    expect(next.notificationOutbox).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operation: "cancel" }),
     ]));
   });
 });

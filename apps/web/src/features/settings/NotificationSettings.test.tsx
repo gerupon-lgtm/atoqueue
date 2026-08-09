@@ -245,6 +245,107 @@ describe("NotificationSettings", () => {
     ).toBeNull();
   });
 
+  it("saves the inbox and memo review frequencies only after explicit confirmation", async () => {
+    const snapshot = createEmptySnapshot({
+      appVersion: "test",
+      localDeviceId: "local",
+      timeZone: "Asia/Tokyo",
+      now: "2026-08-04T08:00:00.000Z",
+    });
+    snapshot.captures = [
+      {
+        id: "inbox-local-only",
+        body: "unclassified private body",
+        classification: "unclassified",
+        createdAt: "2026-08-04T07:00:00.000Z",
+        updatedAt: "2026-08-04T07:00:00.000Z",
+      },
+      {
+        id: "memo-local-only",
+        body: "memo private body",
+        classification: "note",
+        createdAt: "2026-08-04T07:00:00.000Z",
+        updatedAt: "2026-08-04T07:00:00.000Z",
+      },
+    ];
+    const repository = writableMemory(snapshot);
+    const flushNotifications = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(
+      <NotificationSettings
+        repository={repository}
+        flushNotifications={flushNotifications}
+      />,
+    );
+
+    const inbox = await screen.findByLabelText("未整理の受信箱の確認頻度");
+    const memo = screen.getByLabelText("メモの見直し頻度");
+    await user.selectOptions(inbox, "prompt");
+    await user.selectOptions(memo, "monthly");
+    expect(screen.getByText("変更を保存してください")).not.toBeNull();
+    expect(
+      inbox
+        .closest(".notification-settings__review-frequency")
+        ?.classList.contains("is-dirty"),
+    ).toBe(true);
+    expect((await repository.load()).settings.inboxReminderFrequency).toBe(
+      "gentle",
+    );
+
+    await user.click(screen.getByRole("button", { name: "確認頻度を保存" }));
+
+    await waitFor(async () =>
+      expect((await repository.load()).settings).toMatchObject({
+        inboxReminderFrequency: "prompt",
+        memoReviewFrequency: "monthly",
+      }),
+    );
+    expect((await repository.load()).notificationOutbox).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ notificationType: "inbox_review" }),
+        expect.objectContaining({ notificationType: "inbox_review", repeatCadence: "monthly" }),
+      ]),
+    );
+    expect(flushNotifications).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps locally saved review frequencies and offers a retry when notification synchronization fails", async () => {
+    const snapshot = createEmptySnapshot({
+      appVersion: "test",
+      localDeviceId: "local",
+      timeZone: "Asia/Tokyo",
+      now: "2026-08-04T08:00:00.000Z",
+    });
+    const repository = writableMemory(snapshot);
+    const flushNotifications = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(undefined);
+    const user = userEvent.setup();
+    render(
+      <NotificationSettings
+        repository={repository}
+        flushNotifications={flushNotifications}
+      />,
+    );
+
+    await user.selectOptions(
+      await screen.findByLabelText("未整理の受信箱の確認頻度"),
+      "none",
+    );
+    await user.click(screen.getByRole("button", { name: "確認頻度を保存" }));
+
+    expect(await screen.findByText("通知の同期に失敗しました。再試行できます。"))
+      .not.toBeNull();
+    expect((await repository.load()).settings.inboxReminderFrequency).toBe(
+      "none",
+    );
+
+    await user.click(screen.getByRole("button", { name: "通知の同期を再試行" }));
+    expect(await screen.findByText("通知の同期が完了しました。")).not.toBeNull();
+    expect(flushNotifications).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps smartphone troubleshooting available without adding scroll before it is needed", async () => {
     render(<NotificationSettings repository={memory()} />);
 
@@ -266,6 +367,19 @@ function memory(
   return {
     load: async () => value,
     save: async () => undefined,
+    loadDraft: async () => "",
+    saveDraft: async () => undefined,
+    clearDraft: async () => undefined,
+  };
+}
+
+function writableMemory(initial: ReturnType<typeof createEmptySnapshot>): AppRepository {
+  let value = structuredClone(initial);
+  return {
+    load: async () => structuredClone(value),
+    save: async (next) => {
+      value = structuredClone(next);
+    },
     loadDraft: async () => "",
     saveDraft: async () => undefined,
     clearDraft: async () => undefined,

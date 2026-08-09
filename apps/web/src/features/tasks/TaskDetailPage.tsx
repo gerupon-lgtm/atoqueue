@@ -136,6 +136,7 @@ export function TaskDetailPage({
   return (
     <section aria-labelledby="task-detail-title">
       <header className="task-detail__header">
+        <h1 id="task-detail-title">タスクを修正</h1>
         {onReturn ? (
           <button
             className="task-detail__return"
@@ -143,10 +144,9 @@ export function TaskDetailPage({
             style={touchTarget}
             type="button"
           >
-            ← タスク一覧に戻る
+            タスク一覧
           </button>
         ) : null}
-        <h1 id="task-detail-title">タスクを修正</h1>
       </header>
       <section className="task-detail__summary" aria-label="タスクの概要">
         <p className="task-detail__source" aria-label="元の記録">

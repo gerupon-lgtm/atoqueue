@@ -14,6 +14,42 @@
   padding: 0;
 }
 
+.notification-settings__review-frequency {
+  display: grid;
+  gap: 0.625rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid #c6d0c8;
+}
+
+.notification-settings__review-frequency > h2,
+.notification-settings__review-frequency > p {
+  margin: 0;
+}
+
+.notification-settings__review-frequency > label {
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.notification-settings__review-frequency > select {
+  min-height: 44px;
+  padding: 0.5rem 0.625rem;
+  font: inherit;
+  font-size: 1rem;
+}
+
+.notification-settings__review-frequency > button {
+  justify-self: start;
+  margin: 0;
+}
+
+.notification-settings__unsaved {
+  padding: 0.5rem 0.625rem;
+  border-left: 3px solid #b7791f;
+  background: #fff9e6;
+  color: #6b4611;
+}
+
 .notification-settings__timing > h2,
 .notification-settings__timing > p {
   margin: 0;

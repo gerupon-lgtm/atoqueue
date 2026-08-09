@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   markAsNote,
   markAsUnneeded,
+  markNoteAsUnneeded,
   suggestClassification,
   updateCaptureBody,
   type AppRepository,
@@ -20,6 +21,7 @@ export function InboxPage({
   onTaskCandidate,
 }: InboxPageProps) {
   const [captures, setCaptures] = useState<Capture[]>([]);
+  const [tab, setTab] = useState<"unclassified" | "note">("unclassified");
   const [timeZone, setTimeZone] = useState("Asia/Tokyo");
   const [bodyDrafts, setBodyDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string>();
@@ -30,11 +32,7 @@ export function InboxPage({
   async function reload(): Promise<void> {
     const snapshot = await repository.load();
     setTimeZone(snapshot.settings.timeZone);
-    setCaptures(
-      snapshot.captures
-        .filter((capture) => capture.classification === "unclassified")
-        .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
-    );
+    setCaptures(snapshot.captures);
   }
 
   useEffect(() => {
@@ -58,14 +56,20 @@ export function InboxPage({
       });
   }
 
-  function classify(captureId: string, type: "note" | "unneeded"): void {
+  function classify(
+    captureId: string,
+    type: "note" | "unneeded",
+    source: "unclassified" | "note" = "unclassified",
+  ): void {
     setError(undefined);
     enqueueMutation(async () => {
       const snapshot = await repository.load();
       const next =
         type === "note"
           ? markAsNote({ snapshot, captureId, now: now() })
-          : markAsUnneeded({ snapshot, captureId, now: now() });
+          : source === "note"
+            ? markNoteAsUnneeded({ snapshot, captureId, now: now() })
+            : markAsUnneeded({ snapshot, captureId, now: now() });
       await repository.save(next);
       await reload();
     });
@@ -90,12 +94,40 @@ export function InboxPage({
     });
   }
 
+  const visibleCaptures = captures
+    .filter((capture) => capture.classification === tab)
+    .sort((left, right) =>
+      tab === "note"
+        ? left.createdAt.localeCompare(right.createdAt)
+        : right.createdAt.localeCompare(left.createdAt),
+    );
+
   return (
     <section aria-labelledby="inbox-title">
       <h1 id="inbox-title">受信箱</h1>
-      {captures.length === 0 ? <p>未整理の記録はありません。</p> : null}
+      <div role="tablist" aria-label="受信箱の表示">
+        <button
+          aria-selected={tab === "unclassified"}
+          onClick={() => setTab("unclassified")}
+          role="tab"
+          type="button"
+        >
+          未整理
+        </button>
+        <button
+          aria-selected={tab === "note"}
+          onClick={() => setTab("note")}
+          role="tab"
+          type="button"
+        >
+          メモ
+        </button>
+      </div>
+      {visibleCaptures.length === 0 ? (
+        <p>{tab === "note" ? "メモはありません。" : "未整理の記録はありません。"}</p>
+      ) : null}
       <ul>
-        {captures.map((capture) => {
+        {visibleCaptures.map((capture) => {
           const suggestion = suggestClassification(capture.body);
           return (
             <li key={capture.id}>
@@ -128,7 +160,7 @@ export function InboxPage({
               >
                 本文を保存
               </button>
-              {suggestion === "task" ? <p>タスク候補です</p> : null}
+              {tab === "unclassified" && suggestion === "task" ? <p>タスク候補です</p> : null}
               <div
                 className="inbox-item__actions inbox-item__classification-actions"
                 aria-label={`${capture.body} の整理操作`}
@@ -138,18 +170,20 @@ export function InboxPage({
                   onClick={() => onTaskCandidate?.(capture.id)}
                   type="button"
                 >
-                  タスクかも
+                  {tab === "note" ? "タスクにする" : "タスクかも"}
                 </button>
+                {tab === "unclassified" ? (
+                  <button
+                    disabled={isMutating}
+                    onClick={() => classify(capture.id, "note")}
+                    type="button"
+                  >
+                    メモ
+                  </button>
+                ) : null}
                 <button
                   disabled={isMutating}
-                  onClick={() => classify(capture.id, "note")}
-                  type="button"
-                >
-                  メモ
-                </button>
-                <button
-                  disabled={isMutating}
-                  onClick={() => classify(capture.id, "unneeded")}
+                  onClick={() => classify(capture.id, "unneeded", tab)}
                   type="button"
                 >
                   不要

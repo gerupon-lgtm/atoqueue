@@ -30,7 +30,11 @@ export class ReminderDispatcher {
     try {
       const path = job.notificationType === "inbox_review" ? "/inbox" : "/today";
       const result = await this.push.send({ subscription: job.subscription, payload: { type: "review_due", reminderId: job.id, url: `${path}?reminder=${job.id}` } });
-      if (result.statusCode >= 200 && result.statusCode < 300) { await this.repository.markSent(job.id, claimedAt, now.toISOString()); return; }
+      if (result.statusCode >= 200 && result.statusCode < 300) {
+        if (job.repeatCadence) await this.repository.rescheduleAfterSend(job.id, claimedAt, nextScheduledAt(now, job.repeatCadence), now.toISOString());
+        else await this.repository.markSent(job.id, claimedAt, now.toISOString());
+        return;
+      }
       if (result.statusCode === 404 || result.statusCode === 410) { await this.repository.disableDeviceAndFailPending(job.deviceId, job.id, claimedAt, now.toISOString(), `push_${result.statusCode}`); return; }
       await this.handleTemporary(job.id, claimedAt, job.attemptCount, now, `push_${result.statusCode}`);
     } catch {
@@ -44,4 +48,12 @@ export class ReminderDispatcher {
     const minutes = RETRY_MINUTES[currentAttempts]!;
     await this.repository.retry(id, claimedAt, new Date(now.getTime() + minutes * 60_000).toISOString(), attemptCount, now.toISOString(), code);
   }
+}
+
+function nextScheduledAt(now: Date, cadence: "weekly" | "monthly"): string {
+  if (cadence === "weekly") return new Date(now.getTime() + 7 * 24 * 60 * 60_000).toISOString();
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth() + 1;
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month, Math.min(now.getUTCDate(), lastDay), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), now.getUTCMilliseconds())).toISOString();
 }

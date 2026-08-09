@@ -55,7 +55,7 @@ const setupNotifications = () =>
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <AppShell />,
+    element: <AppShell repository={applicationRepository} />,
     children: [
       ...pages.map((page) => ({
         ...(page.index ? { index: true } : { path: page.path }),

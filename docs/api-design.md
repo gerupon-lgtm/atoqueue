@@ -139,7 +139,8 @@ Request:
 {
   "deviceId": "a1f0f85e-8da5-4bfb-8fc4-938067ca9984",
   "scheduledAt": "2026-08-06T09:00:00.000Z",
-  "notificationType": "unset_due_review"
+  "notificationType": "inbox_review",
+  "repeatCadence": "weekly"
 }
 ```
 
@@ -150,6 +151,8 @@ Request:
 - `deadline_review`
 - `unset_due_review`
 
+Requestの `repeatCadence` は省略時だけ一回限りとし、`null` は受け付けない。指定時は `weekly` または `monthly` だけを許可する。Responseの `repeatCadence` は一回限りなら `null` を返す。これは匿名系列の配送後に次回予約へ進めるための値であり、タスク・キャプチャ・メモのローカルIDは受け取らない。
+
 Response `200` または `201`:
 
 ```json
@@ -157,11 +160,12 @@ Response `200` または `201`:
   "reminderId": "34f55ed6-ddf9-481d-8b49-5b520683a8d8",
   "status": "pending",
   "scheduledAt": "2026-08-06T09:00:00.000Z",
+  "repeatCadence": "weekly",
   "updatedAt": "2026-08-03T09:00:00.000Z"
 }
 ```
 
-禁止フィールド `title`、`body`、`taskId`、`category` を受け取った場合は無視せず `INVALID_REQUEST` とする。これにより誤って本文を送る実装を契約テストで検出する。
+禁止フィールド `title`、`body`、`taskId`、`captureId`、`category` を受け取った場合は無視せず `INVALID_REQUEST` とする。これにより誤って本文・局所IDを送る実装を契約テストで検出する。
 
 予約PUTの冪等性記録は端末ID・予約ID・`Idempotency-Key`・要求フィンガープリント・予約応答だけを不変に保存する。後続の予約更新は過去の冪等性応答を変更しない。
 
@@ -191,7 +195,7 @@ Response `200` または `201`:
 }
 ```
 
-タスク本文や期限日はpayloadへ入れない。Service Workerは通知タップ時に同一オリジンの既存ウィンドウをフォーカスし、なければ新規に開く。
+タスク本文、メモ本文、期限、カテゴリ、タスクID、キャプチャIDはpayloadへ入れない。Service Workerは通知タップ時に同一オリジンの既存ウィンドウをフォーカスし、なければ新規に開く。
 
 ## 7. 配送処理
 
@@ -200,9 +204,9 @@ Response `200` または `201`:
 1. 5分ごとに `status=pending AND scheduled_at<=now` を最大100件取得する。
 2. トランザクション内で `claimed` にし、`claimed_at` を記録する。
 3. Web Pushへ送信する。
-4. 成功時は `sent`、一時失敗時は `pending` に戻して予定を5分、15分、60分後へ移す。
+4. 一回限りの成功時は `sent`。`repeatCadence` を持つ成功時は同じ匿名予約を `pending` に戻し、`weekly` は7日後、`monthly` はUTC暦月を一つ進めた同日（存在しない日は月末）へ移す。一時失敗時は `pending` に戻して予定を5分、15分、60分後へ移す。
 5. 3回失敗で `failed` とする。
-6. Push endpointが404/410なら端末購読を `disabled` にし、対象端末の未配送予約を `failed` にする。
+6. Push endpointが404/410なら端末購読を `disabled` にし、対象端末の未配送予約を `failed` にする。この場合、繰り返し予約も次回へ進めない。
 7. 15分以上 `claimed` のままのジョブは起動時に `pending` へ戻す。
 
 配送成功はOS表示を保証しない。アプリは起動時に端末内ルールを再計算し、未処理対象を「今日の確認」に表示する。

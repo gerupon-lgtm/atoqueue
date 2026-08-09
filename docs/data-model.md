@@ -40,7 +40,7 @@
 
 ```ts
 export interface AppSnapshot {
-  schemaVersion: 6;
+  schemaVersion: 7;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -78,6 +78,12 @@ export interface Settings {
   onboardingCompletedAt?: string;
   quietHours?: { start: string; end: string };
   weeklyReviewDay: 0;
+  /** 未整理の受信箱全体に対する再通知頻度。 */
+  inboxReminderFrequency: "none" | "gentle" | "prompt";
+  /** note に分類したメモ一覧全体に対する棚卸し頻度。 */
+  memoReviewFrequency: "none" | "weekly" | "monthly";
+  /** true のとき Enter で記録し、Shift+Enter は改行とする。 */
+  enterSavesCapture: boolean;
 }
 ```
 
@@ -219,6 +225,8 @@ export interface NotificationOutboxItem {
   reminderId: string;
   scheduledAt?: string;
   notificationType?: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review";
+  /** 省略時は一回限り。サーバーへ送ってよい繰り返し情報だけを表す。 */
+  repeatCadence?: "weekly" | "monthly";
   taskRevision: number;
   attemptCount: number;
   nextAttemptAt: string;
@@ -227,14 +235,17 @@ export interface NotificationOutboxItem {
 
 export interface ReminderMapEntry {
   reminderId: string;
-  taskId: string;
-  kind: "initial" | "deadline_before" | "review";
+  taskId?: string;
+  captureId?: string;
+  /** 受信箱・メモ一覧の全体予約。局所IDはサーバーへ送らない。 */
+  scope?: "inbox" | "memo";
+  kind?: "capture_initial" | "initial" | "deadline_before" | "review";
   taskRevision: number;
   createdAt: string;
 }
 ```
 
-`reminderId` は推測困難なUUIDとする。サーバーは `taskId` を受け取らない。Push payloadの `reminderId` を端末側の `ReminderMapEntry` で解決する。解決できない場合は「今日の確認」全体を開く。1タスクは `initial`、`deadline_before`、`review` の最大3件を持ち、完了・不要・保管時は全件を取消す。
+`reminderId` は推測困難なUUIDとする。マッピングは `taskId`、`captureId`、`scope` のいずれか一つだけを所有者として持つ。サーバーはこれらのローカルIDを受け取らない。Push payloadの `reminderId` を端末側の `ReminderMapEntry` で解決し、解決できない場合は「今日の確認」全体を開く。1タスクは `initial`、`deadline_before`、`review` の最大3件を持ち、完了・不要・保管時は全件を取消す。
 
 ## 4. リマインド計算規則
 
@@ -258,16 +269,18 @@ export interface ReminderMapEntry {
 
 期限を変更した場合は `dismissCount` を0へ戻す。完了・不要では通知予約を取消す。過去日を新期限として保存しようとした場合は確認を表示する。
 
-### 4.3 通知時刻（2026-08-08確定）
+### 4.3 通知時刻と全体再通知（2026-08-09確定）
 
 - 【確定】初回通知は、利用者が設定した作成後の分数で予約する。初期値は60分。
-- 【確定】初回通知は記録の保存時に受信箱リマインドとして予約する。予定時刻は作成日時に端末全体の初回通知分数を加えた時刻であり、初期値は60分。
-- 【確定】利用者が記録をタスク化した時は受信箱リマインドを取消し、初回・期限前・再確認のタスク予約へ置き換える。メモ・不要への分類時も受信箱リマインドを取消す。タスク候補は自動確定しない。
+- 【確定】未整理記録が一件以上ある場合、個々の記録ではなく受信箱全体の匿名予約系列を一つだけ持つ。最も古い未整理記録の作成日時と「初回通知まで」から初回を決め、新しい記録の追加では既存時刻を前倒し・リセットしない。
+- 【確定】受信箱の再通知は `none`（初回のみ）、`gentle`（3日後、7日後、以降週1回）、`prompt`（1日後、3日後、7日後、以降週1回）から選ぶ。新規端末の初期値は `gentle`、v6からの移行値は `none` である。未整理が0件になれば系列全件を取消す。
+- 【確定】`note` のメモ棚卸しもメモ一覧全体の匿名予約系列を一つだけ持つ。最も古いメモを基準に、`weekly` は7日後から週ごと、`monthly` は14日後からUTC暦月ごと（各月末へクランプ）に繰り返す。メモが0件になれば取消す。新規端末の初期値は `weekly`、移行値は `none` である。
+- 【確定】利用者が記録をタスク化・メモ化・不要化したときは、全体予約を再計算する。タスク候補は自動確定しない。
 - 【確定】通知予約とPush購読は端末単位で扱う。MVPではタスク本文・タスク状態を端末間同期しないため、ある端末で作ったタスクの通知を別端末へ配送しない。
 - 【確定】端末データ削除では、保存済みの匿名端末識別子と秘密値でサーバー側のPush端末登録を先に無効化する。無効化に失敗した場合はローカルのスナップショットを消さず、再試行できるようにする。無効化後はブラウザのPush購読もベストエフォートで解除する。
 - 【確定】期限ありタスクは、利用者が設定した期限前の分数で予約する。初期値は60分。期限時は通常の `review` 予約を使う。
-- 【確定】設定は個別タスクではなく端末全体に適用し、変更時は有効タスクと未整理記録の匿名予約を再計算する。通知設定前に保存した未整理記録は、設定完了時に初回通知時刻を過ぎていれば直ちに予約する。
-- 【確定】サーバーへ送るのは匿名予約ID、予定時刻、通知種別、端末IDだけであり、タスクID・本文・期限の意味は送らない。
+- 【確定】設定は端末全体に適用する。頻度変更は明示保存時にのみ、古い全体予約を取消して新頻度で組み直す。通知設定前に保存した未整理記録は、設定完了時に初回通知時刻を過ぎていれば直ちに予約する。
+- 【確定】サーバーへ送るのは匿名予約ID、予定時刻、通知種別、繰り返し間隔、端末IDだけであり、タスクID・キャプチャID・本文・期限の意味は送らない。
 - 【想定】同一時刻に複数の予約が重なった場合の集約方針は、試用で過剰通知を確認してから調整する。
 
 ## 5. サーバーデータモデル
@@ -295,6 +308,7 @@ export interface ReminderMapEntry {
 | `device_id`         | TEXT      | `device_subscriptions.device_id` 外部キー               |
 | `scheduled_at`      | TEXT      | UTC、検索索引                                           |
 | `notification_type` | TEXT      | 汎用通知種別                                            |
+| `repeat_cadence`    | TEXT NULL | `weekly` / `monthly`。NULLは一回限り                    |
 | `status`            | TEXT      | `pending` / `claimed` / `sent` / `cancelled` / `failed` |
 | `idempotency_key`   | TEXT      | 一意                                                    |
 | `attempt_count`     | INTEGER   | 0以上                                                   |
@@ -366,6 +380,7 @@ export interface BackupEnvelopeV1 {
    - v3 → v4: 既存端末には `onboardingCompletedAt` として保存日時を設定し、既存利用者へ初回チュートリアルを再表示しない。v4の新規端末は未設定のまま開始し、案内を閉じた時だけ設定する。
    - v4 → v5: 日付だけの期限に使う `defaultDeadlineTime` を `23:59` で補う。
    - v5 → v6: 受信箱リマインドのローカル対応情報を扱える形式へ移行する。既存の未整理記録は次回の通知設定または時刻設定変更時に匿名予約を作成する。
+   - v6 → v7: 受信箱再通知を `none`、メモ棚卸しを `none`、Enter登録を `true` で補う。新規スナップショットは `gentle`、`weekly`、`true` で開始する。全体予約は `ReminderMapEntry.scope` で表す。
 2. 新しい未知バージョンは上書きせず、読み取り停止とJSON退避を案内する。
 3. JSON解析失敗時は破損値を別キー `atoqueue:corrupt:<timestamp>` へ退避して初期化可否を確認する。
 4. 破損復旧や復元では元データを直ちに削除しない。

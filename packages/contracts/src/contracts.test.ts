@@ -70,4 +70,18 @@ describe("notification API contracts", () => {
       ).toThrow();
     },
   );
+
+  it.each(["weekly", "monthly"])("accepts the %s anonymous reminder cadence", (repeatCadence) => {
+    expect(CreateReminderRequestSchema.parse({ deviceId, scheduledAt, notificationType: "task_review", repeatCadence })).toMatchObject({ repeatCadence });
+  });
+
+  it.each([
+    { repeatCadence: null },
+    { repeatCadence: "daily" },
+    { owner: "private-owner" },
+    { captureId: "private-capture" },
+    { scope: "private-scope" },
+  ])("rejects non-anonymous or invalid cadence payloads %#", (payload) => {
+    expect(() => CreateReminderRequestSchema.parse({ deviceId, scheduledAt, notificationType: "task_review", ...payload })).toThrow();
+  });
 });

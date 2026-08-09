@@ -1,7 +1,7 @@
 import { AlreadyClassifiedError } from "./errors";
 import type { AppSnapshot, Capture, Task } from "./model";
 import type { DueResolution } from "./due-date";
-import { cancelCaptureNotification, queueTaskNotifications, type NotificationIdFactory } from "./notification-queue";
+import { queueTaskNotifications, rebuildGlobalNotificationSchedules, type NotificationIdFactory } from "./notification-queue";
 
 export interface ClassifyCaptureInput {
   snapshot: AppSnapshot;
@@ -25,7 +25,23 @@ export function suggestClassification(body: string): "task" | "unknown" {
 }
 
 export function confirmTask(input: ConfirmTaskInput): AppSnapshot {
-  const capture = getUnclassifiedCapture(input.snapshot, input.captureId);
+  return confirmCaptureAsTask(input, "unclassified");
+}
+
+/** Converts a memo only after the user confirms the normal task-candidate form. */
+export function promoteNoteToTask(input: ConfirmTaskInput): AppSnapshot {
+  return confirmCaptureAsTask(input, "note");
+}
+
+function confirmCaptureAsTask(
+  input: ConfirmTaskInput,
+  allowedClassification: "unclassified" | "note",
+): AppSnapshot {
+  const capture = getClassifiableCapture(
+    input.snapshot,
+    input.captureId,
+    allowedClassification,
+  );
   const title = input.title.trim();
   if (!title) throw new Error("A task title is required.");
   validateDueResolution(input.due);
@@ -56,14 +72,13 @@ export function confirmTask(input: ConfirmTaskInput): AppSnapshot {
     updatedAt: input.now,
     revision: 1,
   };
-  const captureCancellation = cancelCaptureNotification({
-    snapshot: input.snapshot,
-    captureId: capture.id,
+  const global = rebuildGlobalNotificationSchedules({
+    snapshot: { ...input.snapshot, captures: replaceCapture(input.snapshot, updatedCapture) },
     now: input.now,
     createId: input.idFactory,
   });
   const notification = queueTaskNotifications({
-    snapshot: { ...input.snapshot, reminderMap: captureCancellation.reminderMap },
+    snapshot: { ...input.snapshot, ...global },
     task,
     now: input.now,
     createId: input.idFactory,
@@ -73,7 +88,10 @@ export function confirmTask(input: ConfirmTaskInput): AppSnapshot {
     ...input.snapshot,
     captures: replaceCapture(input.snapshot, updatedCapture),
     tasks: [...input.snapshot.tasks, task],
-    notificationOutbox: [...input.snapshot.notificationOutbox, ...captureCancellation.notificationOutbox, ...notification.notificationOutbox],
+    notificationOutbox: [
+      ...global.notificationOutbox,
+      ...notification.notificationOutbox,
+    ],
     reminderMap: notification.reminderMap,
     actionHistory: [
       ...input.snapshot.actionHistory,
@@ -108,11 +126,21 @@ export function markAsUnneeded(input: ClassifyCaptureInput): AppSnapshot {
   return classifyWithoutTask(input, "unneeded");
 }
 
+/** Keeps disposal of a reviewed memo inside the domain notification rebuild path. */
+export function markNoteAsUnneeded(input: ClassifyCaptureInput): AppSnapshot {
+  return classifyWithoutTask(input, "unneeded", "note");
+}
+
 function classifyWithoutTask(
   input: ClassifyCaptureInput,
   classification: "note" | "unneeded",
+  allowedClassification: "unclassified" | "note" = "unclassified",
 ): AppSnapshot {
-  const capture = getUnclassifiedCapture(input.snapshot, input.captureId);
+  const capture = getClassifiableCapture(
+    input.snapshot,
+    input.captureId,
+    allowedClassification,
+  );
   const updatedCapture: Capture = {
     ...capture,
     classification,
@@ -120,16 +148,15 @@ function classifyWithoutTask(
     updatedAt: input.now,
   };
 
-  const captureCancellation = cancelCaptureNotification({
-    snapshot: input.snapshot,
-    captureId: input.captureId,
+  const global = rebuildGlobalNotificationSchedules({
+    snapshot: { ...input.snapshot, captures: replaceCapture(input.snapshot, updatedCapture) },
     now: input.now,
   });
   return {
     ...input.snapshot,
     captures: replaceCapture(input.snapshot, updatedCapture),
-    notificationOutbox: [...input.snapshot.notificationOutbox, ...captureCancellation.notificationOutbox],
-    reminderMap: captureCancellation.reminderMap,
+    notificationOutbox: global.notificationOutbox,
+    reminderMap: global.reminderMap,
     actionHistory: [
       ...input.snapshot.actionHistory,
       captureClassificationEvent(updatedCapture, input.now),
@@ -139,9 +166,17 @@ function classifyWithoutTask(
 }
 
 function getUnclassifiedCapture(snapshot: AppSnapshot, captureId: string): Capture {
+  return getClassifiableCapture(snapshot, captureId, "unclassified");
+}
+
+function getClassifiableCapture(
+  snapshot: AppSnapshot,
+  captureId: string,
+  classification: "unclassified" | "note",
+): Capture {
   const capture = snapshot.captures.find((candidate) => candidate.id === captureId);
   if (!capture) throw new Error("Capture not found.");
-  if (capture.classification !== "unclassified") throw new AlreadyClassifiedError(captureId);
+  if (capture.classification !== classification) throw new AlreadyClassifiedError(captureId);
   return capture;
 }
 

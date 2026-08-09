@@ -1,5 +1,5 @@
 import type { AppSnapshot } from "./model";
-import { queueCaptureNotification, type NotificationIdFactory } from "./notification-queue";
+import { rebuildGlobalNotificationSchedules, type NotificationIdFactory } from "./notification-queue";
 
 const MAX_CAPTURE_LENGTH = 280;
 
@@ -23,9 +23,8 @@ export function createCapture(
     createdAt: now,
     updatedAt: now,
   };
-  const notification = queueCaptureNotification({
-    snapshot,
-    capture,
+  const notification = rebuildGlobalNotificationSchedules({
+    snapshot: { ...snapshot, captures: [...snapshot.captures, capture] },
     now,
     createId: idFactory,
   });
@@ -33,7 +32,7 @@ export function createCapture(
   return {
     ...snapshot,
     captures: [...snapshot.captures, capture],
-    notificationOutbox: [...snapshot.notificationOutbox, ...notification.notificationOutbox],
+    notificationOutbox: notification.notificationOutbox,
     reminderMap: notification.reminderMap,
     actionHistory: [
       ...snapshot.actionHistory,

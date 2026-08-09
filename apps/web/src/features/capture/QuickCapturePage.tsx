@@ -9,6 +9,7 @@ import {
   completeOnboarding,
   createCapture,
   type AppRepository,
+  type AppSnapshot,
 } from "../../../../../packages/domain/src";
 import type { NotificationSetupResult } from "../../infrastructure/notifications/push-subscription";
 import "./QuickCapturePage.css";
@@ -38,10 +39,15 @@ export function QuickCapturePage({
   const draftGeneration = useRef(0);
   const draftWriteQueue = useRef<Promise<void>>(Promise.resolve());
   const pendingDraftClear = useRef<string | undefined>(undefined);
+  const preferenceSaveInProgress = useRef(false);
   const [body, setBody] = useState("");
   const [unclassifiedCount, setUnclassifiedCount] = useState(0);
   const [isDraftLoaded, setIsDraftLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [loadedSnapshot, setLoadedSnapshot] = useState<AppSnapshot>();
+  const [enterSavesCapture, setEnterSavesCapture] = useState(true);
+  const [isSavingEnterPreference, setIsSavingEnterPreference] =
+    useState(false);
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -50,15 +56,16 @@ export function QuickCapturePage({
     useState(false);
 
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
     let isCurrent = true;
 
     void Promise.all([repository.load(), repository.loadDraft()])
       .then(async ([snapshot, draft]) => {
         if (!isCurrent) return;
+        setLoadedSnapshot(snapshot);
+        setEnterSavesCapture(snapshot.settings.enterSavesCapture);
+        if (snapshot.device.pushSubscriptionStatus !== "not_requested") {
+          inputRef.current?.focus();
+        }
         setUnclassifiedCount(
           snapshot.captures.filter(
             (capture) => capture.classification === "unclassified",
@@ -131,7 +138,12 @@ export function QuickCapturePage({
   }, [body, isDraftLoaded, repository]);
 
   async function saveCapture(): Promise<void> {
-    if (body.trim().length === 0 || body.trim().length > 280 || isSaving)
+    if (
+      body.trim().length === 0 ||
+      body.trim().length > 280 ||
+      isSaving ||
+      preferenceSaveInProgress.current
+    )
       return;
 
     setIsSaving(true);
@@ -159,6 +171,7 @@ export function QuickCapturePage({
         createId(),
       );
       await repository.save(next);
+      setLoadedSnapshot(next);
       void onNotificationChanged?.();
       pendingDraftClear.current = body;
       await repository.clearDraft();
@@ -181,15 +194,49 @@ export function QuickCapturePage({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
-    if (event.key === "Enter" && !event.shiftKey && !event.altKey) {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.altKey &&
+      (enterSavesCapture || event.ctrlKey || event.metaKey)
+    ) {
       event.preventDefault();
       void saveCapture();
     }
   }
 
+  async function saveEnterSavesCapture(nextValue: boolean): Promise<void> {
+    if (preferenceSaveInProgress.current || !loadedSnapshot) return;
+
+    const previousValue = enterSavesCapture;
+    preferenceSaveInProgress.current = true;
+    setEnterSavesCapture(nextValue);
+    setIsSavingEnterPreference(true);
+    try {
+      const currentSnapshot = await repository.load();
+      const nextSnapshot: AppSnapshot = {
+        ...currentSnapshot,
+        settings: {
+          ...currentSnapshot.settings,
+          enterSavesCapture: nextValue,
+        },
+      };
+      await repository.save(nextSnapshot);
+      setLoadedSnapshot(nextSnapshot);
+    } catch {
+      setEnterSavesCapture(previousValue);
+      setError(FAILURE_MESSAGE);
+    } finally {
+      preferenceSaveInProgress.current = false;
+      setIsSavingEnterPreference(false);
+    }
+  }
+
   async function dismissOnboarding(): Promise<void> {
     try {
-      await repository.save(completeOnboarding(await repository.load(), now()));
+      const nextSnapshot = completeOnboarding(await repository.load(), now());
+      await repository.save(nextSnapshot);
+      setLoadedSnapshot(nextSnapshot);
       setShowOnboarding(false);
     } catch {
       setError(FAILURE_MESSAGE);
@@ -204,6 +251,9 @@ export function QuickCapturePage({
     setMessage(undefined);
     try {
       const result = await setupNotifications();
+      const nextSnapshot = await repository.load();
+      setLoadedSnapshot(nextSnapshot);
+      setEnterSavesCapture(nextSnapshot.settings.enterSavesCapture);
       setShowNotificationSetup(false);
       if (result.state === "granted") {
         void onNotificationChanged?.();
@@ -274,15 +324,33 @@ export function QuickCapturePage({
           ref={inputRef}
           rows={3}
           maxLength={280}
-          readOnly={isSaving}
+          readOnly={isSaving || isSavingEnterPreference}
           value={body}
         />
-        <button
-          disabled={body.trim().length === 0 || isTooLong || isSaving}
-          type="submit"
-        >
-          保存して戻る
-        </button>
+        <div className="quick-capture__actions">
+          <button
+            disabled={
+              body.trim().length === 0 ||
+              isTooLong ||
+              isSaving ||
+              isSavingEnterPreference
+            }
+            type="submit"
+          >
+            保存して戻る
+          </button>
+          <label className="quick-capture__enter-save">
+            <input
+              checked={enterSavesCapture}
+              disabled={isSaving || isSavingEnterPreference || !loadedSnapshot}
+              onChange={(event) => {
+                void saveEnterSavesCapture(event.target.checked);
+              }}
+              type="checkbox"
+            />
+            Enterで登録
+          </label>
+        </div>
       </form>
       {message ? <p role="status">{message}</p> : null}
       {isTooLong ? <p role="alert">{LENGTH_MESSAGE}</p> : null}

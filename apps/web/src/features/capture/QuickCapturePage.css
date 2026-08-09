@@ -28,6 +28,32 @@
   gap: 0.75rem;
 }
 
+.quick-capture__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.quick-capture__actions button {
+  flex: 0 0 auto;
+}
+
+.quick-capture__enter-save {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 44px;
+  white-space: nowrap;
+  font-size: 0.875rem;
+}
+
+.quick-capture__enter-save input {
+  width: 1rem;
+  height: 1rem;
+}
+
 .quick-capture__onboarding {
   display: grid;
   gap: 0.75rem;

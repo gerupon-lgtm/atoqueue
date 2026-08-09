@@ -53,7 +53,7 @@ describe("QuickCapturePage", () => {
     vi.useRealTimers();
   });
 
-  it("renders one text field, omits task metadata controls, and focuses it", async () => {
+  it("renders one text field and omits task metadata controls", async () => {
     const repository = createRepository();
     render(<QuickCapturePage repository={repository} />);
 
@@ -66,12 +66,45 @@ describe("QuickCapturePage", () => {
         .textContent,
     ).toBe("あとで思い出したいことは？");
     expect(screen.queryByLabelText(/期限|カテゴリ/)).toBeNull();
-    expect(input).toBe(document.activeElement);
     expect(
       screen
         .getByRole("button", { name: "保存して戻る" })
         .hasAttribute("disabled"),
     ).toBe(true);
+  });
+
+  it("does not autofocus the capture textarea while notification setup is not requested", async () => {
+    const setupNotifications = vi.fn().mockResolvedValue({ state: "granted" });
+    render(
+      <QuickCapturePage
+        repository={createRepository()}
+        setupNotifications={setupNotifications}
+      />,
+    );
+
+    await screen.findByRole("button", { name: "通知を設定する" });
+    expect(screen.getByLabelText("思いついたこと")).not.toBe(document.activeElement);
+  });
+
+  it("autofocuses the capture textarea after notification setup has already been handled", async () => {
+    const snapshot = createEmptySnapshot({
+      appVersion: "0.1.0",
+      localDeviceId: "device-1",
+      timeZone: "Asia/Tokyo",
+      now,
+    });
+    snapshot.device.pushSubscriptionStatus = "granted";
+    render(
+      <QuickCapturePage
+        repository={createRepository({
+          load: vi.fn().mockResolvedValue(snapshot),
+        })}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("textbox", { name: "思いついたこと" }),
+    ).toBe(document.activeElement);
   });
 
   it("shows a first-use guide and stores its dismissal locally", async () => {
@@ -170,7 +203,7 @@ describe("QuickCapturePage", () => {
     );
   });
 
-  it("saves with Ctrl+Enter, clears the draft, and announces completion", async () => {
+  it("keeps Ctrl+Enter as a save shortcut when Enter registration is on", async () => {
     const repository = createRepository();
     const user = userEvent.setup();
     render(
@@ -188,16 +221,6 @@ describe("QuickCapturePage", () => {
     await user.keyboard("{Control>}{Enter}{/Control}");
 
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
-    expect(repository.clearDraft).toHaveBeenCalledOnce();
-    expect((input as HTMLTextAreaElement).value).toBe("");
-    expect(screen.getByRole("status").textContent).toBe(
-      "保存しました。いまの作業に戻って大丈夫です",
-    );
-    expect(
-      (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]?.[0],
-    ).toMatchObject({
-      captures: [expect.objectContaining({ body: "牛乳を買う" })],
-    });
   });
 
   it("F-014 asks the application notification synchronizer to deliver the new inbox reminder", async () => {
@@ -239,7 +262,138 @@ describe("QuickCapturePage", () => {
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
   });
 
-  it("saves with Meta+Enter", async () => {
+  it("adds a newline with Enter when Enter save is turned off, while the save button still creates one capture", async () => {
+    const repository = createRepository();
+    const user = userEvent.setup();
+    render(<QuickCapturePage repository={repository} />);
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
+
+    await user.click(screen.getByRole("checkbox", { name: "Enterで登録" }));
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect(
+      (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]?.[0],
+    ).toMatchObject({ settings: { enterSavesCapture: false } });
+
+    await user.type(input, "改行する");
+    await user.keyboard("{Enter}");
+    expect((input as HTMLTextAreaElement).value).toBe("改行する\n");
+    expect(repository.save).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "保存して戻る" }));
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(2));
+  });
+
+  it("keeps Ctrl+Enter as an explicit save shortcut when Enter registration is off", async () => {
+    const repository = createRepository();
+    const user = userEvent.setup();
+    render(<QuickCapturePage repository={repository} />);
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
+
+    await user.click(screen.getByRole("checkbox", { name: "Enterで登録" }));
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    await user.type(input, "明示的に保存する");
+    await user.keyboard("{Control>}{Enter}{/Control}");
+
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(2));
+  });
+
+  it("persists only the Enter setting without discarding the typed draft", async () => {
+    const repository = createRepository();
+    const user = userEvent.setup();
+    render(<QuickCapturePage repository={repository} />);
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
+
+    await user.type(input, "保存前の下書き");
+    await user.click(screen.getByRole("checkbox", { name: "Enterで登録" }));
+
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect((input as HTMLTextAreaElement).value).toBe("保存前の下書き");
+    expect(
+      (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]?.[0],
+    ).toMatchObject({
+      captures: [],
+      settings: { enterSavesCapture: false },
+    });
+  });
+
+  it("prevents capture persistence while the Enter setting save is still in flight", async () => {
+    const preferenceSave = createDeferred<void>();
+    let storedSnapshot = createEmptySnapshot({
+      appVersion: "0.1.0",
+      localDeviceId: "device-1",
+      timeZone: "Asia/Tokyo",
+      now,
+    });
+    const repository: AppRepository = {
+      load: vi.fn().mockImplementation(async () => storedSnapshot),
+      save: vi.fn().mockImplementation(async (next) => {
+        if (next.settings.enterSavesCapture === false) {
+          await preferenceSave.promise;
+        }
+        storedSnapshot = next;
+      }),
+      loadDraft: vi.fn().mockResolvedValue(""),
+      saveDraft: vi.fn().mockResolvedValue(undefined),
+      clearDraft: vi.fn().mockResolvedValue(undefined),
+    };
+    const user = userEvent.setup();
+    render(
+      <QuickCapturePage
+        createId={() => "capture-1"}
+        now={() => now}
+        repository={repository}
+      />,
+    );
+    const input = await screen.findByRole("textbox", {
+      name: "思いついたこと",
+    });
+    await user.type(input, "設定保存中の記録");
+
+    await user.click(screen.getByRole("checkbox", { name: "Enterで登録" }));
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    const form = input.closest("form");
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(repository.load).toHaveBeenCalledTimes(2);
+    expect(repository.save).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "保存して戻る" }),
+    ).toHaveProperty("disabled", true);
+
+    preferenceSave.resolve();
+    await waitFor(() =>
+      expect((screen.getByRole("checkbox") as HTMLInputElement).disabled).toBe(
+        false,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "保存して戻る" }));
+
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(2));
+    expect(storedSnapshot.captures).toEqual([
+      expect.objectContaining({ body: "設定保存中の記録" }),
+    ]);
+  });
+
+  it("keeps the Enter registration label on one line in the compact action row", async () => {
+    render(<QuickCapturePage repository={createRepository()} />);
+
+    const label = await screen.findByText("Enterで登録");
+    expect(label.closest(".quick-capture__actions")).not.toBeNull();
+    expect(label.closest("label")?.classList.contains("quick-capture__enter-save")).toBe(true);
+  });
+
+  it("keeps Meta+Enter as a save shortcut when Enter registration is on", async () => {
     const repository = createRepository();
     const user = userEvent.setup();
     render(<QuickCapturePage repository={repository} />);

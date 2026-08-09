@@ -15,17 +15,20 @@ function buildApi(): void {
 }
 
 describe("production API build", () => {
-  it("ships the initial migration alongside compiled migration code", async () => {
+  it("ships initial and recurring migrations alongside compiled migration code", async () => {
     buildApi();
     const sqlAsset = new URL("../dist/db/migrations/001_initial.sql", import.meta.url);
     await expect(access(sqlAsset)).resolves.toBeUndefined();
+    const recurringAsset = new URL("../dist/db/migrations/002_recurring_reminders.sql", import.meta.url);
+    await expect(access(recurringAsset)).resolves.toBeUndefined();
 
     const compiledMigrationModule = new URL("../dist/db/migrate.js", import.meta.url).href;
     const { applyInitialMigration } = await import(compiledMigrationModule);
     const executed: string[] = [];
     await applyInitialMigration({ query: async (sql: string) => { executed.push(sql); } } as never);
-    expect(executed).toHaveLength(1);
+    expect(executed).toHaveLength(2);
     expect(executed[0]).toContain("CREATE TABLE IF NOT EXISTS device_subscriptions");
+    expect(executed[1]).toContain("repeat_cadence");
   }, 45_000);
 
   it("can import the compiled production startup without resolving workspace TypeScript source", () => {

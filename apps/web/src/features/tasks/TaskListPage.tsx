@@ -35,11 +35,11 @@ export function TaskListPage({
       current = false;
     };
   }, [repository]);
-  const tasks = useMemo(() => {
-    if (!snapshot) return [];
+  const display = useMemo(() => {
+    if (!snapshot) return;
     const timestamp = now();
     const calendar = createLocalCalendar(snapshot.settings.timeZone);
-    return listTasks(
+    const tasks = listTasks(
       snapshot.tasks,
       {
         tab,
@@ -51,12 +51,35 @@ export function TaskListPage({
       },
       snapshot.captures,
     );
+    const overdueCount = listTasks(
+      snapshot.tasks,
+      {
+        tab: "active",
+        due: "overdue",
+        now: timestamp,
+        calendar,
+      },
+      snapshot.captures,
+    ).length;
+    return { calendar, overdueCount, tasks, timestamp };
   }, [category, due, now, search, snapshot, tab]);
 
-  if (!snapshot) return <p>読み込み中です…</p>;
+  if (!snapshot || !display) return <p>読み込み中です…</p>;
   return (
     <section aria-labelledby="task-list-title" className="task-list">
       <h1 id="task-list-title">タスク</h1>
+      {display.overdueCount > 0 ? (
+        <button
+          aria-label="期限超過のタスクを見る"
+          onClick={() => {
+            setTab("active");
+            setDue("overdue");
+          }}
+          type="button"
+        >
+          期限超過のタスクを見る（{display.overdueCount}件）
+        </button>
+      ) : null}
       <section aria-label="タスクを絞り込む" className="task-list__filters">
         <label>
           状態
@@ -114,11 +137,11 @@ export function TaskListPage({
           完了したタスクは、詳細画面の「再開」で戻せます。
         </p>
       ) : null}
-      {tasks.length === 0 ? (
+      {display.tasks.length === 0 ? (
         <p>該当するタスクはありません。</p>
       ) : (
         <ul className="task-list__items">
-          {tasks.map((task) => (
+          {display.tasks.map((task) => (
             <li key={task.id}>
               <Link
                 aria-label={task.title}
@@ -135,8 +158,8 @@ export function TaskListPage({
                 >
                   {dueState(
                     task,
-                    now(),
-                    createLocalCalendar(snapshot.settings.timeZone),
+                    display.timestamp,
+                    display.calendar,
                   )}
                 </span>
                 {task.dueAt ? (
