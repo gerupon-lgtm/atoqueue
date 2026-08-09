@@ -71,6 +71,7 @@ export function TaskListPage({
       {display.overdueCount > 0 ? (
         <button
           aria-label="期限超過のタスクを見る"
+          className="task-list__overdue-link"
           onClick={() => {
             setTab("active");
             setDue("overdue");
@@ -107,7 +108,7 @@ export function TaskListPage({
             <option value="none">なし</option>
           </select>
         </label>
-        <label>
+        <label className="task-list__category">
           カテゴリ
           <select
             style={touchTarget}
@@ -156,11 +157,7 @@ export function TaskListPage({
                   aria-label={`${task.title}の期限状態`}
                   className="task-list__due-state"
                 >
-                  {dueState(
-                    task,
-                    display.timestamp,
-                    display.calendar,
-                  )}
+                  {dueState(task, display.timestamp, display.calendar)}
                 </span>
                 {task.dueAt ? (
                   <span aria-label={`${task.title}の期限日時`}>

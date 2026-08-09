@@ -7,7 +7,10 @@ import {
 import { NotificationApi } from "../../infrastructure/notifications/notification-api";
 import {
   createBrowserPushAdapter,
+  createBrowserPushStateProbe,
   enableNotifications,
+  inspectBrowserPushState,
+  type BrowserPushState,
   type NotificationSetupErrorReason,
   type NotificationSetupResult,
 } from "../../infrastructure/notifications/push-subscription";
@@ -23,6 +26,7 @@ import {
 export interface NotificationSettingsProps {
   repository: AppRepository;
   setup?: () => Promise<NotificationSetupResult>;
+  inspectBrowserState?: () => Promise<BrowserPushState>;
   flushNotifications?: () => Promise<unknown>;
 }
 
@@ -30,6 +34,7 @@ export interface NotificationSettingsProps {
 export function NotificationSettings({
   repository,
   setup,
+  inspectBrowserState,
   flushNotifications,
 }: NotificationSettingsProps) {
   const [state, setState] = useState<
@@ -52,31 +57,19 @@ export function NotificationSettings({
     memo: "weekly" as "none" | "weekly" | "monthly",
   });
   const [syncStatus, setSyncStatus] = useState<"success" | "error">();
+  const [frequenciesSaved, setFrequenciesSaved] = useState(false);
   const defaultDeadlineTimePicker = useRef<HTMLInputElement>(null);
   const [hasRegisteredDevice, setHasRegisteredDevice] = useState(false);
   const [registeredAt, setRegisteredAt] = useState<string>();
   const [timeZone, setTimeZone] = useState<string>();
   useEffect(() => {
     let active = true;
-    void repository.load().then((snapshot) => {
+    void repository.load().then(async (snapshot) => {
       if (!active) return;
-      if (
-        snapshot.device.pushSubscriptionStatus === "granted" &&
-        !snapshot.settings.notificationEnabled
-      ) {
-        setState(snapshot.device.pushDeviceSecret ? "error" : "stale");
-        return;
-      }
-      setState(
-        snapshot.device.pushSubscriptionStatus === "not_requested"
-          ? undefined
-          : snapshot.device.pushSubscriptionStatus,
+      const registered = Boolean(
+        snapshot.device.pushDeviceId && snapshot.device.pushDeviceSecret,
       );
-      setHasRegisteredDevice(
-        Boolean(
-          snapshot.device.pushDeviceId && snapshot.device.pushDeviceSecret,
-        ),
-      );
+      setHasRegisteredDevice(registered);
       setRegisteredAt(snapshot.device.registeredAt);
       setTimeZone(snapshot.settings.timeZone);
       setInitialDelay(
@@ -94,11 +87,53 @@ export function NotificationSettings({
         inbox: snapshot.settings.inboxReminderFrequency,
         memo: snapshot.settings.memoReviewFrequency,
       });
+
+      if (
+        registered &&
+        snapshot.device.pushSubscriptionStatus === "granted" &&
+        snapshot.settings.notificationEnabled
+      ) {
+        try {
+          const browserState = await (
+            inspectBrowserState ??
+            (() => inspectBrowserPushState(createBrowserPushStateProbe()))
+          )();
+          if (!active) return;
+          setState(
+            browserState === "ready"
+              ? "granted"
+              : browserState === "denied"
+                ? "denied"
+                : browserState === "unavailable"
+                  ? "unavailable"
+                  : "stale",
+          );
+        } catch {
+          if (active) setState("stale");
+        }
+        return;
+      }
+
+      if (snapshot.device.pushSubscriptionStatus === "granted") {
+        setState("stale");
+      } else {
+        setState(
+          snapshot.device.pushSubscriptionStatus === "not_requested"
+            ? undefined
+            : snapshot.device.pushSubscriptionStatus,
+        );
+      }
     });
     return () => {
       active = false;
     };
-  }, [repository]);
+  }, [inspectBrowserState, repository]);
+
+  useEffect(() => {
+    if (!frequenciesSaved) return;
+    const timer = window.setTimeout(() => setFrequenciesSaved(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [frequenciesSaved]);
 
   async function configure(): Promise<void> {
     setBusy(true);
@@ -198,7 +233,11 @@ export function NotificationSettings({
         ...globalDelivery,
         savedAt,
       });
-      setSavedFrequencies({ inbox: inboxReminderFrequency, memo: memoReviewFrequency });
+      setSavedFrequencies({
+        inbox: inboxReminderFrequency,
+        memo: memoReviewFrequency,
+      });
+      setFrequenciesSaved(true);
       await synchronizeNotifications();
     } catch {
       setState("error");
@@ -226,6 +265,7 @@ export function NotificationSettings({
   const reviewFrequenciesDirty =
     inboxReminderFrequency !== savedFrequencies.inbox ||
     memoReviewFrequency !== savedFrequencies.memo;
+  const isConfigured = state === "granted" && hasRegisteredDevice;
 
   return (
     <section
@@ -234,14 +274,14 @@ export function NotificationSettings({
     >
       <h1 id="notification-settings-title">通知</h1>
       <p className="notification-settings__intro">
-        通知を使うと、アプリを開いて今日の確認に戻るきっかけを受け取れます。タスク本文は通知サーバーへ送信しません。
+        アプリを開いて「今日の確認」に戻るきっかけを通知します。タスク本文は通知サーバーへ送信しません。
       </p>
       {timeZone ? (
         <p
           aria-label="利用中のタイムゾーン"
           className="notification-settings__time-zone"
         >
-          期限と通知時刻の基準: {formatTimeZone(timeZone)}
+          基準: {formatTimeZone(timeZone)}
         </p>
       ) : null}
       <section
@@ -249,12 +289,17 @@ export function NotificationSettings({
         aria-labelledby="notification-timing-title"
       >
         <h2 id="notification-timing-title">通知タイミング</h2>
-        <p>
-          初回通知はタスク登録から、期限前通知は期限より前の指定分で予約します。通知サーバーは最大5分ごとに配送対象を確認します。通知時刻は目安です。端末やOS・ブラウザの状態、省電力設定、通信状態、集中モードなどにより大きく前後することがあり、指定した時刻どおりの到達は保証できません。通知だけに頼らず、アプリを開いたときの確認も併用してください。
+        <p className="notification-settings__timing-note">
+          通知は忘れ防止の補助機能です。端末の状態や通信環境により遅れることがあり、指定時刻の通知は保証されません。
         </p>
-        <p>
-          この端末で保存した記録と、タスクにした項目が通知対象です。端末間でデータは同期しません。
-        </p>
+        <details className="notification-settings__mechanism">
+          <summary>通知の仕組みを見る</summary>
+          <div>
+            <p>
+              通知対象は最大5分ごとに確認します。この端末で保存した記録とタスクだけが対象で、端末間では同期しません。
+            </p>
+          </div>
+        </details>
         <div className="notification-settings__timing-row">
           <label htmlFor="initial-reminder-delay">初回通知まで（分）</label>
           <div className="notification-settings__number-field">
@@ -271,9 +316,7 @@ export function NotificationSettings({
           </div>
         </div>
         <div className="notification-settings__timing-row">
-          <label htmlFor="default-deadline-time">
-            日付だけの期限に使う時刻（4桁）
-          </label>
+          <label htmlFor="default-deadline-time">期限の既定時刻</label>
           <div className="notification-settings__time-input">
             <input
               autoComplete="off"
@@ -308,7 +351,7 @@ export function NotificationSettings({
               value={timeFromDigits(defaultDeadlineTime) ?? ""}
             />
           </div>
-          <p>期限日に時刻を指定しないときだけ、この時刻を使います。</p>
+          <p>日付だけの期限に使います。</p>
         </div>
         <div className="notification-settings__timing-row">
           <label htmlFor="deadline-reminder-lead">期限前通知（分）</label>
@@ -334,39 +377,44 @@ export function NotificationSettings({
         aria-labelledby="notification-review-frequency-title"
       >
         <h2 id="notification-review-frequency-title">確認頻度</h2>
-        <label htmlFor="inbox-reminder-frequency">未整理の受信箱の確認頻度</label>
+        <label htmlFor="inbox-reminder-frequency">
+          未整理の受信箱の確認頻度
+        </label>
         <select
           id="inbox-reminder-frequency"
           value={inboxReminderFrequency}
-          onChange={(event) =>
+          onChange={(event) => {
+            setFrequenciesSaved(false);
             setInboxReminderFrequency(
               event.target.value as "none" | "gentle" | "prompt",
-            )
-          }
+            );
+          }}
         >
-          <option value="none">通知しない</option>
-          <option value="gentle">ゆるやかに確認する</option>
+          <option value="none">再通知しない</option>
+          <option value="gentle">ゆっくり確認する</option>
           <option value="prompt">こまめに確認する</option>
         </select>
         <label htmlFor="memo-review-frequency">メモの見直し頻度</label>
         <select
           id="memo-review-frequency"
           value={memoReviewFrequency}
-          onChange={(event) =>
+          onChange={(event) => {
+            setFrequenciesSaved(false);
             setMemoReviewFrequency(
               event.target.value as "none" | "weekly" | "monthly",
-            )
-          }
+            );
+          }}
         >
-          <option value="none">通知しない</option>
-          <option value="weekly">毎週</option>
-          <option value="monthly">毎月</option>
+          <option value="none">見直し通知なし</option>
+          <option value="weekly">週1回</option>
+          <option value="monthly">月1回</option>
         </select>
         {reviewFrequenciesDirty ? (
           <p className="notification-settings__unsaved" role="status">
             変更を保存してください
           </p>
         ) : null}
+        {frequenciesSaved ? <p role="status">保存しました。</p> : null}
         {syncStatus === "success" ? (
           <p role="status">通知の同期が完了しました。</p>
         ) : null}
@@ -392,20 +440,23 @@ export function NotificationSettings({
       </section>
       <div className="notification-settings__device-setup">
         <button
+          className={isConfigured ? "is-configured" : undefined}
           disabled={busy || state === "denied"}
           onClick={() => void configure()}
           type="button"
         >
-          通知を設定する
+          {hasRegisteredDevice ? "通知を再設定する" : "通知を設定する"}
         </button>
-        <p className="notification-settings__setup-note">
-          通知を受けるには、このボタンを最初に一度押して端末登録を完了する必要があります。
-        </p>
+        {!isConfigured ? (
+          <p className="notification-settings__setup-note">
+            通知を受けるには、このボタンを最初に一度押して端末登録を完了する必要があります。
+          </p>
+        ) : null}
         {state === "granted" ? <p role="status">通知を設定しました。</p> : null}
         {state === "granted" && hasRegisteredDevice ? (
           <>
             <p className="notification-settings__device-status">
-              この端末は通知サービスに登録済みです。
+              この端末は通知設定済みです。
             </p>
             {registeredAt && timeZone ? (
               <p

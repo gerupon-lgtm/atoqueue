@@ -664,10 +664,10 @@ git commit -m "feat: add reversible daily review session"
 
 Assert the following exact behaviors:
 
-- the header has three equal grid columns;
-- the centered heading text is `今日の確認`;
-- the left control text is `← 前のタスク`, not an arrow-only accessible name;
-- the previous control is disabled on item 1 and enabled on item 2;
+- the heading text `今日の確認` is left aligned consistently with other screens;
+- the right control text is `前のタスク`, without an arrow;
+- the previous control is absent on item 1 and visible from item 2 onward;
+- the progress count is inside the task card at its top-right;
 - one task card is rendered at a time;
 - level 0–4 messages match `choosePrompt()`;
 - `完了`, `今日やる`, `日付を変える`, `期限なし`, `今回は閉じる`, `不要` call the matching domain command;
@@ -734,7 +734,7 @@ git add apps/web/src/features/review apps/web/e2e/today-review.spec.ts apps/web/
 git commit -m "feat: add one-at-a-time today review"
 ```
 
-**実装結果（2026-08-03）:** Task 7の状態機械を`AppRepository`経由で画面化し、空セッションの再計算、戻った項目の最新回答表示、結果からの修正導線、期限・経過表示、DST境界、画面全体中央の見出しを実装した。Web50件、型検査、ビルドが成功した。単一E2EはCodex実行環境のChromium `spawn EPERM` で未完了のため、実機環境で再実行する。
+**実装結果（2026-08-09更新）:** Task 7の状態機械を`AppRepository`経由で画面化し、空セッションの再計算、戻った項目の最新回答表示、結果からの修正導線、期限・経過表示、DST境界を実装した。見出しは他画面と同じ左揃え、2件目以降の「前のタスク」は見出し右、進行件数はカード内右上とした。Today Reviewを含むWeb E2E全26件、単体・結合テスト、型検査、ビルドが成功した。
 
 ## Task 9: Build task list, detail, edits, and history（完了: 2026-08-04）
 
@@ -793,7 +793,7 @@ git add packages/domain/src/task-query.ts packages/domain/src/task-query.test.ts
 git commit -m "feat: add active task management and history"
 ```
 
-**実装結果（2026-08-04）:** 一覧・詳細・履歴・編集を端末内状態と匿名Outboxの境界を保って実装した。元メモを含むUnicode検索、IANAタイムゾーン基準の当日判定、選択日による期限変更、保存失敗の復旧表示、44px以上の主要操作をテストした。ドメイン126件、Web58件、型検査、Webビルドが成功した。対象E2EはCodex環境のChromium起動制約により未完了であり、実機環境で再実行する。
+**実装結果（2026-08-09再検証）:** 一覧・詳細・履歴・編集を端末内状態と匿名Outboxの境界を保って実装した。元メモを含むUnicode検索、IANAタイムゾーン基準の当日判定、選択日による期限変更、保存失敗の復旧表示、44px以上の主要操作をテストした。タスク管理を含むWeb E2E全26件、単体・結合テスト、型検査、Webビルドが成功した。
 
 ## Task 10: Define strict notification contracts and device registration API
 
@@ -1307,7 +1307,7 @@ Before claiming completion, answer each question with file/test evidence:
 3. Can any code path serialize task text into an HTTP request, API log, PostgreSQL row, or Push payload?
 4. Does the app remain useful when notification permission is denied, Push is late, or the API is down?
 5. Can a user return to the previous Today Review task and change the choice without an Undo toast?
-6. Is `今日の確認` centered independently from the left and right controls at supported widths?
+6. Is `今日の確認` left aligned, with an arrowless previous control shown only from item 2 onward and progress inside the task card?
 7. Can a completed review be modified from result, list, and detail screens?
 8. Are date/time functions tested at day, week, and time-zone boundaries?
 9. Does backup round-trip all user data while excluding all device secrets?

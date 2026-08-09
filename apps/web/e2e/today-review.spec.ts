@@ -20,38 +20,63 @@ function task(id: string, createdAt: string) {
   };
 }
 
-test("processes three tasks one at a time, re-answers a previous task, and shows the session history", async ({ page }) => {
-  await page.addInitScript((snapshot) => window.localStorage.setItem("atoqueue:data:v1", JSON.stringify(snapshot)), {
-    schemaVersion: 2,
-    appVersion: "0.1.0",
-    device: { localDeviceId: "device-1", pushSubscriptionStatus: "not_requested" },
-    settings: { locale: "ja-JP", timeZone: "Asia/Tokyo", notificationEnabled: false, weeklyReviewDay: 0 },
-    captures: [],
-    tasks: [task("one", "2026-07-01T00:00:00.000Z"), task("two", "2026-07-02T00:00:00.000Z"), task("three", "2026-07-03T00:00:00.000Z")],
-    reviewSessions: [],
-    actionHistory: [],
-    notificationOutbox: [],
-    reminderMap: [],
-    savedAt: now,
-  });
+test("processes three tasks one at a time, re-answers a previous task, and shows the session history", async ({
+  page,
+}) => {
+  await page.addInitScript(
+    (snapshot) =>
+      window.localStorage.setItem("atoqueue:data:v1", JSON.stringify(snapshot)),
+    {
+      schemaVersion: 2,
+      appVersion: "0.1.0",
+      device: {
+        localDeviceId: "device-1",
+        pushSubscriptionStatus: "not_requested",
+      },
+      settings: {
+        locale: "ja-JP",
+        timeZone: "Asia/Tokyo",
+        notificationEnabled: false,
+        weeklyReviewDay: 0,
+      },
+      captures: [],
+      tasks: [
+        task("one", "2026-07-01T00:00:00.000Z"),
+        task("two", "2026-07-02T00:00:00.000Z"),
+        task("three", "2026-07-03T00:00:00.000Z"),
+      ],
+      reviewSessions: [],
+      actionHistory: [],
+      notificationOutbox: [],
+      reminderMap: [],
+      savedAt: now,
+    },
+  );
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/today");
   await expect(page.getByRole("heading", { name: "今日の確認" })).toBeVisible();
   await expect(page.getByText("確認タスク one")).toBeVisible();
-  const previous = page.getByRole("button", { name: "前のタスク" });
-  await expect(previous).toBeDisabled();
-  const titleBox = await page.getByRole("heading", { name: "今日の確認" }).boundingBox();
+  await expect(page.getByRole("button", { name: "前のタスク" })).toHaveCount(0);
+  const titleBox = await page
+    .getByRole("heading", { name: "今日の確認" })
+    .boundingBox();
   const headerBox = await page.getByTestId("review-header").boundingBox();
-  const previousBox = await previous.boundingBox();
   expect(titleBox).not.toBeNull();
   expect(headerBox).not.toBeNull();
-  expect(previousBox).not.toBeNull();
   expect(Math.abs(titleBox!.x - headerBox!.x)).toBeLessThan(2);
-  expect(Math.abs((previousBox!.x + previousBox!.width) - (headerBox!.x + headerBox!.width))).toBeLessThan(2);
 
   await page.getByRole("button", { name: "完了" }).click();
   await expect(page.getByText("確認タスク two")).toBeVisible();
+  const previous = page.getByRole("button", { name: "前のタスク" });
+  await expect(previous).toBeVisible();
+  const previousBox = await previous.boundingBox();
+  expect(previousBox).not.toBeNull();
+  expect(
+    Math.abs(
+      previousBox!.x + previousBox!.width - (headerBox!.x + headerBox!.width),
+    ),
+  ).toBeLessThan(2);
   await page.getByRole("button", { name: "日付を変える" }).click();
   await page.getByLabel("新しい期限").fill("2026-08-10");
   await page.getByRole("button", { name: "この日付にする" }).click();
@@ -70,13 +95,31 @@ test("processes three tasks one at a time, re-answers a previous task, and shows
   await expect(page.getByText("完了: 1件")).toBeVisible();
   await expect(page.getByText("期限変更: 1件")).toBeVisible();
   await expect(page.getByText("期限なし: 3件")).toBeVisible();
-  await expect(page.getByRole("link", { name: "確認タスク oneを修正" })).toHaveAttribute("href", "/tasks/one");
+  await expect(
+    page.getByRole("link", { name: "確認タスク oneを修正" }),
+  ).toHaveAttribute("href", "/tasks/one");
   await expect
-    .poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("atoqueue:data:v1") ?? "{}").actionHistory.map((event: { action: string }) => event.action)))
-    .toEqual(["task_completed", "task_rescheduled", "task_marked_no_due", "task_marked_no_due", "task_marked_no_due"]);
+    .poll(() =>
+      page.evaluate(() =>
+        JSON.parse(
+          window.localStorage.getItem("atoqueue:data:v1") ?? "{}",
+        ).actionHistory.map((event: { action: string }) => event.action),
+      ),
+    )
+    .toEqual([
+      "task_completed",
+      "task_rescheduled",
+      "task_marked_no_due",
+      "task_marked_no_due",
+      "task_marked_no_due",
+    ]);
 
   await page.getByRole("link", { name: "確認タスク oneを修正" }).click();
-  await expect(page.getByRole("heading", { name: "タスクを修正" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "タスクを修正" }),
+  ).toBeVisible();
   await page.setViewportSize({ width: 320, height: 640 });
-  await expect(page.getByRole("heading", { name: "タスクを修正" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "タスクを修正" }),
+  ).toBeVisible();
 });

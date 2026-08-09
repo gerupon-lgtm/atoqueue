@@ -11,16 +11,28 @@ import { SettingsPage } from "./SettingsPage";
 afterEach(cleanup);
 
 describe("SettingsPage", () => {
-  it("F-017/F-018 combines backup controls, notification settings, and local-only app information", () => {
+  it("F-017/F-018 keeps infrequent data and app information collapsed and places copyright outside them", async () => {
     render(<SettingsPage repository={memory()} />);
+
+    const dataSummary = screen.getByText("データ", { selector: "summary" });
+    const dataDetails = dataSummary.closest("details") as HTMLDetailsElement;
+    expect(dataDetails).not.toBeNull();
+    expect(dataDetails.open).toBe(false);
+    await userEvent.setup().click(dataSummary);
     expect(
       screen.getByRole("button", { name: "JSONバックアップを書き出す" }),
     ).not.toBeNull();
     expect(screen.getByLabelText("JSONバックアップを復元")).not.toBeNull();
     expect(screen.getByRole("heading", { name: "通知" })).not.toBeNull();
+
+    const appSummary = screen.getByText("アプリ情報", { selector: "summary" });
+    const appDetails = appSummary.closest("details") as HTMLDetailsElement;
+    expect(appDetails).not.toBeNull();
+    expect(appDetails.open).toBe(false);
+    await userEvent.setup().click(appSummary);
     expect(screen.getByText("あとキュー")).not.toBeNull();
     expect(screen.getByText(/バージョン/)).not.toBeNull();
-    expect(screen.getByText("© 2026 SIKUMI LAB")).not.toBeNull();
+    expect(screen.getByText("© 2026 SIKUMI LAB").closest("details")).toBeNull();
   });
 
   it("F-017/F-018 delegates post-restore notification sync to the injected application service", async () => {
@@ -32,6 +44,9 @@ describe("SettingsPage", () => {
         repository={repository}
       />,
     );
+    await userEvent
+      .setup()
+      .click(screen.getByText("データ", { selector: "summary" }));
 
     const incoming = createEmptySnapshot({
       appVersion: "0.1.0",
@@ -40,14 +55,12 @@ describe("SettingsPage", () => {
       now: "2026-08-04T09:00:00.000Z",
     });
     const input = screen.getByLabelText("JSONバックアップを復元");
-    await userEvent
-      .setup()
-      .upload(
-        input,
-        new File([await createBackup(incoming)], "backup.json", {
-          type: "application/json",
-        }),
-      );
+    await userEvent.setup().upload(
+      input,
+      new File([await createBackup(incoming)], "backup.json", {
+        type: "application/json",
+      }),
+    );
     await userEvent
       .setup()
       .click(
@@ -65,6 +78,9 @@ describe("SettingsPage", () => {
         repository={memory()}
       />,
     );
+    await userEvent
+      .setup()
+      .click(screen.getByText("データ", { selector: "summary" }));
 
     await userEvent
       .setup()

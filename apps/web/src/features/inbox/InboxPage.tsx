@@ -8,6 +8,7 @@ import {
   type AppRepository,
   type Capture,
 } from "../../../../../packages/domain/src";
+import "./InboxPage.css";
 
 export interface InboxPageProps {
   repository: AppRepository;
@@ -105,9 +106,10 @@ export function InboxPage({
   return (
     <section aria-labelledby="inbox-title">
       <h1 id="inbox-title">受信箱</h1>
-      <div role="tablist" aria-label="受信箱の表示">
+      <div className="inbox-tabs" role="tablist" aria-label="受信箱の表示">
         <button
           aria-selected={tab === "unclassified"}
+          className="inbox-tabs__tab"
           onClick={() => setTab("unclassified")}
           role="tab"
           type="button"
@@ -116,6 +118,7 @@ export function InboxPage({
         </button>
         <button
           aria-selected={tab === "note"}
+          className="inbox-tabs__tab"
           onClick={() => setTab("note")}
           role="tab"
           type="button"
@@ -124,75 +127,81 @@ export function InboxPage({
         </button>
       </div>
       {visibleCaptures.length === 0 ? (
-        <p>{tab === "note" ? "メモはありません。" : "未整理の記録はありません。"}</p>
+        <p>
+          {tab === "note" ? "メモはありません。" : "未整理の記録はありません。"}
+        </p>
       ) : null}
-      <ul>
-        {visibleCaptures.map((capture) => {
-          const suggestion = suggestClassification(capture.body);
-          return (
-            <li key={capture.id}>
-              <p>{capture.body}</p>
-              <time dateTime={capture.createdAt}>
-                登録: {formatCaptureCreatedAt(capture.createdAt, timeZone)}
-              </time>
-              <label htmlFor={`capture-body-${capture.id}`}>本文を編集</label>
-              <textarea
-                id={`capture-body-${capture.id}`}
-                onChange={(event) =>
-                  setBodyDrafts((drafts) => ({
-                    ...drafts,
-                    [capture.id]: event.target.value,
-                  }))
-                }
-                readOnly={isMutating}
-                value={bodyDrafts[capture.id] ?? capture.body}
-              />
-              <button
-                disabled={isMutating}
-                onClick={() =>
-                  void saveBody(
-                    capture.id,
-                    bodyDrafts[capture.id] ?? capture.body,
-                  )
-                }
-                type="button"
-                aria-label={`${capture.body}の本文を保存`}
-              >
-                本文を保存
-              </button>
-              {tab === "unclassified" && suggestion === "task" ? <p>タスク候補です</p> : null}
-              <div
-                className="inbox-item__actions inbox-item__classification-actions"
-                aria-label={`${capture.body} の整理操作`}
-              >
+      {visibleCaptures.length > 0 ? (
+        <ul>
+          {visibleCaptures.map((capture) => {
+            const suggestion = suggestClassification(capture.body);
+            return (
+              <li key={capture.id}>
+                <p>{capture.body}</p>
+                <time dateTime={capture.createdAt}>
+                  登録: {formatCaptureCreatedAt(capture.createdAt, timeZone)}
+                </time>
+                <label htmlFor={`capture-body-${capture.id}`}>本文を編集</label>
+                <textarea
+                  id={`capture-body-${capture.id}`}
+                  onChange={(event) =>
+                    setBodyDrafts((drafts) => ({
+                      ...drafts,
+                      [capture.id]: event.target.value,
+                    }))
+                  }
+                  readOnly={isMutating}
+                  value={bodyDrafts[capture.id] ?? capture.body}
+                />
                 <button
                   disabled={isMutating}
-                  onClick={() => onTaskCandidate?.(capture.id)}
+                  onClick={() =>
+                    void saveBody(
+                      capture.id,
+                      bodyDrafts[capture.id] ?? capture.body,
+                    )
+                  }
                   type="button"
+                  aria-label={`${capture.body}の本文を保存`}
                 >
-                  {tab === "note" ? "タスクにする" : "タスクかも"}
+                  本文を保存
                 </button>
-                {tab === "unclassified" ? (
+                {tab === "unclassified" && suggestion === "task" ? (
+                  <p>タスク候補です</p>
+                ) : null}
+                <div
+                  className="inbox-item__actions inbox-item__classification-actions"
+                  aria-label={`${capture.body} の整理操作`}
+                >
                   <button
                     disabled={isMutating}
-                    onClick={() => classify(capture.id, "note")}
+                    onClick={() => onTaskCandidate?.(capture.id)}
                     type="button"
                   >
-                    メモ
+                    {tab === "note" ? "タスクにする" : "タスクかも"}
                   </button>
-                ) : null}
-                <button
-                  disabled={isMutating}
-                  onClick={() => classify(capture.id, "unneeded", tab)}
-                  type="button"
-                >
-                  不要
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+                  {tab === "unclassified" ? (
+                    <button
+                      disabled={isMutating}
+                      onClick={() => classify(capture.id, "note")}
+                      type="button"
+                    >
+                      メモ
+                    </button>
+                  ) : null}
+                  <button
+                    disabled={isMutating}
+                    onClick={() => classify(capture.id, "unneeded", tab)}
+                    type="button"
+                  >
+                    不要
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
       {error ? <p role="alert">{error}</p> : null}
     </section>
   );

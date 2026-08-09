@@ -46,8 +46,7 @@ export function QuickCapturePage({
   const [isSaving, setIsSaving] = useState(false);
   const [loadedSnapshot, setLoadedSnapshot] = useState<AppSnapshot>();
   const [enterSavesCapture, setEnterSavesCapture] = useState(true);
-  const [isSavingEnterPreference, setIsSavingEnterPreference] =
-    useState(false);
+  const [isSavingEnterPreference, setIsSavingEnterPreference] = useState(false);
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -348,7 +347,7 @@ export function QuickCapturePage({
               }}
               type="checkbox"
             />
-            Enterで登録
+            改行で登録
           </label>
         </div>
       </form>

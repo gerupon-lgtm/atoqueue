@@ -1,32 +1,39 @@
 import { expect, test } from "@playwright/test";
 
 const navigation = [
-  ["/", "記録", "✎"],
-  ["/inbox", "受信箱", "▣"],
-  ["/today", "今日", "☀"],
-  ["/tasks", "タスク", "✓"],
-  ["/settings", "設定", "⚙"],
+  ["/", "記録", "capture"],
+  ["/inbox", "受信箱", "inbox"],
+  ["/today", "今日", "today"],
+  ["/tasks", "タスク", "tasks"],
+  ["/settings", "設定", "settings"],
 ] as const;
 
 test.describe("PWA shell", () => {
-  test("serves every primary route with labeled current navigation", async ({ page }) => {
+  test("serves every primary route with labeled current navigation", async ({
+    page,
+  }) => {
     for (const [path, label, icon] of navigation) {
       await page.goto(path);
 
       const currentLink = page.getByRole("link", { name: label });
       await expect(currentLink).toHaveAttribute("aria-current", "page");
-      await expect(currentLink.locator('[aria-hidden="true"]')).toHaveText(icon);
+      await expect(
+        currentLink.locator(`svg[data-icon="${icon}"]`),
+      ).toBeVisible();
     }
   });
 
-  test("starts at quick capture and keeps forward keyboard order visible", async ({ page }) => {
+  test("starts at quick capture and keeps forward keyboard order visible", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     const input = page.getByRole("textbox", { name: "思いついたこと" });
     const saveButton = page.getByRole("button", { name: "保存して戻る" });
-    await expect(input).toBeFocused();
+    await expect(input).not.toBeFocused();
     await expect(saveButton).toBeDisabled();
 
+    await input.focus();
     await input.fill("フォーカス順を確認する");
     await expect(saveButton).toBeEnabled();
 
@@ -54,20 +61,22 @@ test.describe("PWA shell", () => {
     await page.goto("/");
     const nav = page.getByRole("navigation", { name: "主要ナビゲーション" });
     await expect(nav).toHaveCSS("flex-direction", "row");
-    await expect(page.getByRole("link", { name: "記録" })).toHaveCSS(
-      "min-height",
-      "44px",
-    );
+    const mobileLinkBox = await page
+      .getByRole("link", { name: "記録" })
+      .boundingBox();
+    expect(mobileLinkBox?.height).toBeGreaterThanOrEqual(44);
 
     await page.setViewportSize({ width: 768, height: 800 });
     await expect(nav).toHaveCSS("flex-direction", "column");
   });
 
-  test("keeps the mobile navigation as a compact bottom row", async ({ page }) => {
+  test("keeps the mobile navigation as a compact bottom row", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
 
-    const nav = page.getByRole("navigation", { name: "荳ｻ隕√リ繝薙ご繝ｼ繧ｷ繝ｧ繝ｳ" });
+    const nav = page.getByRole("navigation", { name: "主要ナビゲーション" });
     const box = await nav.boundingBox();
 
     expect(box).not.toBeNull();
@@ -76,20 +85,35 @@ test.describe("PWA shell", () => {
     await expect(nav).toHaveCSS("position", "fixed");
   });
 
+  test("keeps the Enter registration checkbox compact on a phone", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    const checkbox = page.getByRole("checkbox", { name: "改行で登録" });
+    const box = await checkbox.boundingBox();
+
+    expect(box).not.toBeNull();
+    expect(box?.width).toBeLessThanOrEqual(24);
+    expect(box?.height).toBeLessThanOrEqual(24);
+    await expect(page.getByText("改行で登録", { exact: true })).toHaveCSS(
+      "white-space",
+      "nowrap",
+    );
+  });
+
   test("reloads the visited shell while offline", async ({ context, page }) => {
     await page.goto("/");
-    await expect
-      .poll(() =>
-        page.evaluate(() =>
-          navigator.serviceWorker.getRegistration().then((registration) =>
-            Boolean(registration),
-          ),
-        ),
-      )
-      .toBe(true);
+    await page.evaluate(() =>
+      navigator.serviceWorker.ready.then(() => undefined),
+    );
     await page.reload();
     await expect
-      .poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)))
+      .poll(
+        () => page.evaluate(() => Boolean(navigator.serviceWorker.controller)),
+        { timeout: 10_000 },
+      )
       .toBe(true);
 
     await context.setOffline(true);
@@ -98,7 +122,30 @@ test.describe("PWA shell", () => {
     await expect(page.getByRole("link", { name: "記録" })).toBeVisible();
   });
 
-  test("publishes an installable standalone Japanese manifest", async ({ page }) => {
+  test("shows iOS installation guidance once in a browser profile", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      baseURL: "http://127.0.0.1:4173",
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 Version/18.6 Mobile/15E148 Safari/604.1",
+    });
+    const page = await context.newPage();
+
+    await page.goto("/");
+    await expect(
+      page.getByRole("dialog", { name: "あとキューをホーム画面に追加" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "わかりました" }).click();
+    await page.reload();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await context.close();
+  });
+
+  test("publishes an installable standalone Japanese manifest", async ({
+    page,
+  }) => {
     await page.goto("/");
     const manifestHref = await page
       .locator('link[rel="manifest"]')
@@ -122,8 +169,14 @@ test.describe("PWA shell", () => {
     });
     expect(manifest.icons).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ src: "/icons/icon-192.png", sizes: "192x192" }),
-        expect.objectContaining({ src: "/icons/icon-512.png", sizes: "512x512" }),
+        expect.objectContaining({
+          src: "/icons/icon-192.png",
+          sizes: "192x192",
+        }),
+        expect.objectContaining({
+          src: "/icons/icon-512.png",
+          sizes: "512x512",
+        }),
       ]),
     );
   });

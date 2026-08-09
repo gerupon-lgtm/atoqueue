@@ -12,7 +12,7 @@ test("notification settings explains privacy without requesting browser permissi
 
   await page.goto("/settings");
 
-  await expect(page.getByRole("heading", { name: "通知" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "通知", exact: true })).toBeVisible();
   await expect(page.getByText("タスク本文は通知サーバーへ送信しません。")) .toBeVisible();
   await expect(page.getByRole("button", { name: "通知を設定する" })).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as Window & { __notificationRequestCount: () => number }).__notificationRequestCount())).toBe(0);
@@ -26,10 +26,11 @@ test("a user-triggered denied permission shows browser-settings guidance", async
   });
 
   await page.goto("/settings");
-  await page.locator("button[type=button]").click();
+  const setupButton = page.getByRole("button", { name: "通知を設定する" });
+  await setupButton.click();
 
   await expect(page.getByRole("alert")).toBeVisible();
-  await expect(page.locator("button[type=button]")).toBeDisabled();
+  await expect(setupButton).toBeDisabled();
 });
 
 test("a persisted unavailable notification state keeps the Today Review fallback visible", async ({ page }) => {

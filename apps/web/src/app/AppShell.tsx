@@ -5,6 +5,11 @@ import {
   listTasks,
   type AppRepository,
 } from "../../../../packages/domain/src";
+import type {
+  InstallExperience,
+  InstallPromptPreference,
+} from "../application/install-experience";
+import { InstallPrompt } from "../features/install/InstallPrompt";
 import "./AppShell.css";
 
 type NavigationItem = {
@@ -23,11 +28,15 @@ const navigation: NavigationItem[] = [
 ];
 
 export interface AppShellProps {
+  installExperience?: InstallExperience;
+  installPromptPreference?: InstallPromptPreference;
   repository?: AppRepository;
   now?: () => string;
 }
 
 export function AppShell({
+  installExperience,
+  installPromptPreference,
   repository,
   now = () => new Date().toISOString(),
 }: AppShellProps) {
@@ -88,6 +97,12 @@ export function AppShell({
         <p className="app-shell__wordmark">あとキュー</p>
         <Outlet />
       </main>
+      {installExperience && installPromptPreference ? (
+        <InstallPrompt
+          experience={installExperience}
+          preference={installPromptPreference}
+        />
+      ) : null}
     </div>
   );
 }

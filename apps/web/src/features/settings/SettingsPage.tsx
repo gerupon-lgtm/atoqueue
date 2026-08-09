@@ -25,36 +25,44 @@ export function SettingsPage({
         repository={repository}
         setup={setupNotifications}
       />
-      <BackupSettings
-        deleteDeviceData={deleteDeviceData}
-        repository={repository}
-        flushOutbox={flushNotifications}
-      />
-      <section
-        aria-labelledby="app-information-title"
-        className="settings-page__app-information"
-      >
-        <h2 id="app-information-title">アプリ情報</h2>
-        <dl>
-          <div>
-            <dt>アプリ</dt>
-            <dd>あとキュー</dd>
-          </div>
-          <div>
-            <dt>バージョン</dt>
-            <dd>0.1.0</dd>
-          </div>
-          <div>
-            <dt>保存</dt>
-            <dd>この端末のみ</dd>
-          </div>
-          <div>
-            <dt>同期</dt>
-            <dd>端末間では同期しません</dd>
-          </div>
-        </dl>
-        <small>© 2026 SIKUMI LAB</small>
-      </section>
+      <details className="settings-page__disclosure">
+        <summary>データ</summary>
+        <div className="settings-page__disclosure-content">
+          <BackupSettings
+            deleteDeviceData={deleteDeviceData}
+            repository={repository}
+            flushOutbox={flushNotifications}
+            showHeading={false}
+          />
+        </div>
+      </details>
+      <details className="settings-page__disclosure">
+        <summary>アプリ情報</summary>
+        <div
+          aria-label="アプリ情報"
+          className="settings-page__app-information settings-page__disclosure-content"
+        >
+          <dl>
+            <div>
+              <dt>アプリ</dt>
+              <dd>あとキュー</dd>
+            </div>
+            <div>
+              <dt>バージョン</dt>
+              <dd>0.1.0</dd>
+            </div>
+            <div>
+              <dt>保存</dt>
+              <dd>この端末のみ</dd>
+            </div>
+            <div>
+              <dt>同期</dt>
+              <dd>端末間では同期しません</dd>
+            </div>
+          </dl>
+        </div>
+      </details>
+      <small className="settings-page__copyright">© 2026 SIKUMI LAB</small>
     </section>
   );
 }

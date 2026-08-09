@@ -137,8 +137,7 @@ describe("NotificationSettings", () => {
     await user.type(initial, "90");
     await user.clear(deadline);
     await user.type(deadline, "45");
-    const defaultDeadlineTime =
-      screen.getByLabelText("日付だけの期限に使う時刻（4桁）");
+    const defaultDeadlineTime = screen.getByLabelText("期限の既定時刻");
     await user.clear(defaultDeadlineTime);
     await user.type(defaultDeadlineTime, "1830");
     await user.click(
@@ -162,7 +161,7 @@ describe("NotificationSettings", () => {
     render(<NotificationSettings repository={memory()} />);
 
     const time = (await screen.findByLabelText(
-      "日付だけの期限に使う時刻（4桁）",
+      "期限の既定時刻",
     )) as HTMLInputElement;
     expect(time.value).toBe("23:59");
     fireEvent.focus(time);
@@ -190,7 +189,7 @@ describe("NotificationSettings", () => {
     expect(deadline.parentElement?.textContent).toContain("分前");
   });
 
-  it("shows whether this browser still has a locally registered notification device", async () => {
+  it("de-emphasizes but keeps the reconfiguration action when the saved device and browser subscription are ready", async () => {
     const snapshot = createEmptySnapshot({
       appVersion: "test",
       localDeviceId: "local",
@@ -202,42 +201,51 @@ describe("NotificationSettings", () => {
     snapshot.device.registeredAt = "2026-08-04T08:00:00.000Z";
     snapshot.device.pushSubscriptionStatus = "granted";
     snapshot.settings.notificationEnabled = true;
-    render(<NotificationSettings repository={memory(snapshot)} />);
+    render(
+      <NotificationSettings
+        inspectBrowserState={async () => "ready"}
+        repository={memory(snapshot)}
+      />,
+    );
 
     expect(
-      await screen.findByText("この端末は通知サービスに登録済みです。"),
+      await screen.findByText("この端末は通知設定済みです。"),
     ).toBeTruthy();
+    const reconfigure = screen.getByRole("button", {
+      name: "通知を再設定する",
+    });
+    expect(reconfigure).not.toHaveProperty("disabled", true);
+    expect(reconfigure.classList).toContain("is-configured");
     expect(screen.getByLabelText("通知の端末登録日時").textContent).toBe(
       "通知の端末登録日時: 2026/8/4 17:00",
     );
   });
 
-  it("shows the active time zone and explains that delivery time is not guaranteed", async () => {
+  it("shows the active time zone and a concise delivery-time limitation", async () => {
     render(<NotificationSettings repository={memory()} />);
 
     expect(
       (await screen.findByLabelText("利用中のタイムゾーン")).textContent,
     ).toContain("Asia/Tokyo");
+    expect(screen.getByText(/通知は忘れ防止の補助機能です/)).toBeTruthy();
+    expect(screen.getByText(/指定時刻の通知は保証されません/)).toBeTruthy();
+    expect(screen.queryByText(/省電力設定、通信状態、集中モード/)).toBeNull();
+  });
+
+  it("uses accurate review-frequency labels and explains the compact default-deadline field", async () => {
+    render(<NotificationSettings repository={memory()} />);
+
     expect(
-      screen.getByText(/通知サーバーは最大5分ごとに配送対象を確認します/),
-    ).toBeTruthy();
-    expect(screen.getByText(/通知時刻は目安です/)).toBeTruthy();
-    expect(
-      screen.getByText(/指定した時刻どおりの到達は保証できません/),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(
-        /端末やOS・ブラウザの状態、省電力設定、通信状態、集中モード/,
-      ),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(/アプリを開いたときの確認も併用してください/),
+      await screen.findByRole("option", { name: "再通知しない" }),
     ).toBeTruthy();
     expect(
-      screen.getByText(
-        "この端末で保存した記録と、タスクにした項目が通知対象です。端末間でデータは同期しません。",
-      ),
+      screen.getByRole("option", { name: "ゆっくり確認する" }),
     ).toBeTruthy();
+    expect(
+      screen.getByRole("option", { name: "こまめに確認する" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("option", { name: "見直し通知なし" })).toBeTruthy();
+    expect(screen.getByText("日付だけの期限に使います。")).toBeTruthy();
   });
 
   it("keeps timing changes separate from the browser notification setup action", async () => {
@@ -315,7 +323,10 @@ describe("NotificationSettings", () => {
     expect((await repository.load()).notificationOutbox).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ notificationType: "inbox_review" }),
-        expect.objectContaining({ notificationType: "inbox_review", repeatCadence: "monthly" }),
+        expect.objectContaining({
+          notificationType: "inbox_review",
+          repeatCadence: "monthly",
+        }),
       ]),
     );
     expect(flushNotifications).toHaveBeenCalledTimes(1);
@@ -347,14 +358,19 @@ describe("NotificationSettings", () => {
     );
     await user.click(screen.getByRole("button", { name: "確認頻度を保存" }));
 
-    expect(await screen.findByText("通知の同期に失敗しました。再試行できます。"))
-      .not.toBeNull();
+    expect(
+      await screen.findByText("通知の同期に失敗しました。再試行できます。"),
+    ).not.toBeNull();
     expect((await repository.load()).settings.inboxReminderFrequency).toBe(
       "none",
     );
 
-    await user.click(screen.getByRole("button", { name: "通知の同期を再試行" }));
-    expect(await screen.findByText("通知の同期が完了しました。")).not.toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "通知の同期を再試行" }),
+    );
+    expect(
+      await screen.findByText("通知の同期が完了しました。"),
+    ).not.toBeNull();
     expect(flushNotifications).toHaveBeenCalledTimes(2);
   });
 
@@ -385,7 +401,9 @@ function memory(
   };
 }
 
-function writableMemory(initial: ReturnType<typeof createEmptySnapshot>): AppRepository {
+function writableMemory(
+  initial: ReturnType<typeof createEmptySnapshot>,
+): AppRepository {
   let value = structuredClone(initial);
   return {
     load: async () => structuredClone(value),

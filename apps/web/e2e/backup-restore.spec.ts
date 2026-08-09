@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 
 test("Settings exposes portable JSON export and an explicit restore control", async ({ page }) => {
   await page.goto("/settings");
+  await page.getByText("データ", { exact: true }).click();
 
   await expect(page.getByRole("button", { name: "JSONバックアップを書き出す" })).toBeVisible();
   await expect(page.getByLabel("JSONバックアップを復元")).toBeVisible();
@@ -29,6 +30,7 @@ test("F-017/F-018 restores an exported backup into a clean browser context after
   await source.addInitScript((snapshot) => window.localStorage.setItem("atoqueue:data:v1", JSON.stringify(snapshot)), sourceSnapshot);
   const sourcePage = await source.newPage();
   await sourcePage.goto("/settings");
+  await sourcePage.getByText("データ", { exact: true }).click();
   await sourcePage.getByRole("button", { name: "JSONバックアップを書き出す" }).click();
   const backup = await sourcePage.getByRole("link", { name: "バックアップをダウンロード" }).evaluate(async (link) => {
     return fetch((link as HTMLAnchorElement).href).then((response) => response.text());
@@ -38,6 +40,7 @@ test("F-017/F-018 restores an exported backup into a clean browser context after
   const destination = await browser.newContext();
   const page = await destination.newPage();
   await page.goto("/settings");
+  await page.getByText("データ", { exact: true }).click();
   await page.getByLabel("JSONバックアップを復元").setInputFiles({
     name: "backup.json",
     mimeType: "application/json",

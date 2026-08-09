@@ -83,7 +83,9 @@ describe("QuickCapturePage", () => {
     );
 
     await screen.findByRole("button", { name: "通知を設定する" });
-    expect(screen.getByLabelText("思いついたこと")).not.toBe(document.activeElement);
+    expect(screen.getByLabelText("思いついたこと")).not.toBe(
+      document.activeElement,
+    );
   });
 
   it("autofocuses the capture textarea after notification setup has already been handled", async () => {
@@ -102,9 +104,9 @@ describe("QuickCapturePage", () => {
       />,
     );
 
-    expect(
-      await screen.findByRole("textbox", { name: "思いついたこと" }),
-    ).toBe(document.activeElement);
+    expect(await screen.findByRole("textbox", { name: "思いついたこと" })).toBe(
+      document.activeElement,
+    );
   });
 
   it("shows a first-use guide and stores its dismissal locally", async () => {
@@ -270,7 +272,7 @@ describe("QuickCapturePage", () => {
       name: "思いついたこと",
     });
 
-    await user.click(screen.getByRole("checkbox", { name: "Enterで登録" }));
+    await user.click(screen.getByRole("checkbox", { name: "改行で登録" }));
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
     expect(
       (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]?.[0],
@@ -293,7 +295,7 @@ describe("QuickCapturePage", () => {
       name: "思いついたこと",
     });
 
-    await user.click(screen.getByRole("checkbox", { name: "Enterで登録" }));
+    await user.click(screen.getByRole("checkbox", { name: "改行で登録" }));
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
     await user.type(input, "明示的に保存する");
     await user.keyboard("{Control>}{Enter}{/Control}");
@@ -310,7 +312,7 @@ describe("QuickCapturePage", () => {
     });
 
     await user.type(input, "保存前の下書き");
-    await user.click(screen.getByRole("checkbox", { name: "Enterで登録" }));
+    await user.click(screen.getByRole("checkbox", { name: "改行で登録" }));
 
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
     expect((input as HTMLTextAreaElement).value).toBe("保存前の下書き");
@@ -355,7 +357,7 @@ describe("QuickCapturePage", () => {
     });
     await user.type(input, "設定保存中の記録");
 
-    await user.click(screen.getByRole("checkbox", { name: "Enterで登録" }));
+    await user.click(screen.getByRole("checkbox", { name: "改行で登録" }));
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
     const form = input.closest("form");
     expect(form).not.toBeNull();
@@ -367,9 +369,10 @@ describe("QuickCapturePage", () => {
     });
     expect(repository.load).toHaveBeenCalledTimes(2);
     expect(repository.save).toHaveBeenCalledTimes(1);
-    expect(
-      screen.getByRole("button", { name: "保存して戻る" }),
-    ).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "保存して戻る" })).toHaveProperty(
+      "disabled",
+      true,
+    );
 
     preferenceSave.resolve();
     await waitFor(() =>
@@ -388,9 +391,11 @@ describe("QuickCapturePage", () => {
   it("keeps the Enter registration label on one line in the compact action row", async () => {
     render(<QuickCapturePage repository={createRepository()} />);
 
-    const label = await screen.findByText("Enterで登録");
+    const label = await screen.findByText("改行で登録");
     expect(label.closest(".quick-capture__actions")).not.toBeNull();
-    expect(label.closest("label")?.classList.contains("quick-capture__enter-save")).toBe(true);
+    expect(
+      label.closest("label")?.classList.contains("quick-capture__enter-save"),
+    ).toBe(true);
   });
 
   it("keeps Meta+Enter as a save shortcut when Enter registration is on", async () => {

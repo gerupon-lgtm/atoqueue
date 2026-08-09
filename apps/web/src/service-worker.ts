@@ -4,9 +4,11 @@ export const genericNotification = {
   tag: "atoqueue-review",
 } as const;
 
-declare const self: { __WB_MANIFEST: unknown[] };
-// Workbox replaces this marker during the PWA build. Runtime caching is not a source of task data.
-void self.__WB_MANIFEST;
+type PrecacheEntry = { url: string; revision?: string | null };
+declare const self: { __WB_MANIFEST: PrecacheEntry[] };
+// Workbox replaces this marker during the PWA build. The cache contains only public app assets.
+const precacheEntries = self.__WB_MANIFEST;
+const precacheName = "atoqueue-public-shell-v1";
 
 export interface PushPayload { type: "review_due"; reminderId: string; url: string; }
 export interface WorkerClients { matchAll(options?: ClientQueryOptions): Promise<Array<{ url: string; focus(): Promise<unknown> | unknown }>>; openWindow(url: string): Promise<unknown> | unknown; }
@@ -59,14 +61,27 @@ interface ServiceWorkerEvent {
   waitUntil(promise: Promise<unknown>): void;
   data?: { text(): string };
   notification?: { close(): void; data?: unknown };
+  request?: Request;
+  respondWith?(response: Promise<Response>): void;
 }
 
 const worker = globalThis as unknown as {
   addEventListener?: (type: string, listener: (event: ServiceWorkerEvent) => void) => void;
   registration?: { showNotification(title: string, options: NotificationOptions): Promise<void> };
   clients?: WorkerClients;
+  caches?: CacheStorage;
+  fetch?: typeof fetch;
 };
 if (worker.registration && worker.clients && worker.addEventListener) {
+  if (worker.caches && worker.fetch) {
+    worker.addEventListener("install", (event) => {
+      event.waitUntil(precachePublicShell(worker.caches!, precacheEntries));
+    });
+    worker.addEventListener("fetch", (event) => {
+      if (!event.request || event.request.method !== "GET" || !event.respondWith) return;
+      event.respondWith(loadPublicShell(event.request, worker.caches!, worker.fetch!));
+    });
+  }
   worker.addEventListener("push", (event) => event.waitUntil(handlePush(event.data?.text() ?? "", (title, options) => worker.registration!.showNotification(title, options))));
   worker.addEventListener("notificationclick", (event) => {
     const notification = event.notification;
@@ -74,4 +89,23 @@ if (worker.registration && worker.clients && worker.addEventListener) {
     notification.close();
     event.waitUntil(handleNotificationClick(notification.data ?? {}, worker.clients!));
   });
+}
+
+async function precachePublicShell(cacheStorage: CacheStorage, entries: PrecacheEntry[]): Promise<void> {
+  const cache = await cacheStorage.open(precacheName);
+  await cache.addAll(entries.map(({ url }) => url));
+}
+
+async function loadPublicShell(request: Request, cacheStorage: CacheStorage, networkFetch: typeof fetch): Promise<Response> {
+  const cached = await cacheStorage.match(request, { ignoreVary: true });
+  if (cached) return cached;
+  try {
+    return await networkFetch(request);
+  } catch (error) {
+    if (request.mode === "navigate") {
+      const fallback = await cacheStorage.match("/index.html", { ignoreVary: true });
+      if (fallback) return fallback;
+    }
+    throw error;
+  }
 }

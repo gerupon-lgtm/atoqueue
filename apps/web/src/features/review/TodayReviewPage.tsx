@@ -231,24 +231,26 @@ export function TodayReviewPage({
         <h1 className="reviewHeader__title" id="today-review-title">
           今日の確認
         </h1>
-        <button
-          className="reviewHeader__previous"
-          disabled={isSaving || session.currentIndex === 0}
-          onClick={() => void previous()}
-          type="button"
-        >
-          前のタスク
-        </button>
+        {session.currentIndex > 0 ? (
+          <button
+            className="reviewHeader__previous"
+            disabled={isSaving}
+            onClick={() => void previous()}
+            type="button"
+          >
+            前のタスク
+          </button>
+        ) : null}
       </header>
-      <p
-        className="reviewProgress"
-        data-testid="review-progress"
-        aria-label="進行状況"
-      >
+      <article aria-label="確認するタスク" className="reviewTaskCard">
+        <p
+          className="reviewProgress"
+          data-testid="review-progress"
+          aria-label="進行状況"
+        >
           {Math.min(session.currentIndex + 1, session.orderedTaskIds.length)} /{" "}
           {session.orderedTaskIds.length}
-      </p>
-      <article aria-label="確認するタスク" className="reviewTaskCard">
+        </p>
         <p>{choosePrompt(level).message}</p>
         <h2>{task.title}</h2>
         <p>{presentation.deadline}</p>

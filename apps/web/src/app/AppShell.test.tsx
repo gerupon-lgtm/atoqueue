@@ -2,8 +2,15 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
-import { createEmptySnapshot, type AppRepository } from "../../../../packages/domain/src";
+import {
+  createEmptySnapshot,
+  type AppRepository,
+} from "../../../../packages/domain/src";
 import { AppShell } from "./AppShell";
+import type {
+  InstallExperience,
+  InstallPromptPreference,
+} from "../application/install-experience";
 
 const navigation = [
   ["/", "記録"],
@@ -71,6 +78,31 @@ describe("AppShell", () => {
     expect(wordmark.classList).toContain("app-shell__wordmark");
   });
 
+  it("shows the startup install guidance supplied by the browser boundary", () => {
+    const installExperience: InstallExperience = {
+      getState: () => "ios",
+      install: async () => "dismissed",
+      subscribe: () => () => undefined,
+    };
+    const installPromptPreference: InstallPromptPreference = {
+      hasSeen: () => false,
+      markSeen: () => undefined,
+    };
+
+    render(
+      <MemoryRouter>
+        <AppShell
+          installExperience={installExperience}
+          installPromptPreference={installPromptPreference}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "あとキューをホーム画面に追加" }),
+    ).toBeTruthy();
+  });
+
   it("F-014 reads the overdue task count from the injected repository for the task navigation badge", async () => {
     const snapshot = createEmptySnapshot({
       appVersion: "0.1.0",
@@ -78,18 +110,39 @@ describe("AppShell", () => {
       timeZone: "UTC",
       now: "2026-08-03T09:00:00.000Z",
     });
-    snapshot.tasks = [{
-      id: "overdue", sourceCaptureId: "capture-1", title: "期限切れ", status: "active",
-      dueMode: "scheduled", dueAt: "2026-08-02T23:59:00.000Z", nextReviewAt: "2026-08-10T00:00:00.000Z",
-      undecidedCount: 0, dismissCount: 0, postponeCount: 0,
-      createdAt: "2026-08-01T00:00:00.000Z", updatedAt: "2026-08-01T00:00:00.000Z", revision: 1,
-    }];
+    snapshot.tasks = [
+      {
+        id: "overdue",
+        sourceCaptureId: "capture-1",
+        title: "期限切れ",
+        status: "active",
+        dueMode: "scheduled",
+        dueAt: "2026-08-02T23:59:00.000Z",
+        nextReviewAt: "2026-08-10T00:00:00.000Z",
+        undecidedCount: 0,
+        dismissCount: 0,
+        postponeCount: 0,
+        createdAt: "2026-08-01T00:00:00.000Z",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+        revision: 1,
+      },
+    ];
     const repository: AppRepository = {
-      load: async () => snapshot, save: async () => undefined,
-      loadDraft: async () => "", saveDraft: async () => undefined, clearDraft: async () => undefined,
+      load: async () => snapshot,
+      save: async () => undefined,
+      loadDraft: async () => "",
+      saveDraft: async () => undefined,
+      clearDraft: async () => undefined,
     };
 
-    render(<MemoryRouter><AppShell repository={repository} now={() => "2026-08-03T09:00:00.000Z"} /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <AppShell
+          repository={repository}
+          now={() => "2026-08-03T09:00:00.000Z"}
+        />
+      </MemoryRouter>,
+    );
 
     expect(await screen.findByLabelText("期限超過のタスク: 1件")).toBeTruthy();
   });

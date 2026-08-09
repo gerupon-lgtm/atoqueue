@@ -1,0 +1,18 @@
+.inbox-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  width: min(100%, 18rem);
+}
+
+.app-shell__content .inbox-tabs__tab {
+  width: 100%;
+  justify-self: stretch;
+  text-align: center;
+}
+
+.app-shell__content .inbox-tabs__tab[aria-selected="false"] {
+  border-color: #78988d;
+  background: #fffdf8;
+  color: #285c50;
+}

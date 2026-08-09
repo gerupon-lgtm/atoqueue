@@ -1,16 +1,16 @@
 .notification-settings {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.625rem;
 }
 
 .notification-settings__intro {
   margin: 0;
-  line-height: 1.55;
+  line-height: 1.45;
 }
 
 .notification-settings__timing {
   display: grid;
-  gap: 0.625rem;
+  gap: 0.55rem;
   padding: 0;
 }
 
@@ -19,6 +19,14 @@
   gap: 0.625rem;
   padding-top: 0.875rem;
   border-top: 1px solid #c6d0c8;
+}
+
+.notification-settings__review-frequency.is-dirty {
+  margin-inline: -0.25rem;
+  padding: 0.875rem 0.25rem 0;
+  border-radius: 0.5rem;
+  background: #fff9e6;
+  box-shadow: inset 3px 0 #b7791f;
 }
 
 .notification-settings__review-frequency > h2,
@@ -155,6 +163,38 @@
   margin: 0;
   font-size: 0.875rem;
   line-height: 1.45;
+  white-space: nowrap;
+}
+
+.notification-settings__timing-note {
+  padding: 0.5rem 0.625rem;
+  border-left: 3px solid #568a77;
+  background: #eef5ef;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.notification-settings__mechanism {
+  border-bottom: 1px solid #d4e2d8;
+}
+
+.notification-settings__mechanism summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  color: #285c50;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.notification-settings__mechanism div {
+  padding: 0 0 0.625rem;
+}
+
+.notification-settings__mechanism p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
 }
 
 .notification-settings__setup-note {
@@ -171,9 +211,14 @@
 
 .notification-settings__time-zone {
   margin: 0;
-  padding: 0.625rem 0.75rem;
-  border-left: 3px solid #568a77;
-  background: #eef5ef;
+  color: #527066;
+  font-size: 0.875rem;
+}
+
+.app-shell__content .notification-settings__device-setup > .is-configured {
+  border-color: #9db2a7;
+  background: #edf2ee;
+  color: #476158;
 }
 
 .notification-settings__device-check {

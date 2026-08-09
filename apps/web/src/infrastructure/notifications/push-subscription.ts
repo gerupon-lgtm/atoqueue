@@ -11,6 +11,19 @@ export interface PushBrowser {
   requestPermission(): Promise<NotificationPermission>;
   subscribe(applicationServerKey: string): Promise<PushSubscription>;
 }
+
+export type BrowserPushState =
+  | "ready"
+  | "denied"
+  | "permission_missing"
+  | "subscription_missing"
+  | "unavailable";
+
+export interface BrowserPushStateProbe {
+  isAvailable(): boolean;
+  permission(): NotificationPermission;
+  hasSubscription(): Promise<boolean>;
+}
 export interface PushRegistrationApi {
   publicKey(): Promise<string>;
   register(
@@ -117,7 +130,10 @@ export async function enableNotifications(input: {
       settings: { ...snapshot.settings, notificationEnabled: true },
       savedAt,
     };
-    const taskDelivery = rebuildActiveTaskNotifications({ snapshot: updated, now: savedAt });
+    const taskDelivery = rebuildActiveTaskNotifications({
+      snapshot: updated,
+      now: savedAt,
+    });
     const captureDelivery = rebuildPendingCaptureNotifications({
       snapshot: { ...updated, ...taskDelivery },
       now: savedAt,
@@ -194,6 +210,30 @@ export function createBrowserPushAdapter(): PushBrowser {
         expirationTime: subscription.expirationTime,
         keys: { p256dh: json.keys?.p256dh ?? "", auth: json.keys?.auth ?? "" },
       };
+    },
+  };
+}
+
+export async function inspectBrowserPushState(
+  browser: BrowserPushStateProbe,
+): Promise<BrowserPushState> {
+  if (!browser.isAvailable()) return "unavailable";
+  const permission = browser.permission();
+  if (permission === "denied") return "denied";
+  if (permission !== "granted") return "permission_missing";
+  return (await browser.hasSubscription()) ? "ready" : "subscription_missing";
+}
+
+export function createBrowserPushStateProbe(): BrowserPushStateProbe {
+  return {
+    isAvailable: () =>
+      "Notification" in window &&
+      "serviceWorker" in navigator &&
+      "PushManager" in window,
+    permission: () => Notification.permission,
+    async hasSubscription() {
+      const registration = await navigator.serviceWorker.ready;
+      return Boolean(await registration.pushManager.getSubscription());
     },
   };
 }

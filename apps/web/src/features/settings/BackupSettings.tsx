@@ -14,6 +14,7 @@ export interface BackupSettingsProps {
   now?: () => string;
   flushOutbox?: () => Promise<unknown>;
   deleteDeviceData?: () => Promise<void>;
+  showHeading?: boolean;
 }
 
 /** Keeps export/import at the local persistence boundary, never in a page route. */
@@ -22,6 +23,7 @@ export function BackupSettings({
   now = () => new Date().toISOString(),
   flushOutbox,
   deleteDeviceData,
+  showHeading = true,
 }: BackupSettingsProps) {
   const [current, setCurrent] = useState<AppSnapshot>();
   const [serialized, setSerialized] = useState<string>();
@@ -131,8 +133,12 @@ export function BackupSettings({
   }
 
   return (
-    <section aria-labelledby="backup-settings-title">
-      <h2 id="backup-settings-title">データ</h2>
+    <section
+      {...(showHeading
+        ? { "aria-labelledby": "backup-settings-title" }
+        : { "aria-label": "データ" })}
+    >
+      {showHeading ? <h2 id="backup-settings-title">データ</h2> : null}
       <p>
         バックアップにはこの端末のタスク、記録、設定を含めます。通知の登録情報は含めません。
       </p>

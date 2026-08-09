@@ -63,11 +63,12 @@ test.describe("NF-001 keyboard and accessible primary routes", () => {
     await page.getByRole("textbox", { name: "タイトル" }).focus();
     await page.keyboard.press("Control+A");
     await page.keyboard.type("キーボードで編集");
-    await page.getByRole("button", { name: "編集を保存" }).focus();
+    await page.getByRole("button", { name: "内容を保存" }).focus();
     await page.keyboard.press("Enter");
-    await expect(page.getByText("キーボードで編集")).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "タイトル" })).toHaveValue("キーボードで編集");
 
     await page.goto("/settings");
+    await page.getByText("データ", { exact: true }).click();
     await page.getByRole("button", { name: "JSONバックアップを書き出す" }).focus();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("link", { name: "バックアップをダウンロード" })).toBeVisible();

@@ -22,6 +22,10 @@ import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
 import { TaskListPage } from "../features/tasks/TaskListPage";
 import { AppShell } from "./AppShell";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import {
+  createBrowserInstallExperience,
+  createInstallPromptPreference,
+} from "../infrastructure/install/browser-install-experience";
 
 type PageDefinition = {
   index?: true;
@@ -38,6 +42,10 @@ const pages: PageDefinition[] = [
 ];
 
 const applicationRepository = new LocalStorageRepository(window.localStorage);
+const installExperience = createBrowserInstallExperience(window);
+const installPromptPreference = createInstallPromptPreference(
+  window.localStorage,
+);
 const notificationApi = new NotificationApi(
   "https://api.atoqueue.sikumilab.com",
 );
@@ -55,7 +63,13 @@ const setupNotifications = () =>
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <AppShell repository={applicationRepository} />,
+    element: (
+      <AppShell
+        installExperience={installExperience}
+        installPromptPreference={installPromptPreference}
+        repository={applicationRepository}
+      />
+    ),
     children: [
       ...pages.map((page) => ({
         ...(page.index ? { index: true } : { path: page.path }),

@@ -28,12 +28,12 @@ body {
   grid-row: 1;
   min-width: 0;
   padding: var(--app-content-padding);
-  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(6.75rem + env(safe-area-inset-bottom));
 }
 
 .app-shell__wordmark {
   margin: 0 0 0.375rem;
-  color: #70877d;
+  color: #526a60;
   font-size: 0.625rem;
   font-weight: 400;
   letter-spacing: 0.18em;
@@ -312,7 +312,7 @@ body {
 
 .app-shell__content > section > .task-list__filters {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(7.5rem, 0.85fr) minmax(0, 1.15fr);
   gap: 0.625rem;
   padding: 0.875rem;
 }
@@ -323,8 +323,19 @@ body {
   font-size: 0.9375rem;
 }
 
+.task-list__filters .task-list__category {
+  grid-column: 1;
+}
+
 .task-list__filters .task-list__search {
-  grid-column: 1 / -1;
+  grid-column: 2;
+}
+
+.app-shell__content .task-list__overdue-link {
+  width: 100%;
+  max-width: none;
+  justify-self: stretch;
+  text-align: center;
 }
 
 .task-list__hint {
@@ -528,6 +539,7 @@ body {
 }
 
 .app-shell__nav-link {
+  position: relative;
   min-height: 48px;
   display: inline-flex;
   flex: 1 1 0;
@@ -562,8 +574,11 @@ body {
 }
 
 .app-shell__nav-badge {
-  min-width: 1.25rem;
-  padding: 0.125rem 0.375rem;
+  position: absolute;
+  top: 0.125rem;
+  right: 0.125rem;
+  min-width: 1.125rem;
+  padding: 0.1rem 0.3rem;
   border-radius: 999px;
   background: #b6483e;
   color: #fff;
