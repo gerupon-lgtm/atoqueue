@@ -161,10 +161,10 @@ describe("InboxPage", () => {
 
     const items = await screen.findAllByRole("listitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      expect.stringContaining("タスクの記録"),
-      expect.stringContaining("不要な記録"),
-      expect.stringContaining("メモの記録"),
-      expect.stringContaining("未整理の記録"),
+      expect.stringMatching(/タスクの記録.*タスク化済み/),
+      expect.stringMatching(/不要な記録.*不要/),
+      expect.stringMatching(/メモの記録.*メモ/),
+      expect.stringMatching(/未整理の記録.*未整理/),
     ]);
   });
 

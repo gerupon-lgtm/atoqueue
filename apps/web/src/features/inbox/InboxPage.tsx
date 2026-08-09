@@ -213,6 +213,9 @@ export function InboxPage({
                 <time dateTime={capture.createdAt}>
                   登録: {formatCaptureCreatedAt(capture.createdAt, timeZone)}
                 </time>
+                <span className="inbox-item__classification">
+                  状態: {classificationLabel(capture.classification)}
+                </span>
                 {capture.classification === "task" ? (
                   <button
                     disabled={!capture.linkedTaskId}
@@ -359,6 +362,21 @@ function emptyMessage(tab: CaptureHistoryTab): string {
       return "不要にした記録はありません。";
     default:
       return "未整理の記録はありません。";
+  }
+}
+
+function classificationLabel(
+  classification: Capture["classification"],
+): string {
+  switch (classification) {
+    case "task":
+      return "タスク化済み";
+    case "note":
+      return "メモ";
+    case "unneeded":
+      return "不要";
+    default:
+      return "未整理";
   }
 }
 

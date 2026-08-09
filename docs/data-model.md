@@ -111,6 +111,10 @@ export interface Capture {
 - `classification="task"` のとき `linkedTaskId` が必須
 - 保存直後は必ず `unclassified`
 - 自動分類結果だけで `task` へ更新しない
+- `unneeded` は自動削除せず、利用者が完全削除するか端末データを全削除するまで保持する
+- `unneeded` から `unclassified` へ戻す場合は `classifiedAt` と `linkedTaskId` を除去し、分類履歴を追加して受信箱通知系列を再構築する
+- 完全削除は `unneeded` だけに許可し、対象CaptureとそのCaptureに属する操作履歴だけを端末内から削除する
+- `すべて` の表示はCaptureを分類にかかわらず新しい順に1件ずつ抽出し、Taskを重複して混在させない
 
 ### 3.4 Task
 
@@ -224,7 +228,8 @@ export interface NotificationOutboxItem {
   operation: "upsert" | "cancel";
   reminderId: string;
   scheduledAt?: string;
-  notificationType?: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review";
+  notificationType?:
+    "inbox_review" | "task_review" | "deadline_review" | "unset_due_review";
   /** 省略時は一回限り。サーバーへ送ってよい繰り返し情報だけを表す。 */
   repeatCadence?: "weekly" | "monthly";
   taskRevision: number;
