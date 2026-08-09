@@ -513,31 +513,31 @@ git commit -m "chore: release custom categories as mvp 1.5.0"
 - Consumes: clean, fully verified branch at `mvp-1.5.0`.
 - Produces: pushed branch, successful GitHub Actions deployment, public PWA/API verification.
 
-- [ ] **Step 1: Verify clean release commit and branch**
+- [x] **Step 1: Verify clean release commit and branch**
 
 Run: `git status --short && git log -5 --oneline`
 
 Expected: only user-owned unrelated untracked files remain; all release files are committed.
 
-- [ ] **Step 2: Push the current branch**
+- [x] **Step 2: Push the current branch**
 
 Run: `git push origin task/atoqueue-mvp`
 
 Expected: remote branch advances to the release commit.
 
-- [ ] **Step 3: Trigger the deployment workflow for the pushed commit**
+- [x] **Step 3: Trigger the deployment workflow for the pushed commit**
 
 Run: `gh workflow run deploy.yml --ref task/atoqueue-mvp -f ref=task/atoqueue-mvp`
 
 Expected: workflow is queued for the current branch. If the workflow input is named differently, inspect `gh workflow view deploy.yml --yaml` and pass its exact input name.
 
-- [ ] **Step 4: Watch deployment to completion**
+- [x] **Step 4: Watch deployment to completion**
 
 Run: `gh run watch --exit-status`
 
 Expected: Test and build, OCI notification API deployment, and GitHub Pages publication all succeed.
 
-- [ ] **Step 5: Verify public release**
+- [x] **Step 5: Verify public release**
 
 Run:
 
@@ -547,3 +547,5 @@ Run:
 ```
 
 Expected: PWA HTTP 200 and API `status: ok`. Open Settings > App Information and verify `mvp-1.5.0` after the Pages cache updates.
+
+**配置結果（2026-08-10）:** release commit `db809a3` をpushし、GitHub Actions Deploy #77（run `31342182972`）を手動実行した。Test and build、GitHub Pages、OCI notification APIの3ジョブはすべて成功した。本番API `/healthz` はHTTP 200で `version: mvp-1.5.0` を返し、公開PWAの配信JavaScriptにも `mvp-1.5.0` が含まれることを確認した。
