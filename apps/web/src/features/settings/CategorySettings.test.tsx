@@ -18,17 +18,29 @@ describe("CategorySettings", () => {
     const { repository, save } = memory();
     render(<CategorySettings repository={repository} />);
 
-    expect(
-      await screen.findByText(/この端末だけに追加できます/),
-    ).toBeTruthy();
+    expect(await screen.findByText(/この端末だけに追加できます/)).toBeTruthy();
     expect(screen.getByText("プリセット（変更不可）")).toBeTruthy();
     expect(screen.getByText("仕事")).toBeTruthy();
     expect(screen.getByText("0 / 10件")).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "カテゴリを保存",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
 
     await userEvent.setup().type(screen.getByLabelText("カテゴリ名"), "冷蔵庫");
     await userEvent.setup().click(screen.getByRole("button", { name: "追加" }));
     expect(save).not.toHaveBeenCalled();
     expect(screen.getByText("冷蔵庫")).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "カテゴリを保存",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
 
     await userEvent
       .setup()
@@ -40,6 +52,13 @@ describe("CategorySettings", () => {
     expect(screen.getByRole("status").textContent).toBe(
       "カテゴリを保存しました。",
     );
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "カテゴリを保存",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
   });
 
   it("shows the full limit before input and re-enables addition for a pending removal", async () => {
@@ -47,7 +66,7 @@ describe("CategorySettings", () => {
       { length: 10 },
       (_, index) => `分類${index}`,
     );
-    const { repository } = memory({
+    const { repository, save } = memory({
       customTaskCategories,
       tasks: [
         task("active-one", "active", "分類0"),
@@ -58,20 +77,19 @@ describe("CategorySettings", () => {
     render(<CategorySettings repository={repository} />);
 
     expect(await screen.findByText("10 / 10件")).toBeTruthy();
-    expect((screen.getByLabelText("カテゴリ名") as HTMLInputElement).disabled).toBe(
-      true,
-    );
+    expect(
+      (screen.getByLabelText("カテゴリ名") as HTMLInputElement).disabled,
+    ).toBe(true);
     expect(screen.getByText(/追加カテゴリは10件までです/)).toBeTruthy();
 
     await userEvent
       .setup()
-      .click(
-        screen.getByRole("button", { name: "分類0を削除予定にする" }),
-      );
+      .click(screen.getByRole("button", { name: "分類0を削除予定にする" }));
     expect(screen.getByText("9 / 10件")).toBeTruthy();
-    expect((screen.getByLabelText("カテゴリ名") as HTMLInputElement).disabled).toBe(
-      false,
-    );
+    expect(screen.getByText("削除予定")).toBeTruthy();
+    expect(
+      (screen.getByLabelText("カテゴリ名") as HTMLInputElement).disabled,
+    ).toBe(false);
     expect(
       screen.getByText(
         "「分類0」が付いたタスク: 3件（対応中2件、完了・アーカイブ1件）",
@@ -79,10 +97,17 @@ describe("CategorySettings", () => {
     ).toBeTruthy();
     expect(screen.getByText(/これらのタスクには残ります/)).toBeTruthy();
 
+    await userEvent.setup().type(screen.getByLabelText("カテゴリ名"), "新規");
+    await userEvent.setup().click(screen.getByRole("button", { name: "追加" }));
     await userEvent
       .setup()
-      .click(screen.getByRole("button", { name: "分類0の削除を元に戻す" }));
-    expect(screen.getByText("10 / 10件")).toBeTruthy();
+      .click(screen.getByRole("button", { name: "カテゴリを保存" }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    expect(save.mock.calls[0]?.[0].settings.customTaskCategories).toEqual([
+      ...customTaskCategories.slice(1),
+      "新規",
+    ]);
   });
 
   it("keeps the edited categories visible when persistence fails", async () => {
@@ -103,11 +128,13 @@ describe("CategorySettings", () => {
   });
 });
 
-function memory(options: {
-  customTaskCategories?: string[];
-  tasks?: Task[];
-  saveError?: boolean;
-} = {}): { repository: AppRepository; save: ReturnType<typeof vi.fn> } {
+function memory(
+  options: {
+    customTaskCategories?: string[];
+    tasks?: Task[];
+    saveError?: boolean;
+  } = {},
+): { repository: AppRepository; save: ReturnType<typeof vi.fn> } {
   let snapshot: AppSnapshot = createEmptySnapshot({
     appVersion: "mvp-1.5.0",
     localDeviceId: "device-1",

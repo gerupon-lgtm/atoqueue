@@ -15,6 +15,7 @@ export interface CategorySettingsProps {
 export function CategorySettings({ repository }: CategorySettingsProps) {
   const [snapshot, setSnapshot] = useState<AppSnapshot>();
   const [categories, setCategories] = useState<string[]>([]);
+  const [savedCategories, setSavedCategories] = useState<string[]>([]);
   const [pendingRemoval, setPendingRemoval] = useState<Set<string>>(new Set());
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,6 +30,7 @@ export function CategorySettings({ repository }: CategorySettingsProps) {
         if (!active) return;
         setSnapshot(current);
         setCategories(current.settings.customTaskCategories);
+        setSavedCategories(current.settings.customTaskCategories);
       })
       .catch(() => {
         if (active) setError("カテゴリを読み込めませんでした。");
@@ -43,6 +45,8 @@ export function CategorySettings({ repository }: CategorySettingsProps) {
     [categories, pendingRemoval],
   );
   const atLimit = activeCategories.length >= 10;
+  const isDirty =
+    JSON.stringify(activeCategories) !== JSON.stringify(savedCategories);
 
   function addCategory(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -50,11 +54,21 @@ export function CategorySettings({ repository }: CategorySettingsProps) {
     setFeedback(undefined);
     try {
       const next = validateCustomTaskCategories([...activeCategories, name]);
-      setCategories(next);
-      setPendingRemoval(new Set());
+      const added = next.at(-1)!;
+      if (categories.includes(added)) {
+        setPendingRemoval((current) => {
+          const updated = new Set(current);
+          updated.delete(added);
+          return updated;
+        });
+      } else {
+        setCategories([...categories, added]);
+      }
       setName("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "追加できませんでした。");
+      setError(
+        reason instanceof Error ? reason.message : "追加できませんでした。",
+      );
     }
   }
 
@@ -90,6 +104,7 @@ export function CategorySettings({ repository }: CategorySettingsProps) {
       await repository.save(next);
       setSnapshot(next);
       setCategories(nextCategories);
+      setSavedCategories(nextCategories);
       setPendingRemoval(new Set());
       setFeedback("カテゴリを保存しました。");
     } catch (reason) {
@@ -104,9 +119,14 @@ export function CategorySettings({ repository }: CategorySettingsProps) {
   }
 
   return (
-    <section aria-labelledby="category-settings-title" className="category-settings">
+    <section
+      aria-labelledby="category-settings-title"
+      className="category-settings"
+    >
       <h2 id="category-settings-title">カテゴリ</h2>
-      <p>タスクのカテゴリをこの端末だけに追加できます。</p>
+      <p>
+        タスクで使うカテゴリを、この端末だけに追加できます。プリセットは変更できません。
+      </p>
 
       <div className="category-settings__presets">
         <strong>プリセット（変更不可）</strong>
@@ -152,11 +172,16 @@ export function CategorySettings({ repository }: CategorySettingsProps) {
                 </button>
                 {removing ? (
                   <div className="category-settings__removal-note">
+                    <strong className="category-settings__removal-label">
+                      削除予定
+                    </strong>
                     <p>
                       「{category}」が付いたタスク: {usage.total}件（対応中
                       {usage.active}件、完了・アーカイブ{usage.finished}件）
                     </p>
-                    <p>これらのタスクには残ります。</p>
+                    <p>
+                      選択肢からは削除されますが、これらのタスクには残ります。
+                    </p>
                   </div>
                 ) : null}
               </div>
@@ -166,7 +191,9 @@ export function CategorySettings({ repository }: CategorySettingsProps) {
       ) : null}
 
       {atLimit ? (
-        <p className="category-settings__limit">追加カテゴリは10件までです。削除予定にすると新しく追加できます。</p>
+        <p className="category-settings__limit">
+          追加カテゴリは10件までです。削除予定にすると新しく追加できます。
+        </p>
       ) : null}
       <form className="category-settings__add" onSubmit={addCategory}>
         <label>
@@ -178,12 +205,21 @@ export function CategorySettings({ repository }: CategorySettingsProps) {
             value={name}
           />
         </label>
-        <button disabled={atLimit || busy || name.trim().length === 0} type="submit">
+        <button
+          disabled={atLimit || busy || name.trim().length === 0}
+          type="submit"
+        >
           追加
         </button>
       </form>
-      <p className="category-settings__note">1〜12文字。削除は「カテゴリを保存」で確定します。</p>
-      <button disabled={busy || !snapshot} onClick={() => void saveCategories()} type="button">
+      <p className="category-settings__note">
+        1〜12文字。削除は「カテゴリを保存」で確定します。
+      </p>
+      <button
+        disabled={busy || !snapshot || !isDirty}
+        onClick={() => void saveCategories()}
+        type="button"
+      >
         {busy ? "保存中…" : "カテゴリを保存"}
       </button>
       {feedback ? <p role="status">{feedback}</p> : null}

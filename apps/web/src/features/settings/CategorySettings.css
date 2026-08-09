@@ -8,6 +8,15 @@
   margin: 0;
 }
 
+.category-settings__removal-label {
+  width: fit-content;
+  padding: 0.125rem 0.45rem;
+  border-radius: 999px;
+  background: #eee8d8;
+  color: #72591c;
+  font-size: 0.75rem;
+}
+
 .category-settings__presets,
 .category-settings__custom-heading {
   display: grid;

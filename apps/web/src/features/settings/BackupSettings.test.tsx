@@ -73,13 +73,25 @@ describe("BackupSettings", () => {
     );
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("status").textContent).toBe(
-      "データを復元しました。",
+      "データを復元しました。通知への反映も完了しました。",
     );
     expect(flush).toHaveBeenCalledTimes(1);
     expect(
       (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].device
         .localDeviceId,
     ).toBe("local");
+  });
+
+  it("explains replacement, cross-device copying, and notification rebuilding before restore", async () => {
+    render(<BackupSettings repository={memory(example())} now={() => now} />);
+
+    expect(
+      await screen.findByText(/復元は現在のデータへの追加ではありません/),
+    ).toBeTruthy();
+    expect(screen.getByText(/別端末への復元はデータのコピーです/)).toBeTruthy();
+    expect(
+      screen.getByText(/復元先端末の設定を使って通知予約を作り直します/),
+    ).toBeTruthy();
   });
 
   it("F-018 gives a reason for invalid files and never replaces local data", async () => {

@@ -125,13 +125,16 @@ export function BackupSettings({
       setCurrent(restored);
       setInspection(undefined);
       setSerialized(undefined);
-      setFeedback("データを復元しました。");
       if (navigator.onLine !== false && flushOutbox) {
         try {
           await flushOutbox();
+          setFeedback("データを復元しました。通知への反映も完了しました。");
         } catch {
+          setFeedback("データを復元しました。");
           setSyncPending(true);
         }
+      } else {
+        setFeedback("データを復元しました。");
       }
     } catch (reason) {
       setError(
@@ -174,7 +177,13 @@ export function BackupSettings({
     >
       {showHeading ? <h2 id="backup-settings-title">データ</h2> : null}
       <p>
-        バックアップにはこの端末のタスク、記録、設定を含めます。通知の登録情報は含めません。
+        バックアップにはこの端末のタスク、記録、設定を含めます。復元は現在のデータへの追加ではありません。バックアップの内容ですべて置き換わります。
+      </p>
+      <p>
+        別端末への復元はデータのコピーです。元の端末のデータと通知は残ります。
+      </p>
+      <p>
+        通知の登録情報はコピーせず、復元先端末の設定を使って通知予約を作り直します。
       </p>
       <button disabled={busy} onClick={() => void exportJson()} type="button">
         {activeOperation === "export"
