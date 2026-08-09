@@ -3,6 +3,7 @@ export const DOMAIN_SCHEMA_VERSION = 6 as const;
 export * from "./errors";
 export * from "./backup";
 export * from "./capture";
+export * from "./capture-query";
 export * from "./candidate";
 export * from "./classification";
 export * from "./due-date";
