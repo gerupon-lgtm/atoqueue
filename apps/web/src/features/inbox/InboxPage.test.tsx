@@ -282,6 +282,53 @@ describe("InboxPage", () => {
     );
   });
 
+  it("F-006 keeps the batch selection when local persistence fails", async () => {
+    const repository = repositoryWithAllClassifications();
+    repository.save = vi.fn().mockRejectedValue(new Error("quota"));
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
+    render(<InboxPage now={() => now} repository={repository} />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /不要.*2件/ }));
+    fireEvent.click(screen.getByRole("button", { name: "選択" }));
+    fireEvent.click(screen.getByRole("button", { name: "すべて選択" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "選択した記録を未整理に戻す",
+      }),
+    );
+
+    await screen.findByRole("alert");
+    expect(screen.getByText("2件選択中")).toBeTruthy();
+    expect(
+      screen
+        .getAllByRole("checkbox")
+        .every((checkbox) => (checkbox as HTMLInputElement).checked),
+    ).toBe(true);
+  });
+
+  it("F-014 keeps a successful batch restore and reports queued synchronization", async () => {
+    const repository = repositoryWithAllClassifications();
+    const sync = vi.fn().mockRejectedValue(new Error("offline"));
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
+    render(<InboxPage now={() => now} repository={repository} sync={sync} />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /不要.*2件/ }));
+    fireEvent.click(screen.getByRole("button", { name: "選択" }));
+    fireEvent.click(screen.getByRole("button", { name: "すべて選択" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "選択した記録を未整理に戻す",
+      }),
+    );
+
+    expect((await screen.findByRole("status")).textContent).toBe(
+      "2件を未整理に戻しました。通知の更新は送信待ちです。",
+    );
+    expect(repository.save).toHaveBeenCalledTimes(1);
+    expect(sync).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("tab", { name: /未整理.*3件/ })).toBeTruthy();
+  });
+
   it("does not leave an empty list card below the inbox empty state", async () => {
     const empty = createEmptySnapshot({
       appVersion: "0.1.0",

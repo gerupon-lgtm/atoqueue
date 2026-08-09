@@ -469,4 +469,27 @@ describe("classification", () => {
     ]);
     expect(next.reminderMap.some(({ scope }) => scope === "inbox")).toBe(false);
   });
+
+  it("F-006 validates every selected capture before a batch deletion", () => {
+    const snapshot = markAsUnneeded({
+      snapshot: createCapture(
+        snapshotWithCapture(),
+        "返却する",
+        "2026-08-03T09:05:00.000Z",
+        "capture-2",
+      ),
+      captureId: "capture-1",
+      now: "2026-08-03T10:00:00.000Z",
+    });
+    const before = structuredClone(snapshot);
+
+    expect(() =>
+      deleteUnneededCaptures({
+        snapshot,
+        captureIds: ["capture-1", "capture-2"],
+        now: "2026-08-03T11:00:00.000Z",
+      }),
+    ).toThrow(AlreadyClassifiedError);
+    expect(snapshot).toEqual(before);
+  });
 });

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createReviewPresentation } from "./review-presentation";
+import {
+  createReviewPresentation,
+  latestSessionAnswer,
+} from "./review-presentation";
 
 const calendar = {
   addDays: (date: string) => date,
@@ -31,5 +34,25 @@ describe("createReviewPresentation", () => {
       deadline: "期限: 2026/8/1 23:59",
       elapsed: "期限から3日",
     });
+  });
+
+  it("labels an archived task as archive when returning to a previous answer", () => {
+    expect(
+      latestSessionAnswer({
+        actionEventIds: ["archive-event"],
+        events: [
+          {
+            id: "archive-event",
+            entityType: "task",
+            entityId: "task-1",
+            action: "task_archived",
+            occurredAt: "2026-08-10T00:00:00.000Z",
+          },
+        ],
+        taskId: "task-1",
+        now: "2026-08-10T00:00:00.000Z",
+        calendar,
+      }),
+    ).toBe("アーカイブ");
   });
 });

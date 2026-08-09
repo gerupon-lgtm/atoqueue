@@ -57,7 +57,7 @@ export function latestSessionAnswer(input: {
     if (event.action === "task_completed") return "完了";
     if (event.action === "task_marked_no_due") return "期限なし";
     if (event.action === "task_dismissed") return "今回は閉じる";
-    if (event.action === "task_archived") return "不要";
+    if (event.action === "task_archived") return "アーカイブ";
     if (event.action === "task_rescheduled") {
       const dueAt = event.after?.dueAt;
       return typeof dueAt === "string" &&

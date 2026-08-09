@@ -124,8 +124,8 @@ test("shows three counted inbox tabs and restores selected unneeded captures", a
   await expect(page.getByText("タスク化済みの記録")).toHaveCount(0);
 
   await page.getByRole("tab", { name: /不要.*2件/ }).click();
-  await expect(page.getByText("未整理から")).toBeVisible();
-  await expect(page.getByText("メモから")).toBeVisible();
+  await expect(page.getByText("未整理から", { exact: true })).toBeVisible();
+  await expect(page.getByText("メモから", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "選択" }).click();
   await page.getByRole("button", { name: "すべて選択" }).click();
   await expect(page.getByText("2件選択中")).toBeVisible();

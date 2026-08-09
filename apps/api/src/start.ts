@@ -7,6 +7,8 @@ import { WebPushClient } from "./push/web-push-client.js";
 import { ReminderDispatcher } from "./scheduler/reminder-dispatcher.js";
 import { buildProductionApp } from "./server.js";
 
+export const API_VERSION = "mvp-1.4.0";
+
 export interface RunningApi {
   close(): Promise<void>;
 }
@@ -59,7 +61,7 @@ export async function startServer(input: {
 
 export async function start(
   input: { version: string; environment?: NodeJS.ProcessEnv } = {
-    version: "mvp-1.3.0",
+    version: API_VERSION,
   },
 ): Promise<RunningApi> {
   const environment = input.environment ?? process.env;

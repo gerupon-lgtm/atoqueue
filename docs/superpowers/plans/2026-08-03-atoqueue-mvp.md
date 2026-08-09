@@ -1375,3 +1375,14 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 **Confirmed design:** The quick-capture screen keeps deadline entry out of the initial action. At task conversion and task editing, a user may add an optional `HH:MM` time to today, tomorrow, this Sunday, or a custom date. A blank time remains 23:59. The local IANA time zone converts that selection to UTC for persistence, and dates are rendered back in the device time zone. New v4 snapshots show a local-only guide covering notification timing, explicit browser notification setup, and inbox task conversion. Existing v3 data migrates as already guided.
 
 **Implementation steps:** Add time-aware due-choice tests before extending the domain calendar call; render an accessible time input in candidate and detail screens; add schema v4 migration tests; format local dates, time zones, and offsets at the presentation boundary; use Kosugi and a consistent settings-style card/form system across screens; replace fragile text icons with `2.5`-stroke SVG navigation icons. Explain the five-minute dispatcher poll and Android/PWA notification checks in Settings. No new task data may cross the notification boundary.
+
+## Follow-up: 受信箱3タブとレイアウト統一（2026-08-10）
+
+**Requirements:** F-004、F-006、F-009、F-010、F-014、F-015、NF-001、NF-004、NF-006、NF-010、NF-013
+
+- 【確定】受信箱は `未整理 / メモ / 不要` の3タブとし、タスク化済みCaptureは一覧・件数へ表示しない。Task本体とCapture参照は端末内に保持する。
+- 【確定】不要記録には `未整理から` または `メモから` の経路を表示し、個別操作に加えて全選択・選択解除・一括復元・確認付き一括完全削除を提供する。
+- 【確定】Captureを捨てる操作は `不要`、Taskを保管する操作は `アーカイブ` と表示する。
+- 【確定】ページタイトルから最初の要素までの間隔を `0.75rem` に統一し、PC左ナビの文字・アイコン・操作範囲を拡大する。スマホのフローティングフッター寸法は維持する。
+- 【確定】表示・Web・API・ワークスペースのバージョンを `mvp-1.4.0` / `1.4.0` へ揃える。
+- 実装結果: ドメインの一括操作を事前検証後の単一snapshot更新として実装し、画面では1回の保存と1回の通知同期に限定した。単体・結合テスト56ファイル452件、対象Chromium E2E 16件、Lint、型検査、本番ビルドを通過した。

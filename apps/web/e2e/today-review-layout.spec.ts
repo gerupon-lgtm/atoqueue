@@ -72,6 +72,7 @@ test("keeps the today review header, progress, and card inside the desktop conte
   expect(
     Math.abs(header!.x + header!.width - (card!.x + card!.width)),
   ).toBeLessThan(2);
+  expect(card!.y - (header!.y + header!.height)).toBe(12);
   expect(header!.y + header!.height).toBeLessThanOrEqual(card!.y);
   expect(progress!.x).toBeGreaterThanOrEqual(card!.x);
   expect(progress!.x + progress!.width).toBeLessThanOrEqual(
