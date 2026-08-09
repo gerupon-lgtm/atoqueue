@@ -43,7 +43,7 @@ export async function startServer(input: {
   }
 }
 
-export async function start(input: { version: string; environment?: NodeJS.ProcessEnv } = { version: "0.1.0" }): Promise<RunningApi> {
+export async function start(input: { version: string; environment?: NodeJS.ProcessEnv } = { version: "mvp-1.1.0" }): Promise<RunningApi> {
   const environment = input.environment ?? process.env;
   const config = loadConfig(environment);
   const { app, pool } = await buildProductionApp({ version: input.version, environment });

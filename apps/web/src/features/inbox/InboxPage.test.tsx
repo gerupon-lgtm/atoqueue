@@ -159,6 +159,10 @@ describe("InboxPage", () => {
 
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
     expect(
+      screen.getByRole("status", { name: "編集した記録の保存結果" })
+        .textContent,
+    ).toBe("本文を保存しました。");
+    expect(
       (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].captures,
     ).toContainEqual(
       expect.objectContaining({
@@ -166,6 +170,27 @@ describe("InboxPage", () => {
         classification: "unclassified",
       }),
     );
+  });
+
+  it("keeps a failed body edit beside its capture so the user can retry", async () => {
+    const repository = repositoryWithCaptures();
+    repository.save = vi.fn().mockRejectedValue(new Error("quota"));
+    render(<InboxPage now={() => now} repository={repository} />);
+
+    const body = await screen.findByDisplayValue("新しい記録");
+    fireEvent.change(body, { target: { value: "保存できなかった記録" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "新しい記録の本文を保存" }),
+    );
+
+    expect(
+      (
+        await screen.findByRole("alert", {
+          name: "保存できなかった記録の保存結果",
+        })
+      ).textContent,
+    ).toBe("本文を保存できませんでした。もう一度お試しください。");
+    expect(screen.getByDisplayValue("保存できなかった記録")).not.toBeNull();
   });
 
   it("F-004 disables the whole list during a classification to prevent a concurrent lost update", async () => {

@@ -155,6 +155,10 @@ describe("NotificationSettings", () => {
         }),
       ),
     );
+    expect(
+      screen.getByRole("status", { name: "通知タイミングの保存結果" })
+        .textContent,
+    ).toBe("通知タイミングを保存しました。");
   });
 
   it("formats the default deadline time and selects all text when the user taps it", async () => {
@@ -211,6 +215,7 @@ describe("NotificationSettings", () => {
     expect(
       await screen.findByText("この端末は通知設定済みです。"),
     ).toBeTruthy();
+    expect(screen.queryByText("通知を設定しました。")).toBeNull();
     const reconfigure = screen.getByRole("button", {
       name: "通知を再設定する",
     });

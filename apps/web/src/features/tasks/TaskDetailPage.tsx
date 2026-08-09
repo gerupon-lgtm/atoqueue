@@ -42,7 +42,14 @@ export function TaskDetailPage({
   const [selectedDueDate, setSelectedDueDate] = useState("");
   const [selectedDueTime, setSelectedDueTime] = useState("");
   const [dueTimeEnabled, setDueTimeEnabled] = useState(false);
-  const [message, setMessage] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<DirectTaskChange["type"]>();
+  const [feedback, setFeedback] = useState<{
+    area: "content" | "deadline" | "status";
+    kind: "success" | "error";
+    message: string;
+    syncPending?: boolean;
+  }>();
   useEffect(() => {
     let current = true;
     void repository.load().then((value) => {
@@ -72,8 +79,14 @@ export function TaskDetailPage({
     };
   }, [now, repository, taskId]);
 
-  async function change(change: DirectTaskChange): Promise<void> {
-    if (!snapshot) return;
+  async function change(
+    change: DirectTaskChange,
+    result: { area: "content" | "deadline" | "status"; message: string },
+  ): Promise<void> {
+    if (!snapshot || busy) return;
+    setBusy(true);
+    setBusyAction(change.type);
+    setFeedback(undefined);
     try {
       const timestamp = now();
       const next = modifyTask({
@@ -88,16 +101,28 @@ export function TaskDetailPage({
       const task = next.tasks.find((item) => item.id === taskId)!;
       setTitle(task.title);
       setCategory(task.category ?? "");
+      if (change.type === "no_due") {
+        setSelectedDueDate("");
+        setSelectedDueTime("");
+        setDueTimeEnabled(false);
+      }
+      setFeedback({ ...result, kind: "success" });
       if (sync) {
         try {
           await sync(next);
-          setMessage(undefined);
         } catch {
-          setMessage("通知の更新を送信待ちにしています");
+          setFeedback({ ...result, kind: "success", syncPending: true });
         }
       }
     } catch {
-      setMessage("変更を保存できませんでした。もう一度お試しください。");
+      setFeedback({
+        area: result.area,
+        kind: "error",
+        message: "変更を保存できませんでした。もう一度お試しください。",
+      });
+    } finally {
+      setBusy(false);
+      setBusyAction(undefined);
     }
   }
 
@@ -114,12 +139,25 @@ export function TaskDetailPage({
     (capture) => capture.id === task.sourceCaptureId,
   );
   const applyDue = async (type: "reschedule" | "no_due") => {
-    if (type === "no_due") return change({ type });
+    if (type === "no_due")
+      return change(
+        { type },
+        { area: "deadline", message: "期限なしに変更しました。" },
+      );
     const date = dateFromDigits(selectedDueDate);
-    if (!date) return setMessage("新しい期限日を8桁で入力してください。");
+    if (!date)
+      return setFeedback({
+        area: "deadline",
+        kind: "error",
+        message: "新しい期限日を8桁で入力してください。",
+      });
     const time = dueTimeEnabled ? timeFromDigits(selectedDueTime) : undefined;
     if (dueTimeEnabled && !time)
-      return setMessage("期限時刻を4桁で入力してください。");
+      return setFeedback({
+        area: "deadline",
+        kind: "error",
+        message: "期限時刻を4桁で入力してください。",
+      });
     const due = resolveDueChoice({
       choice: {
         type: "custom",
@@ -131,7 +169,10 @@ export function TaskDetailPage({
       weeklyReviewDay: snapshot.settings.weeklyReviewDay,
       defaultDeadlineTime: snapshot.settings.defaultDeadlineTime ?? "23:59",
     });
-    return change({ type, due });
+    return change(
+      { type, due },
+      { area: "deadline", message: "期限を変更しました。" },
+    );
   };
   return (
     <section aria-labelledby="task-detail-title">
@@ -201,7 +242,10 @@ export function TaskDetailPage({
           <input
             style={touchTarget}
             value={title}
-            onChange={(event) => setTitle(event.target.value)}
+            onChange={(event) => {
+              if (feedback?.area === "content") setFeedback(undefined);
+              setTitle(event.target.value);
+            }}
           />
         </label>
         <label>
@@ -209,9 +253,10 @@ export function TaskDetailPage({
           <select
             style={touchTarget}
             value={category}
-            onChange={(event) =>
-              setCategory(event.target.value as Task["category"] | "")
-            }
+            onChange={(event) => {
+              if (feedback?.area === "content") setFeedback(undefined);
+              setCategory(event.target.value as Task["category"] | "");
+            }}
           >
             <option value="">なし</option>
             <option value="work">仕事</option>
@@ -223,15 +268,20 @@ export function TaskDetailPage({
         <div className="task-detail__actions task-detail__content-actions">
           <button
             className="task-detail__content-save"
+            disabled={busy}
             style={touchTarget}
             type="button"
             onClick={() =>
-              void change({ type: "edit", title, category: category || null })
+              void change(
+                { type: "edit", title, category: category || null },
+                { area: "content", message: "内容を保存しました。" },
+              )
             }
           >
-            内容を保存
+            {busyAction === "edit" ? "保存中…" : "内容を保存"}
           </button>
         </div>
+        <OperationFeedback area="content" feedback={feedback} />
       </section>
       <section
         className="task-detail__section"
@@ -242,9 +292,16 @@ export function TaskDetailPage({
           dateDigits={selectedDueDate}
           defaultDeadlineTime={snapshot.settings.defaultDeadlineTime ?? "23:59"}
           idPrefix="task-detail"
-          onDateDigitsChange={setSelectedDueDate}
-          onTimeDigitsChange={setSelectedDueTime}
+          onDateDigitsChange={(value) => {
+            if (feedback?.area === "deadline") setFeedback(undefined);
+            setSelectedDueDate(value);
+          }}
+          onTimeDigitsChange={(value) => {
+            if (feedback?.area === "deadline") setFeedback(undefined);
+            setSelectedDueTime(value);
+          }}
           onTimeEnabledChange={(enabled) => {
+            if (feedback?.area === "deadline") setFeedback(undefined);
             setDueTimeEnabled(enabled);
             if (!enabled) setSelectedDueTime("");
           }}
@@ -255,22 +312,25 @@ export function TaskDetailPage({
           <div className="task-detail__actions task-detail__deadline-actions">
             <button
               className="task-detail__deadline-save"
+              disabled={busy}
               style={touchTarget}
               type="button"
               onClick={() => void applyDue("reschedule")}
             >
-              期限を保存
+              {busyAction === "reschedule" ? "保存中…" : "期限を保存"}
             </button>
             <button
               className="task-detail__no-due"
+              disabled={busy}
               style={touchTarget}
               type="button"
               onClick={() => void applyDue("no_due")}
             >
-              期限なしにする
+              {busyAction === "no_due" ? "変更中…" : "期限なしにする"}
             </button>
           </div>
         ) : null}
+        <OperationFeedback area="deadline" feedback={feedback} />
       </section>
       {task.status === "active" ? (
         <section
@@ -281,27 +341,45 @@ export function TaskDetailPage({
           <div className="task-detail__actions task-detail__status-actions">
             <button
               className="task-detail__complete"
+              disabled={busy}
               style={touchTarget}
               type="button"
-              onClick={() => void change({ type: "complete" })}
+              onClick={() =>
+                void change(
+                  { type: "complete" },
+                  { area: "status", message: "完了にしました。" },
+                )
+              }
             >
-              完了
+              {busyAction === "complete" ? "変更中…" : "完了"}
             </button>
             <button
               className="task-detail__dismiss"
+              disabled={busy}
               style={touchTarget}
               type="button"
-              onClick={() => void change({ type: "dismiss" })}
+              onClick={() =>
+                void change(
+                  { type: "dismiss" },
+                  { area: "status", message: "後回しにしました。" },
+                )
+              }
             >
-              後回し
+              {busyAction === "dismiss" ? "変更中…" : "後回し"}
             </button>
             <button
               className="task-detail__archive"
+              disabled={busy}
               style={touchTarget}
               type="button"
-              onClick={() => void change({ type: "archive" })}
+              onClick={() =>
+                void change(
+                  { type: "archive" },
+                  { area: "status", message: "アーカイブしました。" },
+                )
+              }
             >
-              アーカイブ
+              {busyAction === "archive" ? "変更中…" : "アーカイブ"}
             </button>
           </div>
         </section>
@@ -309,14 +387,21 @@ export function TaskDetailPage({
         <div className="task-detail__actions task-detail__single-action">
           <button
             className="task-detail__reopen"
+            disabled={busy}
             style={touchTarget}
             type="button"
-            onClick={() => void change({ type: "reopen" })}
+            onClick={() =>
+              void change(
+                { type: "reopen" },
+                { area: "status", message: "対応中に戻しました。" },
+              )
+            }
           >
-            再開
+            {busyAction === "reopen" ? "変更中…" : "再開"}
           </button>
         </div>
       )}
+      <OperationFeedback area="status" feedback={feedback} />
       <h2>操作履歴</h2>
       <ActionHistoryList
         events={snapshot.actionHistory.filter(
@@ -324,8 +409,33 @@ export function TaskDetailPage({
         )}
         timeZone={snapshot.settings.timeZone}
       />
-      {message ? <p role="alert">{message}</p> : null}
     </section>
+  );
+}
+
+interface OperationFeedbackProps {
+  area: "content" | "deadline" | "status";
+  feedback:
+    | {
+        area: "content" | "deadline" | "status";
+        kind: "success" | "error";
+        message: string;
+        syncPending?: boolean;
+      }
+    | undefined;
+}
+
+function OperationFeedback({ area, feedback }: OperationFeedbackProps) {
+  if (!feedback || feedback.area !== area) return null;
+  return (
+    <div className="task-detail__feedback">
+      <p role={feedback.kind === "success" ? "status" : "alert"}>
+        {feedback.message}
+      </p>
+      {feedback.syncPending ? (
+        <p role="alert">通知の更新を送信待ちにしています</p>
+      ) : null}
+    </div>
   );
 }
 

@@ -36,6 +36,9 @@ describe("BackupSettings", () => {
         .getByRole("link", { name: "バックアップをダウンロード" })
         .getAttribute("download"),
     ).toBe("atoqueue-backup-2026-08-04.json");
+    expect(screen.getByRole("status").textContent).toBe(
+      "バックアップを準備しました。ダウンロードしてください。",
+    );
   });
 
   it("F-018 previews incoming and current counts, then replaces only after explicit confirmation", async () => {
@@ -63,10 +66,15 @@ describe("BackupSettings", () => {
     expect(screen.getByText(/現在のデータ: タスク 0件/)).not.toBeNull();
     expect(repository.save).not.toHaveBeenCalled();
 
-    await userEvent
-      .setup()
-      .click(screen.getByRole("button", { name: "この内容で置き換える" }));
+    await userEvent.setup().click(
+      await screen.findByRole("button", {
+        name: "この内容で置き換える",
+      }),
+    );
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("status").textContent).toBe(
+      "データを復元しました。",
+    );
     expect(flush).toHaveBeenCalledTimes(1);
     expect(
       (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].device
@@ -84,6 +92,37 @@ describe("BackupSettings", () => {
     expect(
       screen.queryByRole("button", { name: "この内容で置き換える" }),
     ).toBeNull();
+  });
+
+  it("keeps a completed restore distinct from a notification sync failure", async () => {
+    const repository = memory(
+      createEmptySnapshot({
+        appVersion: "0.1.0",
+        localDeviceId: "local",
+        timeZone: "Asia/Tokyo",
+        now,
+      }),
+    );
+    render(
+      <BackupSettings
+        flushOutbox={vi.fn().mockRejectedValue(new Error("offline"))}
+        now={() => now}
+        repository={repository}
+      />,
+    );
+
+    await selectFile(await createBackup(example()));
+    await userEvent.setup().click(
+      await screen.findByRole("button", {
+        name: "この内容で置き換える",
+      }),
+    );
+
+    expect(await screen.findByText("データを復元しました。")).not.toBeNull();
+    expect(screen.getByRole("alert").textContent).toBe(
+      "通知への反映は送信待ちです。",
+    );
+    expect(screen.queryByText("復元できませんでした。")).toBeNull();
   });
 
   it("keeps the destructive confirmation choices equally arranged", async () => {

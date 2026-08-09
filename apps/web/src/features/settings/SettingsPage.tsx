@@ -1,5 +1,6 @@
 import type { AppRepository } from "../../../../../packages/domain/src";
 import type { NotificationSetupResult } from "../../infrastructure/notifications/push-subscription";
+import { APP_VERSION } from "../../app-version";
 import { BackupSettings } from "./BackupSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import "./SettingsPage.css";
@@ -49,7 +50,7 @@ export function SettingsPage({
             </div>
             <div>
               <dt>バージョン</dt>
-              <dd>mvp-1.0.1</dd>
+              <dd>{APP_VERSION}</dd>
             </div>
             <div>
               <dt>保存</dt>

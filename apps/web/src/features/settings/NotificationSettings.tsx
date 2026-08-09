@@ -43,6 +43,9 @@ export function NotificationSettings({
   const [errorReason, setErrorReason] =
     useState<NotificationSetupErrorReason>();
   const [busy, setBusy] = useState(false);
+  const [activeOperation, setActiveOperation] = useState<
+    "setup" | "timing" | "frequency" | "sync"
+  >();
   const [initialDelay, setInitialDelay] = useState("60");
   const [deadlineLead, setDeadlineLead] = useState("60");
   const [defaultDeadlineTime, setDefaultDeadlineTime] = useState("2359");
@@ -57,9 +60,15 @@ export function NotificationSettings({
     memo: "weekly" as "none" | "weekly" | "monthly",
   });
   const [syncStatus, setSyncStatus] = useState<"success" | "error">();
+  const [syncArea, setSyncArea] = useState<"timing" | "frequency">();
+  const [timingFeedback, setTimingFeedback] = useState<
+    { type: "success" | "error"; message: string } | undefined
+  >();
   const [frequenciesSaved, setFrequenciesSaved] = useState(false);
+  const [frequencyError, setFrequencyError] = useState<string>();
   const defaultDeadlineTimePicker = useRef<HTMLInputElement>(null);
   const [hasRegisteredDevice, setHasRegisteredDevice] = useState(false);
+  const [setupCompleted, setSetupCompleted] = useState(false);
   const [registeredAt, setRegisteredAt] = useState<string>();
   const [timeZone, setTimeZone] = useState<string>();
   useEffect(() => {
@@ -137,6 +146,8 @@ export function NotificationSettings({
 
   async function configure(): Promise<void> {
     setBusy(true);
+    setActiveOperation("setup");
+    setSetupCompleted(false);
     try {
       const result = await (
         setup ??
@@ -150,6 +161,7 @@ export function NotificationSettings({
       setState(result.state === "error" ? "diagnostic_error" : result.state);
       setErrorReason(result.state === "error" ? result.reason : undefined);
       if (result.state === "granted") {
+        setSetupCompleted(true);
         const refreshed = await repository.load();
         setHasRegisteredDevice(
           Boolean(
@@ -165,10 +177,12 @@ export function NotificationSettings({
       setErrorReason(undefined);
     } finally {
       setBusy(false);
+      setActiveOperation(undefined);
     }
   }
 
   async function saveTiming(): Promise<void> {
+    setTimingFeedback(undefined);
     const initialReminderDelayMinutes = Number(initialDelay);
     const deadlineReminderLeadMinutes = Number(deadlineLead);
     const parsedDefaultDeadlineTime = timeFromDigits(defaultDeadlineTime);
@@ -177,10 +191,14 @@ export function NotificationSettings({
       !isReminderMinutes(deadlineReminderLeadMinutes) ||
       !parsedDefaultDeadlineTime
     ) {
-      setState("error");
+      setTimingFeedback({
+        type: "error",
+        message: "入力内容を確認してください。",
+      });
       return;
     }
     setBusy(true);
+    setActiveOperation("timing");
     try {
       const snapshot = await repository.load();
       const updated = {
@@ -198,16 +216,27 @@ export function NotificationSettings({
         now: savedAt,
       });
       await repository.save({ ...updated, ...delivery, savedAt });
-      await synchronizeNotifications();
+      setTimingFeedback({
+        type: "success",
+        message: "通知タイミングを保存しました。",
+      });
+      await synchronizeNotifications("timing");
     } catch {
-      setState("error");
+      setTimingFeedback({
+        type: "error",
+        message:
+          "通知タイミングを保存できませんでした。もう一度お試しください。",
+      });
     } finally {
       setBusy(false);
+      setActiveOperation(undefined);
     }
   }
 
   async function saveReviewFrequencies(): Promise<void> {
     setBusy(true);
+    setActiveOperation("frequency");
+    setFrequencyError(undefined);
     try {
       const snapshot = await repository.load();
       const updated = {
@@ -238,15 +267,21 @@ export function NotificationSettings({
         memo: memoReviewFrequency,
       });
       setFrequenciesSaved(true);
-      await synchronizeNotifications();
+      await synchronizeNotifications("frequency");
     } catch {
-      setState("error");
+      setFrequencyError(
+        "確認頻度を保存できませんでした。もう一度お試しください。",
+      );
     } finally {
       setBusy(false);
+      setActiveOperation(undefined);
     }
   }
 
-  async function synchronizeNotifications(): Promise<void> {
+  async function synchronizeNotifications(
+    area: "timing" | "frequency" = syncArea ?? "frequency",
+  ): Promise<void> {
+    setSyncArea(area);
     setSyncStatus(undefined);
     try {
       await flushNotifications?.();
@@ -258,8 +293,27 @@ export function NotificationSettings({
 
   async function retryNotificationSync(): Promise<void> {
     setBusy(true);
+    setActiveOperation("sync");
     await synchronizeNotifications();
     setBusy(false);
+    setActiveOperation(undefined);
+  }
+
+  function clearTimingResult(): void {
+    setTimingFeedback(undefined);
+    if (syncArea === "timing") {
+      setSyncArea(undefined);
+      setSyncStatus(undefined);
+    }
+  }
+
+  function clearFrequencyResult(): void {
+    setFrequenciesSaved(false);
+    setFrequencyError(undefined);
+    if (syncArea === "frequency") {
+      setSyncArea(undefined);
+      setSyncStatus(undefined);
+    }
   }
 
   const reviewFrequenciesDirty =
@@ -306,7 +360,10 @@ export function NotificationSettings({
             <input
               id="initial-reminder-delay"
               min="0"
-              onChange={(event) => setInitialDelay(event.target.value)}
+              onChange={(event) => {
+                clearTimingResult();
+                setInitialDelay(event.target.value);
+              }}
               onFocus={(event) => event.currentTarget.select()}
               step="1"
               type="number"
@@ -323,9 +380,10 @@ export function NotificationSettings({
               id="default-deadline-time"
               inputMode="numeric"
               maxLength={5}
-              onChange={(event) =>
-                setDefaultDeadlineTime(digits(event.target.value, 4))
-              }
+              onChange={(event) => {
+                clearTimingResult();
+                setDefaultDeadlineTime(digits(event.target.value, 4));
+              }}
               onFocus={(event) => event.currentTarget.select()}
               pattern="[0-9:]*"
               placeholder="例: 23:59"
@@ -342,9 +400,10 @@ export function NotificationSettings({
             <input
               aria-hidden="true"
               className="notification-settings__native-time-picker"
-              onChange={(event) =>
-                setDefaultDeadlineTime(event.target.value.replace(":", ""))
-              }
+              onChange={(event) => {
+                clearTimingResult();
+                setDefaultDeadlineTime(event.target.value.replace(":", ""));
+              }}
               ref={defaultDeadlineTimePicker}
               tabIndex={-1}
               type="time"
@@ -359,7 +418,10 @@ export function NotificationSettings({
             <input
               id="deadline-reminder-lead"
               min="0"
-              onChange={(event) => setDeadlineLead(event.target.value)}
+              onChange={(event) => {
+                clearTimingResult();
+                setDeadlineLead(event.target.value);
+              }}
               onFocus={(event) => event.currentTarget.select()}
               step="1"
               type="number"
@@ -369,8 +431,22 @@ export function NotificationSettings({
           </div>
         </div>
         <button disabled={busy} onClick={() => void saveTiming()} type="button">
-          通知タイミングを保存
+          {activeOperation === "timing" ? "保存中…" : "通知タイミングを保存"}
         </button>
+        {timingFeedback ? (
+          <p
+            aria-label="通知タイミングの保存結果"
+            role={timingFeedback.type === "success" ? "status" : "alert"}
+          >
+            {timingFeedback.message}
+          </p>
+        ) : null}
+        {syncArea === "timing" && syncStatus === "success" ? (
+          <p role="status">通知への反映も完了しました。</p>
+        ) : null}
+        {syncArea === "timing" && syncStatus === "error" ? (
+          <p role="alert">通知への反映は送信待ちです。</p>
+        ) : null}
       </section>
       <section
         className={`notification-settings__review-frequency${reviewFrequenciesDirty ? " is-dirty" : ""}`}
@@ -384,7 +460,7 @@ export function NotificationSettings({
           id="inbox-reminder-frequency"
           value={inboxReminderFrequency}
           onChange={(event) => {
-            setFrequenciesSaved(false);
+            clearFrequencyResult();
             setInboxReminderFrequency(
               event.target.value as "none" | "gentle" | "prompt",
             );
@@ -399,7 +475,7 @@ export function NotificationSettings({
           id="memo-review-frequency"
           value={memoReviewFrequency}
           onChange={(event) => {
-            setFrequenciesSaved(false);
+            clearFrequencyResult();
             setMemoReviewFrequency(
               event.target.value as "none" | "weekly" | "monthly",
             );
@@ -415,10 +491,11 @@ export function NotificationSettings({
           </p>
         ) : null}
         {frequenciesSaved ? <p role="status">保存しました。</p> : null}
-        {syncStatus === "success" ? (
+        {frequencyError ? <p role="alert">{frequencyError}</p> : null}
+        {syncArea === "frequency" && syncStatus === "success" ? (
           <p role="status">通知の同期が完了しました。</p>
         ) : null}
-        {syncStatus === "error" ? (
+        {syncArea === "frequency" && syncStatus === "error" ? (
           <>
             <p role="alert">通知の同期に失敗しました。再試行できます。</p>
             <button
@@ -435,7 +512,7 @@ export function NotificationSettings({
           onClick={() => void saveReviewFrequencies()}
           type="button"
         >
-          確認頻度を保存
+          {activeOperation === "frequency" ? "保存中…" : "確認頻度を保存"}
         </button>
       </section>
       <div className="notification-settings__device-setup">
@@ -445,14 +522,18 @@ export function NotificationSettings({
           onClick={() => void configure()}
           type="button"
         >
-          {hasRegisteredDevice ? "通知を再設定する" : "通知を設定する"}
+          {activeOperation === "setup"
+            ? "設定中…"
+            : hasRegisteredDevice
+              ? "通知を再設定する"
+              : "通知を設定する"}
         </button>
         {!isConfigured ? (
           <p className="notification-settings__setup-note">
             通知を受けるには、このボタンを最初に一度押して端末登録を完了する必要があります。
           </p>
         ) : null}
-        {state === "granted" ? <p role="status">通知を設定しました。</p> : null}
+        {setupCompleted ? <p role="status">通知を設定しました。</p> : null}
         {state === "granted" && hasRegisteredDevice ? (
           <>
             <p className="notification-settings__device-status">

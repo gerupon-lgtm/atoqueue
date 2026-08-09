@@ -29,6 +29,11 @@ export function BackupSettings({
   const [serialized, setSerialized] = useState<string>();
   const [inspection, setInspection] = useState<BackupInspection>();
   const [error, setError] = useState<string>();
+  const [feedback, setFeedback] = useState<string>();
+  const [syncPending, setSyncPending] = useState(false);
+  const [activeOperation, setActiveOperation] = useState<
+    "export" | "restore" | "delete"
+  >();
   const [download, setDownload] = useState<{
     href: string;
     filename: string;
@@ -53,6 +58,11 @@ export function BackupSettings({
   }, [repository]);
 
   async function exportJson(): Promise<void> {
+    setBusy(true);
+    setActiveOperation("export");
+    setDownload(undefined);
+    setError(undefined);
+    setFeedback(undefined);
     try {
       const snapshot = await repository.load();
       const contents = await createBackup(snapshot);
@@ -64,8 +74,12 @@ export function BackupSettings({
         filename: backupFilename(new Date(now())),
       });
       setError(undefined);
+      setFeedback("バックアップを準備しました。ダウンロードしてください。");
     } catch {
       setError("バックアップを作成できませんでした。");
+    } finally {
+      setBusy(false);
+      setActiveOperation(undefined);
     }
   }
 
@@ -73,6 +87,8 @@ export function BackupSettings({
     setInspection(undefined);
     setSerialized(undefined);
     setError(undefined);
+    setFeedback(undefined);
+    setSyncPending(false);
     if (!file) return;
     try {
       const contents = await readFile(file);
@@ -93,6 +109,10 @@ export function BackupSettings({
   async function replace(): Promise<void> {
     if (!serialized || !inspection) return;
     setBusy(true);
+    setActiveOperation("restore");
+    setError(undefined);
+    setFeedback(undefined);
+    setSyncPending(false);
     try {
       // Re-load just before confirmation so current device identity can never be stale.
       const latest = await repository.load();
@@ -105,19 +125,32 @@ export function BackupSettings({
       setCurrent(restored);
       setInspection(undefined);
       setSerialized(undefined);
-      if (navigator.onLine !== false) await flushOutbox?.();
+      setFeedback("データを復元しました。");
+      if (navigator.onLine !== false && flushOutbox) {
+        try {
+          await flushOutbox();
+        } catch {
+          setSyncPending(true);
+        }
+      }
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "復元できませんでした。",
       );
     } finally {
       setBusy(false);
+      setActiveOperation(undefined);
     }
   }
 
   async function removeDeviceData(): Promise<void> {
     if (!deleteDeviceData) return;
     setBusy(true);
+    setActiveOperation("delete");
+    setError(undefined);
+    setFeedback(undefined);
+    setSyncPending(false);
+    setDeleted(false);
     try {
       await deleteDeviceData();
       setDeleted(true);
@@ -129,6 +162,7 @@ export function BackupSettings({
       );
     } finally {
       setBusy(false);
+      setActiveOperation(undefined);
     }
   }
 
@@ -142,19 +176,24 @@ export function BackupSettings({
       <p>
         バックアップにはこの端末のタスク、記録、設定を含めます。通知の登録情報は含めません。
       </p>
-      <button onClick={() => void exportJson()} type="button">
-        JSONバックアップを書き出す
+      <button disabled={busy} onClick={() => void exportJson()} type="button">
+        {activeOperation === "export"
+          ? "準備中…"
+          : "JSONバックアップを書き出す"}
       </button>
       {download ? (
         <a download={download.filename} href={download.href}>
           バックアップをダウンロード
         </a>
       ) : null}
+      {feedback ? <p role="status">{feedback}</p> : null}
+      {syncPending ? <p role="alert">通知への反映は送信待ちです。</p> : null}
       <label>
         JSONバックアップを復元
         <input
           accept="application/json,.json"
           aria-label="JSONバックアップを復元"
+          disabled={busy}
           onChange={(event) => void selectBackup(event.target.files?.[0])}
           type="file"
         />
@@ -165,7 +204,7 @@ export function BackupSettings({
           <p>{countsLabel("現在のデータ", counts(current))}</p>
           <p>内容を確認してから置き換えてください。</p>
           <button disabled={busy} onClick={() => void replace()} type="button">
-            この内容で置き換える
+            {activeOperation === "restore" ? "復元中…" : "この内容で置き換える"}
           </button>
         </section>
       ) : null}
@@ -196,7 +235,7 @@ export function BackupSettings({
                 onClick={() => void removeDeviceData()}
                 type="button"
               >
-                削除を確定する
+                {activeOperation === "delete" ? "削除中…" : "削除を確定する"}
               </button>
               <button
                 className="backup-settings__delete-cancel"

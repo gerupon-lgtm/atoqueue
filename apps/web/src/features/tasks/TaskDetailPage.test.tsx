@@ -252,6 +252,62 @@ describe("TaskDetailPage", () => {
     );
   });
 
+  it("shows a nearby confirmation after saving task content", async () => {
+    const { repository } = repositoryWithTask();
+    render(
+      <TaskDetailPage
+        now={() => now}
+        repository={repository}
+        taskId="task-1"
+      />,
+    );
+
+    fireEvent.change(await screen.findByDisplayValue("牛乳を買う"), {
+      target: { value: "低脂肪乳を買う" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "内容を保存" }));
+
+    expect(await screen.findByText("内容を保存しました。")).not.toBeNull();
+  });
+
+  it("makes a no-deadline change visible in both the controls and feedback", async () => {
+    const { repository, snapshot } = repositoryWithTask();
+    render(
+      <TaskDetailPage
+        now={() => now}
+        repository={repository}
+        taskId="task-1"
+      />,
+    );
+
+    await screen.findByDisplayValue("牛乳を買う");
+    fireEvent.click(screen.getByRole("button", { name: "期限なしにする" }));
+
+    await waitFor(() => expect(snapshot().tasks[0]?.dueMode).toBe("none"));
+    expect(screen.getByLabelText("期限日（8桁）")).toHaveProperty("value", "");
+    expect(screen.getByLabelText("期限時刻を指定する")).toHaveProperty(
+      "checked",
+      false,
+    );
+    expect(screen.getByText("期限なしに変更しました。")).not.toBeNull();
+  });
+
+  it("confirms that an active task was postponed", async () => {
+    const { repository } = repositoryWithTask();
+    render(
+      <TaskDetailPage
+        now={() => now}
+        repository={repository}
+        taskId="task-1"
+      />,
+    );
+
+    await screen.findByDisplayValue("牛乳を買う");
+    fireEvent.click(screen.getByRole("button", { name: "後回し" }));
+
+    expect(await screen.findByText("後回しにしました。")).not.toBeNull();
+  });
+
   it("NF-012 handles a local save failure with a recoverable message", async () => {
     const { repository } = repositoryWithTask();
     repository.save = vi.fn().mockRejectedValue(new Error("quota"));

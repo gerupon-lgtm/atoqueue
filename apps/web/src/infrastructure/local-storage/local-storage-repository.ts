@@ -7,6 +7,7 @@ import {
   type AppRepository,
   type AppSnapshot,
 } from "../../../../../packages/domain/src/index";
+import { APP_VERSION } from "../../app-version";
 
 const DATA_KEY = "atoqueue:data:v1";
 const DRAFT_KEY = "atoqueue:draft:v1";
@@ -28,7 +29,7 @@ export class LocalStorageRepository implements AppRepository {
     private readonly storage: Storage,
     options: LocalStorageRepositoryOptions = {},
   ) {
-    this.appVersion = options.appVersion ?? "0.1.0";
+    this.appVersion = options.appVersion ?? APP_VERSION;
     this.localDeviceId = options.localDeviceId ?? createDeviceId();
     this.now = options.now ?? (() => new Date().toISOString());
     this.timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;

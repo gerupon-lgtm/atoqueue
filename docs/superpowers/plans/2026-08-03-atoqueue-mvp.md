@@ -1341,6 +1341,14 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 - 検証は予定生成の境界、期限変更、設定変更、期限なし・期限未設定をドメインテストで固定する。API・PostgreSQL・Push payloadの契約は変更しない。
 - 実装結果: 上記境界をドメインテストでREDから確認して実装し、Web・Domain・Contracts 349件、API通常70件、Chromium E2E 27件、型検査、Lint、直接ビルドを通過した。表示バージョンを `mvp-1.0.1` へ更新した。
 
+### 2026-08-09 implementation follow-up: operation feedback and version policy
+
+- 対象要件: F-004、F-015、F-017、F-018、NF-001、NF-006。
+- 【確定】保存・変更の処理中は対象ボタンの文言を切り替えて二重操作を防ぎ、成功・失敗を操作区画の直下へ表示する。
+- 【確定】端末内への保存と通知サーバーへの反映は別結果として表示する。通知同期だけが失敗した場合もローカル保存・復元は成功として扱う。
+- 【確定】表示バージョンは`mvp-1.1.0`。単一画面かつロジック変更なしはパッチ、複数画面またはロジック変更ありはマイナーとしてパッチを0へ戻し、メジャーは事前相談する。
+- 実装結果: 通知タイミング・確認頻度・通知端末設定、タスク内容・期限・状態、受信箱本文、バックアップ・復元・削除へ操作結果表示を追加した。既存設定の読込みだけで通知設定完了を誤表示しないようにし、「期限なし」は入力状態も解除する。全427テスト、Chromium E2E 27件、Lint、型検査、本番ビルドを通過した。
+
 ## Follow-up: mobile UI, deadline time, and first-use guidance（2026-08-08）
 
 **Requirements:** F-002, F-006, F-007, F-013, F-018, NF-008, NF-010, NF-012

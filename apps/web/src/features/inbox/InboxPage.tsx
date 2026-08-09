@@ -27,6 +27,9 @@ export function InboxPage({
   const [bodyDrafts, setBodyDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string>();
   const [isMutating, setIsMutating] = useState(false);
+  const [savingBodyId, setSavingBodyId] = useState<string>();
+  const [savedBodyId, setSavedBodyId] = useState<string>();
+  const [bodyErrorId, setBodyErrorId] = useState<string>();
   const mutationQueue = useRef<Promise<void>>(Promise.resolve());
   const pendingMutations = useRef(0);
 
@@ -63,6 +66,8 @@ export function InboxPage({
     source: "unclassified" | "note" = "unclassified",
   ): void {
     setError(undefined);
+    setSavedBodyId(undefined);
+    setBodyErrorId(undefined);
     enqueueMutation(async () => {
       const snapshot = await repository.load();
       const next =
@@ -78,20 +83,30 @@ export function InboxPage({
 
   function saveBody(captureId: string, body: string): void {
     setError(undefined);
+    setSavedBodyId(undefined);
+    setBodyErrorId(undefined);
+    setSavingBodyId(captureId);
     enqueueMutation(async () => {
-      const next = updateCaptureBody(
-        await repository.load(),
-        captureId,
-        body,
-        now(),
-      );
-      await repository.save(next);
-      setBodyDrafts((drafts) => {
-        const remaining = { ...drafts };
-        delete remaining[captureId];
-        return remaining;
-      });
-      await reload();
+      try {
+        const next = updateCaptureBody(
+          await repository.load(),
+          captureId,
+          body,
+          now(),
+        );
+        await repository.save(next);
+        setBodyDrafts((drafts) => {
+          const remaining = { ...drafts };
+          delete remaining[captureId];
+          return remaining;
+        });
+        await reload();
+        setSavedBodyId(captureId);
+      } catch {
+        setBodyErrorId(captureId);
+      } finally {
+        setSavingBodyId(undefined);
+      }
     });
   }
 
@@ -144,12 +159,14 @@ export function InboxPage({
                 <label htmlFor={`capture-body-${capture.id}`}>本文を編集</label>
                 <textarea
                   id={`capture-body-${capture.id}`}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setSavedBodyId(undefined);
+                    setBodyErrorId(undefined);
                     setBodyDrafts((drafts) => ({
                       ...drafts,
                       [capture.id]: event.target.value,
-                    }))
-                  }
+                    }));
+                  }}
                   readOnly={isMutating}
                   value={bodyDrafts[capture.id] ?? capture.body}
                 />
@@ -164,8 +181,26 @@ export function InboxPage({
                   type="button"
                   aria-label={`${capture.body}の本文を保存`}
                 >
-                  本文を保存
+                  {savingBodyId === capture.id ? "保存中…" : "本文を保存"}
                 </button>
+                {savedBodyId === capture.id ? (
+                  <p
+                    aria-label={`${capture.body}の保存結果`}
+                    className="inbox-item__feedback"
+                    role="status"
+                  >
+                    本文を保存しました。
+                  </p>
+                ) : null}
+                {bodyErrorId === capture.id ? (
+                  <p
+                    aria-label={`${bodyDrafts[capture.id] ?? capture.body}の保存結果`}
+                    className="inbox-item__feedback"
+                    role="alert"
+                  >
+                    本文を保存できませんでした。もう一度お試しください。
+                  </p>
+                ) : null}
                 {tab === "unclassified" && suggestion === "task" ? (
                   <p>タスク候補です</p>
                 ) : null}

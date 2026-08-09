@@ -67,7 +67,7 @@ MVPでは利用者アカウントを持たないため、端末シークレッ�
 ```json
 {
   "status": "ok",
-  "version": "0.1.0",
+  "version": "mvp-1.1.0",
   "time": "2026-08-03T09:00:00.000Z"
 }
 ```
@@ -226,15 +226,15 @@ Response `200` または `201`:
 
 ## 9. 環境変数
 
-| 変数                | 必須 | 内容                |
-| ------------------- | ---- | ------------------- |
-| `PORT`              | 任意 | 既定3030            |
-| `DATABASE_URL`      | 必須 | PostgreSQL接続URL   |
+| 変数                | 必須 | 内容                             |
+| ------------------- | ---- | -------------------------------- |
+| `PORT`              | 任意 | 既定3030                         |
+| `DATABASE_URL`      | 必須 | PostgreSQL接続URL                |
 | `ALLOWED_ORIGIN`    | 必須 | `https://atoqueue.sikumilab.com` |
-| `VAPID_PUBLIC_KEY`  | 必須 | 公開鍵              |
-| `VAPID_PRIVATE_KEY` | 必須 | 秘密鍵              |
-| `VAPID_SUBJECT`     | 必須 | `mailto:gerupon@gmail.com` |
-| `LOG_LEVEL`         | 任意 | 既定info            |
+| `VAPID_PUBLIC_KEY`  | 必須 | 公開鍵                           |
+| `VAPID_PRIVATE_KEY` | 必須 | 秘密鍵                           |
+| `VAPID_SUBJECT`     | 必須 | `mailto:gerupon@gmail.com`       |
+| `LOG_LEVEL`         | 任意 | 既定info                         |
 
 ## 10. 契約テスト
 
