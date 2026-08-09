@@ -480,12 +480,7 @@ function task(value: unknown, index: number): void {
     "scheduled",
     "none",
   ]);
-  optionalOneOf(entity.category, `tasks[${index}].category`, [
-    "work",
-    "home",
-    "shopping",
-    "other",
-  ]);
+  optionalTaskCategory(entity.category, `tasks[${index}].category`);
   optionalStrings(
     entity,
     ["dueAt", "lastPromptedAt", "completedAt", "archivedAt"],
@@ -761,6 +756,15 @@ function optionalOneOf(
   allowed: readonly string[] | ReadonlySet<string>,
 ): void {
   if (value !== undefined) oneOf(value, name, allowed);
+}
+
+function optionalTaskCategory(value: unknown, name: string): void {
+  if (value === undefined) return;
+  string(value, name);
+  const length = [...(value as string)].length;
+  if (length < 1 || length > 12 || (value as string).trim() !== value) {
+    throw corrupt(`${name} must be a trimmed string between 1 and 12 characters`);
+  }
 }
 
 function corrupt(message: string): CorruptDataError {

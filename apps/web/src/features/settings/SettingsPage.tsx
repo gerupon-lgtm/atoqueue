@@ -2,6 +2,7 @@ import type { AppRepository } from "../../../../../packages/domain/src";
 import type { NotificationSetupResult } from "../../infrastructure/notifications/push-subscription";
 import { APP_VERSION } from "../../app-version";
 import { BackupSettings } from "./BackupSettings";
+import { CategorySettings } from "./CategorySettings";
 import { NotificationSettings } from "./NotificationSettings";
 import "./SettingsPage.css";
 
@@ -29,6 +30,7 @@ export function SettingsPage({
       <details className="settings-page__disclosure">
         <summary>データ</summary>
         <div className="settings-page__disclosure-content">
+          <CategorySettings repository={repository} />
           <BackupSettings
             deleteDeviceData={deleteDeviceData}
             repository={repository}

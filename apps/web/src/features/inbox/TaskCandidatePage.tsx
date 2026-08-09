@@ -297,9 +297,11 @@ function defaultConfirmPastDate(date: string): boolean {
 }
 
 function categoryLabel(category: NonNullable<Task["category"]>): string {
-  return { work: "仕事", home: "家", shopping: "買い物", other: "その他" }[
-    category
-  ];
+  return (
+    { work: "仕事", home: "家", shopping: "買い物", other: "その他" }[
+      category
+    ] ?? category
+  );
 }
 
 function formatCaptureCreatedAt(value: string, timeZone: string): string {

@@ -19,8 +19,16 @@ describe("SettingsPage", () => {
     expect(dataDetails).not.toBeNull();
     expect(dataDetails.open).toBe(false);
     await userEvent.setup().click(dataSummary);
+    const categoryHeading = screen.getByRole("heading", { name: "カテゴリ" });
+    const backupButton = screen.getByRole("button", {
+      name: "JSONバックアップを書き出す",
+    });
     expect(
-      screen.getByRole("button", { name: "JSONバックアップを書き出す" }),
+      categoryHeading.compareDocumentPosition(backupButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      backupButton,
     ).not.toBeNull();
     expect(screen.getByLabelText("JSONバックアップを復元")).not.toBeNull();
     expect(screen.getByRole("heading", { name: "通知" })).not.toBeNull();

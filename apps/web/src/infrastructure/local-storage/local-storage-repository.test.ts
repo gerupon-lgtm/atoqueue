@@ -31,11 +31,11 @@ function repositoryContract(
   describe(_name, () => {
     afterEach(() => window.localStorage.clear());
 
-    it("returns an empty version 7 snapshot when storage is missing", async () => {
+    it("returns an empty version 8 snapshot when storage is missing", async () => {
       const snapshot = await createRepository().load();
 
       expect(snapshot).toMatchObject({
-        schemaVersion: 7,
+        schemaVersion: 8,
         captures: [],
         tasks: [],
         actionHistory: [],
@@ -45,10 +45,12 @@ function repositoryContract(
     it("preserves Unicode task text and action history after save and load", async () => {
       const repository = createRepository();
       const snapshot = sampleSnapshot();
+      snapshot.settings.customTaskCategories = ["冷蔵庫"];
       snapshot.tasks.push({
         id: "task-1",
         sourceCaptureId: "capture-1",
         title: "牛乳を買う 🥛",
+        category: "冷蔵庫",
         status: "active",
         dueMode: "unset",
         nextReviewAt: "2026-08-04T00:00:00.000Z",
@@ -97,7 +99,7 @@ function repositoryContract(
     });
 
     it("rejects a future schema version without overwriting it", async () => {
-      const stored = JSON.stringify({ schemaVersion: 8 });
+      const stored = JSON.stringify({ schemaVersion: 9 });
       window.localStorage.setItem(DATA_KEY, stored);
 
       await expect(createRepository().load()).rejects.toBeInstanceOf(
@@ -150,7 +152,7 @@ describe("LocalStorageRepository persistence failures", () => {
   });
 
   it("preserves an unknown existing schema version when save is attempted", async () => {
-    const existing = JSON.stringify({ schemaVersion: 8 });
+    const existing = JSON.stringify({ schemaVersion: 9 });
     window.localStorage.setItem(DATA_KEY, existing);
 
     await expect(
@@ -252,7 +254,7 @@ describe("LocalStorageRepository persistence failures", () => {
 
 function sampleSnapshot(): AppSnapshot {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     appVersion: "0.1.0",
     device: {
       localDeviceId: "device-1",
@@ -269,6 +271,7 @@ function sampleSnapshot(): AppSnapshot {
       inboxReminderFrequency: "none",
       memoReviewFrequency: "none",
       enterSavesCapture: true,
+      customTaskCategories: [],
     },
     captures: [],
     tasks: [],
