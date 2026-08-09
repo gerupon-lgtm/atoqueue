@@ -68,6 +68,38 @@ test.describe("PWA shell", () => {
 
     await page.setViewportSize({ width: 768, height: 800 });
     await expect(nav).toHaveCSS("flex-direction", "column");
+
+    await page.setViewportSize({ width: 1024, height: 800 });
+    const desktopLink = page.getByRole("link", { name: "受信箱" });
+    const desktopLinkBox = await desktopLink.boundingBox();
+    const desktopIconBox = await desktopLink.locator("svg").boundingBox();
+    expect(desktopLinkBox?.height).toBeGreaterThanOrEqual(52);
+    expect(desktopLinkBox?.width).toBeGreaterThanOrEqual(160);
+    expect(desktopIconBox?.width).toBeGreaterThanOrEqual(24);
+    await expect(desktopLink).toHaveCSS("font-size", "16px");
+  });
+
+  test("uses the same compact title-to-content spacing on every primary page", async ({
+    page,
+  }) => {
+    for (const [path, label] of navigation) {
+      await page.goto(path);
+      const heading = page.getByRole("heading", {
+        level: 1,
+        name:
+          label === "記録"
+            ? "あとで思い出したいことは？"
+            : label === "今日"
+              ? "今日の確認"
+              : label,
+      });
+      await expect(heading).toBeVisible();
+      const sectionGap = await heading.evaluate((element) => {
+        const section = element.closest("section");
+        return section ? getComputedStyle(section).rowGap : null;
+      });
+      expect(sectionGap).toBe("12px");
+    }
   });
 
   test("keeps the mobile navigation as a compact bottom row", async ({
