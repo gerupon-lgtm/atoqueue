@@ -14,6 +14,7 @@ const settings: Settings = {
   inboxReminderFrequency: "none",
   memoReviewFrequency: "none",
   enterSavesCapture: true,
+  customTaskCategories: [],
 };
 
 function scheduledTask(overrides: Partial<Task> = {}): Task {

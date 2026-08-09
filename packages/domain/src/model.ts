@@ -1,5 +1,5 @@
 export interface AppSnapshot {
-  schemaVersion: 7;
+  schemaVersion: 8;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -38,6 +38,7 @@ export interface Settings {
   inboxReminderFrequency: InboxReminderFrequency;
   memoReviewFrequency: MemoReviewFrequency;
   enterSavesCapture: boolean;
+  customTaskCategories: string[];
 }
 
 export type InboxReminderFrequency = "none" | "gentle" | "prompt";
@@ -60,7 +61,7 @@ export interface Task {
   id: string;
   sourceCaptureId: string;
   title: string;
-  category?: "work" | "home" | "shopping" | "other";
+  category?: string;
   status: "active" | "completed" | "archived";
   dueMode: "unset" | "scheduled" | "none";
   dueAt?: string;

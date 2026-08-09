@@ -1,4 +1,5 @@
 import { CorruptDataError, UnsupportedSchemaVersionError } from "./errors";
+import { validateCustomTaskCategories } from "./task-categories";
 import type { AppSnapshot } from "./model";
 
 type RecordValue = Record<string, unknown>;
@@ -25,56 +26,61 @@ export function migrateSnapshot(input: unknown): AppSnapshot {
   if (version === 1) {
     validateSnapshot(snapshot, false);
     return normalizeSnapshot(
-      upgradeV6ToV7(
+      upgradeV7ToV8(upgradeV6ToV7(
         upgradeV5ToV6(
           upgradeV4ToV5(upgradeV3ToV4(upgradeV2ToV3(upgradeV1ToV2(snapshot)))),
         ),
-      ),
+      )),
     );
   }
   if (version === 2) {
     validateSnapshot(snapshot, true);
     return normalizeSnapshot(
-      upgradeV6ToV7(
+      upgradeV7ToV8(upgradeV6ToV7(
         upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(upgradeV2ToV3(snapshot)))),
-      ),
+      )),
     );
   }
   if (version === 3) {
     validateSnapshot(snapshot, true);
     return normalizeSnapshot(
-      upgradeV6ToV7(upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(snapshot)))),
+      upgradeV7ToV8(upgradeV6ToV7(upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(snapshot))))),
     );
   }
   if (version === 4) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV6ToV7(upgradeV5ToV6(upgradeV4ToV5(snapshot))));
+    return normalizeSnapshot(upgradeV7ToV8(upgradeV6ToV7(upgradeV5ToV6(upgradeV4ToV5(snapshot)))));
   }
   if (version === 5) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV6ToV7(upgradeV5ToV6(snapshot)));
+    return normalizeSnapshot(upgradeV7ToV8(upgradeV6ToV7(upgradeV5ToV6(snapshot))));
   }
   if (version === 6) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV6ToV7(snapshot));
+    return normalizeSnapshot(upgradeV7ToV8(upgradeV6ToV7(snapshot)));
   }
   if (version === 7) {
     validateSnapshot(snapshot, true, true);
+    return normalizeSnapshot(upgradeV7ToV8(snapshot));
+  }
+  if (version === 8) {
+    validateSnapshot(snapshot, true, true, true);
     return normalizeSnapshot(snapshot);
   }
   if (typeof version === "number")
     throw new UnsupportedSchemaVersionError(version);
-  throw corrupt("schemaVersion must be 1, 2, 3, 4, 5, 6, or 7");
+  throw corrupt("schemaVersion must be 1, 2, 3, 4, 5, 6, 7, or 8");
 }
 
 function validateSnapshot(
   snapshot: RecordValue,
   requireReviewEventIds: boolean,
   requireV7Fields = false,
+  requireV8Fields = false,
 ): void {
   string(snapshot.appVersion, "appVersion");
   device(snapshot.device);
-  settings(snapshot.settings, requireV7Fields);
+  settings(snapshot.settings, requireV7Fields, requireV8Fields);
   entities(snapshot.captures, "captures", capture);
   entities(snapshot.tasks, "tasks", task);
   entities(snapshot.reviewSessions, "reviewSessions", (value, index) =>
@@ -137,6 +143,7 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
     "inboxReminderFrequency",
     "memoReviewFrequency",
     "enterSavesCapture",
+    "customTaskCategories",
   ]);
   if (settingsValue.quietHours !== undefined) {
     normalizedSettings.quietHours = copyKnown(
@@ -282,7 +289,11 @@ function device(value: unknown): void {
   optionalString(entity.registeredAt, "device.registeredAt");
 }
 
-function settings(value: unknown, requireV7Fields: boolean): void {
+function settings(
+  value: unknown,
+  requireV7Fields: boolean,
+  requireV8Fields: boolean,
+): void {
   const entity = object(value, "settings");
   oneOf(entity.locale, "settings.locale", ["ja-JP"]);
   string(entity.timeZone, "settings.timeZone");
@@ -315,6 +326,21 @@ function settings(value: unknown, requireV7Fields: boolean): void {
       "monthly",
     ]);
     boolean(entity.enterSavesCapture, "settings.enterSavesCapture");
+  }
+  if (requireV8Fields) {
+    stringArray(
+      entity.customTaskCategories,
+      "settings.customTaskCategories",
+    );
+    try {
+      validateCustomTaskCategories(entity.customTaskCategories as string[]);
+    } catch (reason) {
+      throw corrupt(
+        reason instanceof Error
+          ? reason.message
+          : "settings.customTaskCategories is invalid",
+      );
+    }
   }
   if (entity.quietHours !== undefined) {
     const quietHours = object(entity.quietHours, "settings.quietHours");
@@ -386,6 +412,19 @@ function upgradeV6ToV7(snapshot: RecordValue): RecordValue {
       inboxReminderFrequency: "none",
       memoReviewFrequency: "none",
       enterSavesCapture: true,
+    },
+  };
+}
+
+/** Version 8 adds device-local custom task category names. */
+function upgradeV7ToV8(snapshot: RecordValue): RecordValue {
+  const settingsValue = object(snapshot.settings, "settings");
+  return {
+    ...snapshot,
+    schemaVersion: 8,
+    settings: {
+      ...settingsValue,
+      customTaskCategories: [],
     },
   };
 }

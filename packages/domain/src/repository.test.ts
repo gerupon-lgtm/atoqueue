@@ -94,7 +94,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v6)).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       settings: {
         inboxReminderFrequency: "none",
         memoReviewFrequency: "none",
@@ -188,7 +188,7 @@ describe("domain repository model", () => {
     },
   );
 
-  it("creates a version 7 empty snapshot from the supplied device context", () => {
+  it("creates a version 8 empty snapshot from the supplied device context", () => {
     expect(
       createEmptySnapshot({
         appVersion: "0.1.0",
@@ -197,7 +197,7 @@ describe("domain repository model", () => {
         now: "2026-08-03T00:00:00.000Z",
       }),
     ).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       appVersion: "0.1.0",
       device: {
         localDeviceId: "device-1",
@@ -241,7 +241,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v4)).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       settings: { defaultDeadlineTime: "23:59" },
     });
   });
@@ -266,7 +266,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v2)).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       settings: {
         initialReminderDelayMinutes: 60,
         deadlineReminderLeadMinutes: 60,
@@ -295,13 +295,27 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v3)).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       settings: { onboardingCompletedAt: "2026-08-03T00:00:00.000Z" },
     });
   });
 
+  it("migrates version 7 settings with no custom task categories to version 8", () => {
+    const v7: unknown = createEmptySnapshot({
+      appVersion: "mvp-1.4.0",
+      localDeviceId: "device-1",
+      timeZone: "Asia/Tokyo",
+      now: "2026-08-10T00:00:00.000Z",
+    });
+
+    expect(migrateSnapshot(v7)).toMatchObject({
+      schemaVersion: 8,
+      settings: { customTaskCategories: [] },
+    });
+  });
+
   it("rejects a stored future schema version", () => {
-    expect(() => migrateSnapshot({ schemaVersion: 8 })).toThrow(
+    expect(() => migrateSnapshot({ schemaVersion: 9 })).toThrow(
       UnsupportedSchemaVersionError,
     );
   });
@@ -330,7 +344,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v1)).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       reviewSessions: [{ id: "session-1", actionEventIds: [] }],
     });
   });
@@ -429,7 +443,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v1)).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       reviewSessions: [
         {
           orderedTaskIds: ["task-1", "task-2"],

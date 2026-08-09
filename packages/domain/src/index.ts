@@ -1,4 +1,4 @@
-export const DOMAIN_SCHEMA_VERSION = 6 as const;
+export const DOMAIN_SCHEMA_VERSION = 8 as const;
 
 export * from "./errors";
 export * from "./backup";
@@ -17,4 +17,5 @@ export * from "./onboarding";
 export * from "./prompts";
 export * from "./review-session";
 export * from "./task-actions";
+export * from "./task-categories";
 export * from "./task-query";
