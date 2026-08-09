@@ -382,6 +382,26 @@ describe("NotificationSettings", () => {
     expect(details).not.toBeNull();
     expect((details as HTMLDetailsElement).open).toBe(false);
   });
+
+  it("explains that delivery time may move in either direction and exposes the mechanism as an expandable control", async () => {
+    const user = userEvent.setup();
+    render(<NotificationSettings repository={memory()} />);
+
+    expect(
+      await screen.findByText(/通知時刻が前後することがあり/),
+    ).not.toBeNull();
+
+    const summary = screen.getByText("通知の仕組みを見る");
+    const details = summary.closest("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+
+    await user.click(summary);
+
+    expect(details.open).toBe(true);
+    expect(
+      screen.getByText(/通知対象は最大5分ごとに確認します/),
+    ).not.toBeNull();
+  });
 });
 
 function memory(

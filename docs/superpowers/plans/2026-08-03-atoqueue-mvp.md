@@ -734,7 +734,7 @@ git add apps/web/src/features/review apps/web/e2e/today-review.spec.ts apps/web/
 git commit -m "feat: add one-at-a-time today review"
 ```
 
-**実装結果（2026-08-09更新）:** Task 7の状態機械を`AppRepository`経由で画面化し、空セッションの再計算、戻った項目の最新回答表示、結果からの修正導線、期限・経過表示、DST境界を実装した。見出しは他画面と同じ左揃え、2件目以降の「前のタスク」は見出し右、進行件数はカード内右上とした。Today Reviewを含むWeb E2E全26件、単体・結合テスト、型検査、ビルドが成功した。
+**実装結果（2026-08-09更新）:** Task 7の状態機械を`AppRepository`経由で画面化し、空セッションの再計算、戻った項目の最新回答表示、結果からの修正導線、期限・経過表示、DST境界を実装した。見出しは他画面と同じ左揃え、2件目以降の「前のタスク」は見出し右、進行件数はカード内右上とした。Today Reviewを含むWeb E2E全27件、単体・結合テスト、型検査、ビルドが成功した。
 
 ## Task 9: Build task list, detail, edits, and history（完了: 2026-08-04）
 
@@ -793,7 +793,7 @@ git add packages/domain/src/task-query.ts packages/domain/src/task-query.test.ts
 git commit -m "feat: add active task management and history"
 ```
 
-**実装結果（2026-08-09再検証）:** 一覧・詳細・履歴・編集を端末内状態と匿名Outboxの境界を保って実装した。元メモを含むUnicode検索、IANAタイムゾーン基準の当日判定、選択日による期限変更、保存失敗の復旧表示、44px以上の主要操作をテストした。タスク管理を含むWeb E2E全26件、単体・結合テスト、型検査、Webビルドが成功した。
+**実装結果（2026-08-09再検証）:** 一覧・詳細・履歴・編集を端末内状態と匿名Outboxの境界を保って実装した。元メモを含むUnicode検索、IANAタイムゾーン基準の当日判定、選択日による期限変更、保存失敗の復旧表示、44px以上の主要操作をテストした。タスク管理を含むWeb E2E全27件、単体・結合テスト、型検査、Webビルドが成功した。
 
 ## Task 10: Define strict notification contracts and device registration API
 

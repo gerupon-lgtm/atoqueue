@@ -49,7 +49,7 @@ export function SettingsPage({
             </div>
             <div>
               <dt>バージョン</dt>
-              <dd>0.1.0</dd>
+              <dd>mvp-1.0.0</dd>
             </div>
             <div>
               <dt>保存</dt>

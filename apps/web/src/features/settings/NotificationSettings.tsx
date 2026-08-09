@@ -290,7 +290,7 @@ export function NotificationSettings({
       >
         <h2 id="notification-timing-title">通知タイミング</h2>
         <p className="notification-settings__timing-note">
-          通知は忘れ防止の補助機能です。端末の状態や通信環境により遅れることがあり、指定時刻の通知は保証されません。
+          通知は忘れ防止の補助機能です。端末の状態や通信環境により通知時刻が前後することがあり、指定時刻の通知は保証されません。
         </p>
         <details className="notification-settings__mechanism">
           <summary>通知の仕組みを見る</summary>

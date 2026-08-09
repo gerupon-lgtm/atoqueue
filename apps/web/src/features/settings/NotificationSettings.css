@@ -175,20 +175,43 @@
 }
 
 .notification-settings__mechanism {
-  border-bottom: 1px solid #d4e2d8;
+  padding-block: 0.125rem;
 }
 
 .notification-settings__mechanism summary {
+  width: fit-content;
   min-height: 40px;
   display: flex;
   align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid #9db2a7;
+  border-radius: 0.625rem;
+  background: #f4f8f4;
+  box-shadow: 0 2px 0 #d4e2d8;
   color: #285c50;
   cursor: pointer;
   font-weight: 700;
 }
 
+.notification-settings__mechanism summary::after {
+  content: "⌄";
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.notification-settings__mechanism[open] summary {
+  background: #edf2ee;
+  box-shadow: none;
+}
+
+.notification-settings__mechanism[open] summary::after {
+  transform: rotate(180deg);
+}
+
 .notification-settings__mechanism div {
-  padding: 0 0 0.625rem;
+  padding: 0.625rem 0 0.25rem;
 }
 
 .notification-settings__mechanism p {

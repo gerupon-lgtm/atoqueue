@@ -42,18 +42,25 @@
   margin: 0;
 }
 
+.settings-page__app-information {
+  padding-top: 0.75rem;
+}
+
 .settings-page__app-information dl > div {
   display: grid;
-  grid-template-columns: 4.5rem minmax(0, 1fr);
-  gap: 0.5rem;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: 0.375rem;
+  font-size: 0.9375rem;
 }
 
 .settings-page__app-information dt {
   color: #476158;
+  white-space: nowrap;
 }
 
 .settings-page__app-information dd {
   margin: 0;
+  white-space: nowrap;
 }
 
 .settings-page__copyright {
