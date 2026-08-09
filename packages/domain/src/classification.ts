@@ -28,6 +28,14 @@ export function confirmTask(input: ConfirmTaskInput): AppSnapshot {
   return confirmCaptureAsTask(input, "unclassified");
 }
 
+export interface ClassifyCapturesInput {
+  snapshot: AppSnapshot;
+  captureIds: readonly string[];
+  now: string;
+}
+
+export type UnneededCaptureSource = "unclassified" | "note";
+
 /** Converts a memo only after the user confirms the normal task-candidate form. */
 export function promoteNoteToTask(input: ConfirmTaskInput): AppSnapshot {
   return confirmCaptureAsTask(input, "note");
@@ -132,43 +140,71 @@ export function markNoteAsUnneeded(input: ClassifyCaptureInput): AppSnapshot {
 }
 
 export function restoreUnneededCapture(input: ClassifyCaptureInput): AppSnapshot {
-  const capture = getClassifiableCapture(
-    input.snapshot,
-    input.captureId,
-    "unneeded",
+  return restoreUnneededCaptures({
+    snapshot: input.snapshot,
+    captureIds: [input.captureId],
+    now: input.now,
+  });
+}
+
+export function restoreUnneededCaptures(
+  input: ClassifyCapturesInput,
+): AppSnapshot {
+  const captures = selectedUnneededCaptures(input);
+  const selectedIds = new Set(input.captureIds);
+  const restoredById = new Map(
+    captures.map((capture) => [
+      capture.id,
+      {
+        id: capture.id,
+        body: capture.body,
+        classification: "unclassified" as const,
+        createdAt: capture.createdAt,
+        updatedAt: input.now,
+      },
+    ]),
   );
-  const updatedCapture: Capture = {
-    id: capture.id,
-    body: capture.body,
-    classification: "unclassified",
-    createdAt: capture.createdAt,
-    updatedAt: input.now,
-  };
+  const updatedCaptures = input.snapshot.captures.map((capture) =>
+    selectedIds.has(capture.id) ? restoredById.get(capture.id)! : capture,
+  );
   const global = rebuildGlobalNotificationSchedules({
     snapshot: {
       ...input.snapshot,
-      captures: replaceCapture(input.snapshot, updatedCapture),
+      captures: updatedCaptures,
     },
     now: input.now,
   });
 
   return {
     ...input.snapshot,
-    captures: replaceCapture(input.snapshot, updatedCapture),
+    captures: updatedCaptures,
     notificationOutbox: global.notificationOutbox,
     reminderMap: global.reminderMap,
     actionHistory: [
       ...input.snapshot.actionHistory,
-      captureClassificationEvent(updatedCapture, input.now),
+      ...captures.map((capture) =>
+        captureClassificationEvent(restoredById.get(capture.id)!, input.now),
+      ),
     ],
     savedAt: input.now,
   };
 }
 
 export function deleteUnneededCapture(input: ClassifyCaptureInput): AppSnapshot {
-  getClassifiableCapture(input.snapshot, input.captureId, "unneeded");
+  return deleteUnneededCaptures({
+    snapshot: input.snapshot,
+    captureIds: [input.captureId],
+    now: input.now,
+  });
+}
+
+export function deleteUnneededCaptures(
+  input: ClassifyCapturesInput,
+): AppSnapshot {
+  selectedUnneededCaptures(input);
+  const selectedIds = new Set(input.captureIds);
   const captures = input.snapshot.captures.filter(
-    (capture) => capture.id !== input.captureId,
+    (capture) => !selectedIds.has(capture.id),
   );
   const global = rebuildGlobalNotificationSchedules({
     snapshot: { ...input.snapshot, captures },
@@ -182,10 +218,36 @@ export function deleteUnneededCapture(input: ClassifyCaptureInput): AppSnapshot 
     reminderMap: global.reminderMap,
     actionHistory: input.snapshot.actionHistory.filter(
       (event) =>
-        !(event.entityType === "capture" && event.entityId === input.captureId),
+        !(event.entityType === "capture" && selectedIds.has(event.entityId)),
     ),
     savedAt: input.now,
   };
+}
+
+export function getUnneededCaptureSource(
+  snapshot: AppSnapshot,
+  captureId: string,
+): UnneededCaptureSource {
+  getClassifiableCapture(snapshot, captureId, "unneeded");
+  let foundCurrentUnneeded = false;
+
+  for (const event of [...snapshot.actionHistory].reverse()) {
+    if (
+      event.entityType !== "capture" ||
+      event.entityId !== captureId ||
+      event.action !== "capture_classified"
+    ) {
+      continue;
+    }
+    const classification = eventClassification(event.after);
+    if (!foundCurrentUnneeded) {
+      if (classification === "unneeded") foundCurrentUnneeded = true;
+      continue;
+    }
+    return classification === "note" ? "note" : "unclassified";
+  }
+
+  return "unclassified";
 }
 
 function classifyWithoutTask(
@@ -232,6 +294,37 @@ function getClassifiableCapture(
   if (capture.classification !== classification) throw new AlreadyClassifiedError(captureId);
   return capture;
 }
+
+function selectedUnneededCaptures(
+  input: ClassifyCapturesInput,
+): Capture[] {
+  if (input.captureIds.length === 0) {
+    throw new Error("At least one capture is required.");
+  }
+  if (new Set(input.captureIds).size !== input.captureIds.length) {
+    throw new Error("Capture IDs must be unique.");
+  }
+  return input.captureIds.map((captureId) =>
+    getClassifiableCapture(input.snapshot, captureId, "unneeded"),
+  );
+}
+
+function eventClassification(
+  after: ActionEventAfter,
+): Capture["classification"] | undefined {
+  if (!after || typeof after !== "object" || !("classification" in after)) {
+    return undefined;
+  }
+  const classification = after.classification;
+  return classification === "unclassified" ||
+    classification === "task" ||
+    classification === "note" ||
+    classification === "unneeded"
+    ? classification
+    : undefined;
+}
+
+type ActionEventAfter = AppSnapshot["actionHistory"][number]["after"];
 
 function replaceCapture(snapshot: AppSnapshot, updated: Capture): Capture[] {
   return snapshot.captures.map((capture) => (capture.id === updated.id ? updated : capture));

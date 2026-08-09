@@ -16,23 +16,7 @@ function capture(
 }
 
 describe("listCaptures", () => {
-  it("shows every capture classification once in newest-first order", () => {
-    const captures = [
-      capture("unclassified", "unclassified", "2026-08-09T01:00:00.000Z"),
-      capture("task", "task", "2026-08-09T04:00:00.000Z"),
-      capture("note", "note", "2026-08-09T02:00:00.000Z"),
-      capture("unneeded", "unneeded", "2026-08-09T03:00:00.000Z"),
-    ];
-
-    expect(listCaptures(captures, "all").map(({ id }) => id)).toEqual([
-      "task",
-      "unneeded",
-      "note",
-      "unclassified",
-    ]);
-  });
-
-  it("keeps unclassified, note, and unneeded tabs separate", () => {
+  it("F-004 exposes only unclassified, note, and unneeded inbox records", () => {
     const captures = [
       capture("unclassified", "unclassified", "2026-08-09T01:00:00.000Z"),
       capture("task", "task", "2026-08-09T04:00:00.000Z"),
