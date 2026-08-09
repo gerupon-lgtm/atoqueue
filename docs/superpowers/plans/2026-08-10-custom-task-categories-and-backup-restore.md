@@ -248,7 +248,71 @@ git commit -m "feat: use custom categories across task screens"
 
 ---
 
-### Task 4: Backup Replacement Copy and Full Reminder Rebuild
+### Task 4: Today Review Refresh and Next-Task Navigation
+
+**Files:**
+- Modify: `packages/domain/src/review-session.ts`
+- Modify: `packages/domain/src/review-session.test.ts`
+- Modify: `packages/domain/src/task-actions.ts`
+- Modify: `packages/domain/src/task-actions.test.ts`
+- Modify: `apps/web/src/features/review/TodayReviewPage.tsx`
+- Modify: `apps/web/src/features/review/TodayReviewPage.test.tsx`
+- Modify: `apps/web/src/features/review/TodayReviewPage.css`
+
+**Interfaces:**
+- Produces: `refreshReviewSession(session, tasks, now, calendar): ReviewSession` that appends newly eligible task IDs without reordering existing entries.
+- Produces: `goToNextTask(session, tasks, now): ReviewSession` and circular unanswered selection after an answer.
+
+- [ ] **Step 1: Write failing regression tests**
+
+```ts
+it("adds a newly created today task to an unfinished one-task session", () => {
+  const refreshed = refreshReviewSession(sessionWith(["first"]), [first, createdToday], now, calendar);
+  expect(refreshed.orderedTaskIds).toEqual(["first", "created-today"]);
+});
+
+it("cycles to skipped unanswered work before completing the session", () => {
+  const skipped = goToNextTask(sessionWith(["first", "second"]), [first, second], now);
+  const answered = answerReview({ snapshot: withSession(skipped), sessionId: skipped.id, answer: "complete", now, calendar });
+  expect(answered.reviewSessions[0]).toMatchObject({ currentIndex: 0, completedAt: undefined });
+});
+```
+
+```tsx
+it("refreshes a stale one-task session and shows the next-task action", async () => {
+  render(<TodayReviewPage repository={repositoryWithStaleSession()} now={() => now} calendar={calendar} />);
+  expect(await screen.findByText("1 / 2")).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "次のタスク" }));
+  expect(await screen.findByText("新しく今日にしたタスク")).toBeTruthy();
+});
+```
+
+- [ ] **Step 2: Run tests to verify RED**
+
+Run: `pnpm --filter @atoqueue/domain test -- review-session.test.ts task-actions.test.ts && pnpm --filter @atoqueue/web test -- TodayReviewPage.test.tsx`
+
+Expected: FAIL because session refresh, next navigation, and button do not exist.
+
+- [ ] **Step 3: Implement refresh and safe circular navigation**
+
+Refresh an unfinished session at load by appending IDs returned by a fresh `startReviewSession()` that are absent from `orderedTaskIds`. `次のタスク` changes only `currentIndex`; answering chooses the next active unanswered ID after the current index and wraps to the beginning before completing. Keep `前のタスク` and the existing action buttons unchanged.
+
+- [ ] **Step 4: Run regression tests to verify GREEN**
+
+Run: `pnpm --filter @atoqueue/domain test -- review-session.test.ts task-actions.test.ts && pnpm --filter @atoqueue/web test -- TodayReviewPage.test.tsx`
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit Task 4**
+
+```bash
+git add packages/domain/src/review-session.ts packages/domain/src/review-session.test.ts packages/domain/src/task-actions.ts packages/domain/src/task-actions.test.ts apps/web/src/features/review
+git commit -m "fix: refresh and navigate today's review tasks"
+```
+
+---
+
+### Task 5: Backup Replacement Copy and Full Reminder Rebuild
 
 **Files:**
 - Modify: `packages/domain/src/backup.ts`
@@ -304,7 +368,7 @@ git commit -m "fix: clarify restore replacement and rebuild reminders"
 
 ---
 
-### Task 5: Version, Documentation, and Browser Acceptance
+### Task 6: Version, Documentation, and Browser Acceptance
 
 **Files:**
 - Modify: `apps/web/src/app-version.ts`
@@ -320,7 +384,7 @@ git commit -m "fix: clarify restore replacement and rebuild reminders"
 - Modify: this plan with verification results
 
 **Interfaces:**
-- Consumes: completed Tasks 1–4.
+- Consumes: completed Tasks 1–5.
 - Produces: release-ready `mvp-1.5.0` documentation and acceptance coverage.
 
 - [ ] **Step 1: Add failing E2E and version assertions**
@@ -367,7 +431,7 @@ git commit -m "chore: release custom categories as mvp 1.5.0"
 
 ---
 
-### Task 6: Push and Deploy mvp-1.5.0
+### Task 7: Push and Deploy mvp-1.5.0
 
 **Files:**
 - Verify: `.github/workflows/deploy.yml`
