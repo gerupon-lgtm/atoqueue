@@ -57,7 +57,7 @@ describe("QuickCapturePage", () => {
     const repository = createRepository();
     render(<QuickCapturePage repository={repository} />);
 
-    const input = await screen.findByRole("textbox", {
+    await screen.findByRole("textbox", {
       name: "思いついたこと",
     });
     expect(screen.getAllByRole("textbox")).toHaveLength(1);

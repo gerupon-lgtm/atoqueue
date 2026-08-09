@@ -156,7 +156,7 @@ function replaceScope(input: GlobalRebuildInput, scope: "inbox" | "memo", schedu
   const priorOutboxIds = new Set(prior.map((entry) => entry.reminderId));
   const retainedOutbox = input.snapshot.notificationOutbox.filter((item) => !priorOutboxIds.has(item.reminderId));
   const cancellations = prior.map((entry) => ({ id: createId(input, "outbox", "capture_initial"), operation: "cancel" as const, reminderId: entry.reminderId, taskRevision: 0, attemptCount: 0, nextAttemptAt: input.now, createdAt: input.now }));
-  const mappings = schedules.map((schedule) => ({ reminderId: createId(input, "reminder", "capture_initial"), scope, kind: "capture_initial" as const, taskRevision: 0, createdAt: input.now }));
+  const mappings = schedules.map(() => ({ reminderId: createId(input, "reminder", "capture_initial"), scope, kind: "capture_initial" as const, taskRevision: 0, createdAt: input.now }));
   const upserts = schedules.map((schedule, index) => ({ id: createId(input, "outbox", "capture_initial"), operation: "upsert" as const, reminderId: mappings[index]!.reminderId, scheduledAt: laterOf(schedule.scheduledAt, input.now), notificationType: "inbox_review" as const, ...(schedule.repeatCadence ? { repeatCadence: schedule.repeatCadence } : {}), taskRevision: 0, attemptCount: 0, nextAttemptAt: input.now, createdAt: input.now }));
   return { notificationOutbox: [...retainedOutbox, ...cancellations, ...upserts], reminderMap: [...retained, ...mappings] };
 }

@@ -151,8 +151,9 @@ describe("domain repository model", () => {
       "a scope and non-string capture owner",
     ],
   ] as const)(
-    "rejects a reminder-map entry with %s",
-    (owner, _reason) => {
+    "rejects a reminder-map entry with %j (%s)",
+    (...args) => {
+      const [owner] = args;
       const v7: unknown = {
         ...createEmptySnapshot({
           appVersion: "0.1.0",

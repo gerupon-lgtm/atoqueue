@@ -165,10 +165,6 @@ function classifyWithoutTask(
   };
 }
 
-function getUnclassifiedCapture(snapshot: AppSnapshot, captureId: string): Capture {
-  return getClassifiableCapture(snapshot, captureId, "unclassified");
-}
-
 function getClassifiableCapture(
   snapshot: AppSnapshot,
   captureId: string,
