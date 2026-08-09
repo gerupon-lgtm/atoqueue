@@ -89,6 +89,7 @@ export function TaskListPage({
             value={tab}
             onChange={(event) => setTab(event.target.value as TaskTab)}
           >
+            <option value="all">すべて</option>
             <option value="active">対応中</option>
             <option value="completed">完了</option>
             <option value="archived">アーカイブ</option>

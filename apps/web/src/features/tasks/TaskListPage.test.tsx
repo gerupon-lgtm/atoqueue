@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import {
@@ -48,6 +54,8 @@ function repository(): AppRepository {
       task("未設定", { dueMode: "unset" }),
       task("なし"),
       task("明日", { dueMode: "scheduled", dueAt: "2026-08-04T23:59:00.000Z" }),
+      task("完了済み", { status: "completed", completedAt: now }),
+      task("保管済み", { status: "archived", archivedAt: now }),
     ],
   };
   return {
@@ -124,6 +132,24 @@ describe("TaskListPage", () => {
     expect(screen.getByDisplayValue("期限超過")).toBeTruthy();
     expect(screen.getByText("期限切れ")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "今日" })).toBeNull();
+  });
+
+  it("F-014 lets the user select every state and open active, completed, or archived tasks", async () => {
+    render(
+      <MemoryRouter>
+        <TaskListPage now={() => now} repository={repository()} />
+      </MemoryRouter>,
+    );
+
+    const state = await screen.findByLabelText("状態");
+    expect(
+      within(state.closest("label")!).getByRole("option", { name: "すべて" }),
+    ).toBeTruthy();
+    fireEvent.change(state, { target: { value: "all" } });
+
+    expect(screen.getByRole("link", { name: "期限切れ" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "完了済み" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "保管済み" })).toBeTruthy();
   });
 
   it("keeps the overdue action and second filter row aligned for a compact mobile layout", async () => {

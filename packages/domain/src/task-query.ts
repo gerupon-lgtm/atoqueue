@@ -1,6 +1,6 @@
 import type { Capture, Task } from "./model";
 
-export type TaskTab = Task["status"];
+export type TaskTab = "all" | Task["status"];
 export type DueFilter = "overdue" | "today" | "unset" | "none";
 
 export interface TaskQuery {
@@ -21,7 +21,7 @@ export interface TaskQuery {
 export function listTasks(tasks: readonly Task[], query: TaskQuery, captures: readonly Capture[] = []): Task[] {
   const search = query.search?.trim().toLocaleLowerCase("ja-JP");
   return tasks
-    .filter((task) => task.status === query.tab)
+    .filter((task) => query.tab === "all" || task.status === query.tab)
     .filter((task) => !query.category || task.category === query.category)
     .filter((task) => !search || matchesSearch(task, captures, search))
     .filter((task) => !query.due || matchesDueFilter(task, query))
