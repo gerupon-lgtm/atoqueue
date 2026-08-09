@@ -27,9 +27,7 @@ describe("SettingsPage", () => {
       categoryHeading.compareDocumentPosition(backupButton) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(
-      backupButton,
-    ).not.toBeNull();
+    expect(backupButton).not.toBeNull();
     expect(screen.getByLabelText("JSONバックアップを復元")).not.toBeNull();
     expect(screen.getByRole("heading", { name: "通知" })).not.toBeNull();
 
@@ -40,7 +38,7 @@ describe("SettingsPage", () => {
     await userEvent.setup().click(appSummary);
     expect(screen.getByText("あとキュー")).not.toBeNull();
     expect(screen.getByText(/バージョン/)).not.toBeNull();
-    expect(screen.getByText("mvp-1.4.0")).not.toBeNull();
+    expect(screen.getByText("mvp-1.5.0")).not.toBeNull();
     expect(screen.getByText("© 2026 SIKUMI LAB").closest("details")).toBeNull();
   });
 

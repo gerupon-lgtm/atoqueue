@@ -8,7 +8,7 @@ async function seedInbox(page: Page): Promise<void> {
       window.localStorage.setItem("atoqueue:data:v1", JSON.stringify(snapshot)),
     {
       schemaVersion: 2,
-      appVersion: "mvp-1.4.0",
+      appVersion: "mvp-1.5.0",
       device: {
         localDeviceId: "00000000-0000-4000-8000-000000000001",
         pushSubscriptionStatus: "not_requested",
@@ -161,15 +161,11 @@ test("keeps a batch deletion after cancellation and deletes it after confirmatio
   await page.getByRole("button", { name: "すべて選択" }).click();
 
   page.once("dialog", (dialog) => dialog.dismiss());
-  await page
-    .getByRole("button", { name: "選択した記録を完全削除" })
-    .click();
+  await page.getByRole("button", { name: "選択した記録を完全削除" }).click();
   await expect(page.getByText("2件選択中")).toBeVisible();
 
   page.once("dialog", (dialog) => dialog.accept());
-  await page
-    .getByRole("button", { name: "選択した記録を完全削除" })
-    .click();
+  await page.getByRole("button", { name: "選択した記録を完全削除" }).click();
   await expect(page.getByRole("status")).toContainText(
     "2件を完全に削除しました。",
   );
