@@ -126,7 +126,6 @@ function InboxRoute() {
   return (
     <InboxPage
       onTaskCandidate={(captureId) => navigate(`/inbox/${captureId}`)}
-      onTaskOpen={(taskId) => navigate(`/tasks/${taskId}`)}
       repository={applicationRepository}
       sync={() => notificationSync.flush()}
     />

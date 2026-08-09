@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import {
   deleteUnneededCapture,
+  deleteUnneededCaptures,
+  getUnneededCaptureSource,
   listCaptures,
   markAsNote,
   markAsUnneeded,
   markNoteAsUnneeded,
   restoreUnneededCapture,
+  restoreUnneededCaptures,
   suggestClassification,
   updateCaptureBody,
   type AppRepository,
+  type AppSnapshot,
   type Capture,
   type CaptureHistoryTab,
 } from "../../../../../packages/domain/src";
@@ -18,7 +22,6 @@ export interface InboxPageProps {
   repository: AppRepository;
   now?: () => string;
   onTaskCandidate?: (captureId: string) => void;
-  onTaskOpen?: (taskId: string) => void;
   sync?: () => Promise<unknown>;
 }
 
@@ -26,12 +29,12 @@ export function InboxPage({
   repository,
   now = () => new Date().toISOString(),
   onTaskCandidate,
-  onTaskOpen,
   sync,
 }: InboxPageProps) {
-  const [captures, setCaptures] = useState<Capture[]>([]);
+  const [snapshot, setSnapshot] = useState<AppSnapshot>();
   const [tab, setTab] = useState<CaptureHistoryTab>("unclassified");
-  const [timeZone, setTimeZone] = useState("Asia/Tokyo");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bodyDrafts, setBodyDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
@@ -43,9 +46,7 @@ export function InboxPage({
   const pendingMutations = useRef(0);
 
   async function reload(): Promise<void> {
-    const snapshot = await repository.load();
-    setTimeZone(snapshot.settings.timeZone);
-    setCaptures(snapshot.captures);
+    setSnapshot(await repository.load());
   }
 
   useEffect(() => {
@@ -134,6 +135,86 @@ export function InboxPage({
     });
   }
 
+  function changeTab(nextTab: CaptureHistoryTab): void {
+    setTab(nextTab);
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelected(captureId: string): void {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(captureId)) next.delete(captureId);
+      else next.add(captureId);
+      return next;
+    });
+  }
+
+  function selectAll(captureIds: readonly string[]): void {
+    setSelectedIds(new Set(captureIds));
+  }
+
+  function cancelSelection(): void {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }
+
+  function restoreSelected(): void {
+    const captureIds = [...selectedIds];
+    if (
+      captureIds.length === 0 ||
+      !window.confirm(
+        `選択した${captureIds.length}件を未整理に戻しますか？`,
+      )
+    ) {
+      return;
+    }
+    setError(undefined);
+    setFeedback(undefined);
+    enqueueMutation(async () => {
+      const next = restoreUnneededCaptures({
+        snapshot: await repository.load(),
+        captureIds,
+        now: now(),
+      });
+      await repository.save(next);
+      await reload();
+      cancelSelection();
+      await synchronize(
+        `${captureIds.length}件を未整理に戻しました。`,
+        `${captureIds.length}件を未整理に戻しました。通知の更新は送信待ちです。`,
+      );
+    });
+  }
+
+  function removeSelected(): void {
+    const captureIds = [...selectedIds];
+    if (
+      captureIds.length === 0 ||
+      !window.confirm(
+        `選択した${captureIds.length}件を完全に削除しますか？この操作は元に戻せません。`,
+      )
+    ) {
+      return;
+    }
+    setError(undefined);
+    setFeedback(undefined);
+    enqueueMutation(async () => {
+      const next = deleteUnneededCaptures({
+        snapshot: await repository.load(),
+        captureIds,
+        now: now(),
+      });
+      await repository.save(next);
+      await reload();
+      cancelSelection();
+      await synchronize(
+        `${captureIds.length}件を完全に削除しました。`,
+        `${captureIds.length}件を完全に削除しました。通知の取消は送信待ちです。`,
+      );
+    });
+  }
+
   async function synchronize(success: string, pending: string): Promise<void> {
     if (!sync) {
       setFeedback(success);
@@ -176,7 +257,19 @@ export function InboxPage({
     });
   }
 
+  const captures = snapshot?.captures ?? [];
+  const timeZone = snapshot?.settings.timeZone ?? "Asia/Tokyo";
   const visibleCaptures = listCaptures(captures, tab);
+  const tabCounts = {
+    unclassified: captures.filter(
+      ({ classification }) => classification === "unclassified",
+    ).length,
+    note: captures.filter(({ classification }) => classification === "note")
+      .length,
+    unneeded: captures.filter(
+      ({ classification }) => classification === "unneeded",
+    ).length,
+  };
 
   return (
     <section aria-labelledby="inbox-title">
@@ -184,7 +277,6 @@ export function InboxPage({
       <div className="inbox-tabs" role="tablist" aria-label="受信箱の表示">
         {(
           [
-            ["all", "すべて"],
             ["unclassified", "未整理"],
             ["note", "メモ"],
             ["unneeded", "不要"],
@@ -194,14 +286,80 @@ export function InboxPage({
             aria-selected={tab === value}
             className="inbox-tabs__tab"
             key={value}
-            onClick={() => setTab(value)}
+            onClick={() => changeTab(value)}
             role="tab"
             type="button"
           >
-            {label}
+            <span>{label}</span>
+            <span className="inbox-tabs__count">{tabCounts[value]}件</span>
           </button>
         ))}
       </div>
+      {tab === "unneeded" && visibleCaptures.length > 0 ? (
+        selectionMode ? (
+          <section
+            aria-label="不要記録の一括操作"
+            className="inbox-selection"
+          >
+            <div className="inbox-selection__summary">
+              <button
+                disabled={isMutating}
+                onClick={() =>
+                  selectAll(visibleCaptures.map(({ id }) => id))
+                }
+                type="button"
+              >
+                すべて選択
+              </button>
+              <button
+                disabled={isMutating || selectedIds.size === 0}
+                onClick={() => setSelectedIds(new Set())}
+                type="button"
+              >
+                選択解除
+              </button>
+              <span aria-live="polite">{selectedIds.size}件選択中</span>
+            </div>
+            <div className="inbox-selection__actions">
+              <button
+                aria-label="選択した記録を未整理に戻す"
+                disabled={isMutating || selectedIds.size === 0}
+                onClick={restoreSelected}
+                type="button"
+              >
+                未整理に戻す
+              </button>
+              <button
+                aria-label="選択した記録を完全削除"
+                className="inbox-item__delete"
+                disabled={isMutating || selectedIds.size === 0}
+                onClick={removeSelected}
+                type="button"
+              >
+                完全削除
+              </button>
+            </div>
+            <button
+              className="inbox-selection__cancel"
+              disabled={isMutating}
+              onClick={cancelSelection}
+              type="button"
+            >
+              キャンセル
+            </button>
+          </section>
+        ) : (
+          <div className="inbox-selection__start">
+            <button
+              disabled={isMutating}
+              onClick={() => setSelectionMode(true)}
+              type="button"
+            >
+              選択
+            </button>
+          </div>
+        )
+      ) : null}
       {visibleCaptures.length === 0 ? <p>{emptyMessage(tab)}</p> : null}
       {visibleCaptures.length > 0 ? (
         <ul>
@@ -216,38 +374,48 @@ export function InboxPage({
                 <span className="inbox-item__classification">
                   状態: {classificationLabel(capture.classification)}
                 </span>
-                {capture.classification === "task" ? (
-                  <button
-                    disabled={!capture.linkedTaskId}
-                    onClick={() => {
-                      if (capture.linkedTaskId)
-                        onTaskOpen?.(capture.linkedTaskId);
-                    }}
-                    type="button"
-                  >
-                    タスクを開く
-                  </button>
-                ) : capture.classification === "unneeded" ? (
-                  <div
-                    aria-label={`${capture.body} の不要記録操作`}
-                    className="inbox-item__actions inbox-item__unneeded-actions"
-                  >
-                    <button
-                      disabled={isMutating}
-                      onClick={() => restore(capture.id)}
-                      type="button"
-                    >
-                      未整理に戻す
-                    </button>
-                    <button
-                      className="inbox-item__delete"
-                      disabled={isMutating}
-                      onClick={() => remove(capture.id)}
-                      type="button"
-                    >
-                      完全削除
-                    </button>
-                  </div>
+                {capture.classification === "unneeded" ? (
+                  <>
+                    <span className="inbox-item__origin">
+                      {snapshot &&
+                      getUnneededCaptureSource(snapshot, capture.id) === "note"
+                        ? "メモから"
+                        : "未整理から"}
+                    </span>
+                    {selectionMode ? (
+                      <label className="inbox-item__selection">
+                        <input
+                          aria-label={`${capture.body}を選択`}
+                          checked={selectedIds.has(capture.id)}
+                          disabled={isMutating}
+                          onChange={() => toggleSelected(capture.id)}
+                          type="checkbox"
+                        />
+                        選択
+                      </label>
+                    ) : (
+                      <div
+                        aria-label={`${capture.body} の不要記録操作`}
+                        className="inbox-item__actions inbox-item__unneeded-actions"
+                      >
+                        <button
+                          disabled={isMutating}
+                          onClick={() => restore(capture.id)}
+                          type="button"
+                        >
+                          未整理に戻す
+                        </button>
+                        <button
+                          className="inbox-item__delete"
+                          disabled={isMutating}
+                          onClick={() => remove(capture.id)}
+                          type="button"
+                        >
+                          完全削除
+                        </button>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <>
                     <label htmlFor={`capture-body-${capture.id}`}>
@@ -354,8 +522,6 @@ export function InboxPage({
 
 function emptyMessage(tab: CaptureHistoryTab): string {
   switch (tab) {
-    case "all":
-      return "記録はありません。";
     case "note":
       return "メモはありません。";
     case "unneeded":

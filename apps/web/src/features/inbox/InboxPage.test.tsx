@@ -12,6 +12,7 @@ import {
   createCapture,
   createEmptySnapshot,
   markAsNote,
+  markNoteAsUnneeded,
   markAsUnneeded,
   type AppRepository,
 } from "../../../../../packages/domain/src";
@@ -111,6 +112,22 @@ function repositoryWithAllClassifications(): AppRepository {
   snapshot = markAsUnneeded({ snapshot, captureId: "capture-unneeded", now });
   snapshot = createCapture(
     snapshot,
+    "不要になったメモ",
+    "2026-08-02T12:00:00.000Z",
+    "capture-note-unneeded",
+  );
+  snapshot = markAsNote({
+    snapshot,
+    captureId: "capture-note-unneeded",
+    now,
+  });
+  snapshot = markNoteAsUnneeded({
+    snapshot,
+    captureId: "capture-note-unneeded",
+    now: "2026-08-03T10:00:00.000Z",
+  });
+  snapshot = createCapture(
+    snapshot,
     "タスクの記録",
     "2026-08-04T09:00:00.000Z",
     "capture-task",
@@ -143,44 +160,35 @@ describe("InboxPage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("F-004 offers all four capture-history tabs and starts with unclassified", async () => {
-    render(<InboxPage repository={repositoryWithCaptures()} />);
-
-    expect(await screen.findByRole("tab", { name: "すべて" })).toBeTruthy();
-    expect(
-      screen.getByRole("tab", { name: "未整理" }).getAttribute("aria-selected"),
-    ).toBe("true");
-    expect(screen.getByRole("tab", { name: "メモ" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "不要" })).toBeTruthy();
-  });
-
-  it("F-004 shows every capture classification once in the all tab", async () => {
+  it("F-004 offers three counted capture-history tabs and starts with unclassified", async () => {
     render(<InboxPage repository={repositoryWithAllClassifications()} />);
 
-    fireEvent.click(await screen.findByRole("tab", { name: "すべて" }));
-
-    const items = await screen.findAllByRole("listitem");
-    expect(items.map((item) => item.textContent)).toEqual([
-      expect.stringMatching(/タスクの記録.*タスク化済み/),
-      expect.stringMatching(/不要な記録.*不要/),
-      expect.stringMatching(/メモの記録.*メモ/),
-      expect.stringMatching(/未整理の記録.*未整理/),
-    ]);
+    expect(screen.queryByRole("tab", { name: "すべて" })).toBeNull();
+    expect(
+      (await screen.findByRole("tab", { name: /未整理.*1件/ })).getAttribute(
+        "aria-selected",
+      ),
+    ).toBe("true");
+    expect(screen.getByRole("tab", { name: /メモ.*1件/ })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /不要.*2件/ })).toBeTruthy();
   });
 
-  it("F-006 opens a task-classified capture through its linked task", async () => {
-    const onTaskOpen = vi.fn();
-    render(
-      <InboxPage
-        onTaskOpen={onTaskOpen}
-        repository={repositoryWithAllClassifications()}
-      />,
-    );
+  it("F-004 never shows task-classified captures in the inbox", async () => {
+    render(<InboxPage repository={repositoryWithAllClassifications()} />);
 
-    fireEvent.click(await screen.findByRole("tab", { name: "すべて" }));
-    fireEvent.click(screen.getByRole("button", { name: "タスクを開く" }));
+    expect(await screen.findAllByText("未整理の記録")).toHaveLength(2);
+    expect(screen.queryByText("タスクの記録")).toBeNull();
+    expect(screen.queryByRole("button", { name: "タスクを開く" })).toBeNull();
+  });
 
-    expect(onTaskOpen).toHaveBeenCalledWith("task-1");
+  it("F-006 labels whether an unneeded capture came from unclassified or memo", async () => {
+    render(<InboxPage repository={repositoryWithAllClassifications()} />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /不要.*2件/ }));
+
+    expect(screen.getByText("未整理から")).toBeTruthy();
+    expect(screen.getByText("メモから")).toBeTruthy();
+    expect(screen.queryByRole("checkbox")).toBeNull();
   });
 
   it("F-006 restores an unneeded capture and synchronizes its rebuilt reminders", async () => {
@@ -188,8 +196,10 @@ describe("InboxPage", () => {
     const sync = vi.fn().mockResolvedValue(undefined);
     render(<InboxPage now={() => now} repository={repository} sync={sync} />);
 
-    fireEvent.click(await screen.findByRole("tab", { name: "不要" }));
-    fireEvent.click(screen.getByRole("button", { name: "未整理に戻す" }));
+    fireEvent.click(await screen.findByRole("tab", { name: /不要.*2件/ }));
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "未整理に戻す" })[0]!,
+    );
 
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
     expect(sync).toHaveBeenCalledTimes(1);
@@ -206,14 +216,70 @@ describe("InboxPage", () => {
     vi.stubGlobal("confirm", confirm);
     render(<InboxPage now={() => now} repository={repository} sync={sync} />);
 
-    fireEvent.click(await screen.findByRole("tab", { name: "不要" }));
-    fireEvent.click(screen.getByRole("button", { name: "完全削除" }));
+    fireEvent.click(await screen.findByRole("tab", { name: /不要.*2件/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "完全削除" })[0]!);
     expect(repository.save).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "完全削除" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "完全削除" })[0]!);
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
     expect(sync).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("不要な記録")).toBeNull();
+  });
+
+  it("F-006 selects every unneeded capture and restores the batch after confirmation", async () => {
+    const repository = repositoryWithAllClassifications();
+    const sync = vi.fn().mockResolvedValue(undefined);
+    const confirm = vi.fn().mockReturnValue(true);
+    vi.stubGlobal("confirm", confirm);
+    render(<InboxPage now={() => now} repository={repository} sync={sync} />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /不要.*2件/ }));
+    fireEvent.click(screen.getByRole("button", { name: "選択" }));
+
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "未整理に戻す" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "すべて選択" }));
+    expect(screen.getByText("2件選択中")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "選択した記録を未整理に戻す" }));
+
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect(confirm).toHaveBeenCalledWith(
+      "選択した2件を未整理に戻しますか？",
+    );
+    expect(sync).toHaveBeenCalledTimes(1);
+    expect((await screen.findByRole("status")).textContent).toBe(
+      "2件を未整理に戻しました。",
+    );
+  });
+
+  it("F-006 cancels or confirms a batch permanent deletion without partial updates", async () => {
+    const repository = repositoryWithAllClassifications();
+    const sync = vi.fn().mockResolvedValue(undefined);
+    const confirm = vi
+      .fn()
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    vi.stubGlobal("confirm", confirm);
+    render(<InboxPage now={() => now} repository={repository} sync={sync} />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /不要.*2件/ }));
+    fireEvent.click(screen.getByRole("button", { name: "選択" }));
+    fireEvent.click(screen.getByRole("button", { name: "すべて選択" }));
+    const remove = screen.getByRole("button", {
+      name: "選択した記録を完全削除",
+    });
+    fireEvent.click(remove);
+    expect(repository.save).not.toHaveBeenCalled();
+
+    fireEvent.click(remove);
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect(confirm).toHaveBeenLastCalledWith(
+      "選択した2件を完全に削除しますか？この操作は元に戻せません。",
+    );
+    expect(sync).toHaveBeenCalledTimes(1);
+    expect((await screen.findByRole("status")).textContent).toBe(
+      "2件を完全に削除しました。",
+    );
   });
 
   it("does not leave an empty list card below the inbox empty state", async () => {
@@ -390,7 +456,7 @@ describe("InboxPage", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("tab", { name: "メモ" }));
+    fireEvent.click(await screen.findByRole("tab", { name: /メモ.*2件/ }));
 
     const items = await screen.findAllByRole("listitem");
     expect(items.map((item) => item.textContent)).toEqual([
