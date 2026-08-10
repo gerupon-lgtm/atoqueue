@@ -54,7 +54,12 @@ function repository(): AppRepository {
       task("未設定", { dueMode: "unset" }),
       task("なし"),
       task("明日", { dueMode: "scheduled", dueAt: "2026-08-04T23:59:00.000Z" }),
-      task("完了済み", { status: "completed", completedAt: now }),
+      task("完了済み", {
+        status: "completed",
+        completedAt: now,
+        dueMode: "scheduled",
+        dueAt: "2026-08-02T23:59:00.000Z",
+      }),
       task("保管済み", { status: "archived", archivedAt: now, category: "旧分類" }),
     ],
   };
@@ -151,6 +156,23 @@ describe("TaskListPage", () => {
     expect(screen.getByRole("link", { name: "期限切れ" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "完了済み" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "保管済み" })).toBeTruthy();
+  });
+
+  it("F-016 does not label a completed task as overdue", async () => {
+    render(
+      <MemoryRouter>
+        <TaskListPage now={() => now} repository={repository()} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(await screen.findByLabelText("状態"), {
+      target: { value: "completed" },
+    });
+
+    expect(screen.getByRole("link", { name: "完了済み" })).toBeTruthy();
+    expect(screen.getByLabelText("完了済みの期限状態").textContent).toBe(
+      "期限あり",
+    );
   });
 
   it("keeps the overdue action and second filter row aligned for a compact mobile layout", async () => {

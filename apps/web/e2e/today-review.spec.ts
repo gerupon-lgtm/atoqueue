@@ -71,12 +71,17 @@ test("processes three tasks one at a time, re-answers a previous task, and shows
   const previous = page.getByRole("button", { name: "前のタスク" });
   await expect(previous).toBeVisible();
   const previousBox = await previous.boundingBox();
+  const next = page.getByRole("button", { name: "次のタスク" });
+  await expect(next).toBeVisible();
+  const nextBox = await next.boundingBox();
   expect(previousBox).not.toBeNull();
+  expect(nextBox).not.toBeNull();
   expect(
     Math.abs(
-      previousBox!.x + previousBox!.width - (headerBox!.x + headerBox!.width),
+      nextBox!.x + nextBox!.width - (headerBox!.x + headerBox!.width),
     ),
   ).toBeLessThan(2);
+  expect(previousBox!.x + previousBox!.width).toBeLessThanOrEqual(nextBox!.x);
   await page.getByRole("button", { name: "日付を変える" }).click();
   await page.getByLabel("新しい期限").fill("2026-08-10");
   await page.getByRole("button", { name: "この日付にする" }).click();
@@ -86,15 +91,13 @@ test("processes three tasks one at a time, re-answers a previous task, and shows
   await page.getByRole("button", { name: "前のタスク" }).click();
   await expect(page.getByText("確認タスク one")).toBeVisible();
   await page.getByRole("button", { name: "期限なし" }).click();
-  await expect(page.getByText("確認タスク two")).toBeVisible();
-  await page.getByRole("button", { name: "期限なし" }).click();
   await expect(page.getByText("確認タスク three")).toBeVisible();
   await page.getByRole("button", { name: "期限なし" }).click();
 
   await expect(page).toHaveURL(/\/today\/result$/);
   await expect(page.getByText("完了: 1件")).toBeVisible();
   await expect(page.getByText("期限変更: 1件")).toBeVisible();
-  await expect(page.getByText("期限なし: 3件")).toBeVisible();
+  await expect(page.getByText("期限なし: 2件")).toBeVisible();
   await expect(
     page.getByRole("link", { name: "確認タスク oneを修正" }),
   ).toHaveAttribute("href", "/tasks/one");
@@ -109,7 +112,6 @@ test("processes three tasks one at a time, re-answers a previous task, and shows
     .toEqual([
       "task_completed",
       "task_rescheduled",
-      "task_marked_no_due",
       "task_marked_no_due",
       "task_marked_no_due",
     ]);

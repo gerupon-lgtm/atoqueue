@@ -198,7 +198,7 @@ function dueState(
   if (task.dueMode === "unset") return "期限未設定";
   if (task.dueMode === "none") return "期限なし";
   if (!task.dueAt) return "期限あり";
-  if (task.dueAt < now) return "期限超過";
+  if (task.status === "active" && task.dueAt < now) return "期限超過";
   return calendar.today(task.dueAt) === calendar.today(now)
     ? "今日が期限"
     : "期限あり";

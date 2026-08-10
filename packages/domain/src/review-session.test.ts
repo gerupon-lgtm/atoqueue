@@ -126,6 +126,28 @@ describe("review session", () => {
     });
   });
 
+  it("F-009 keeps next navigation on the remaining unanswered task instead of reopening an answered completion", () => {
+    const tasks = [
+      task("first", { status: "completed", completedAt: now }),
+      task("second"),
+    ];
+    const session = {
+      ...startReviewSession({
+        sessionId: "session-1",
+        now,
+        calendar,
+        tasks: [task("first"), task("second")],
+      }),
+      currentIndex: 1,
+      visitedTaskIds: ["first"],
+      answeredTaskIds: ["first"],
+    };
+
+    expect(goToNextTask(session, tasks, now)).toMatchObject({
+      currentIndex: 1,
+    });
+  });
+
   it("F-009 skips stale unvisited completed and archived IDs when resuming", () => {
     const session = {
       ...startReviewSession({ sessionId: "session-1", now, calendar, tasks: [task("done"), task("archived"), task("active")] }),

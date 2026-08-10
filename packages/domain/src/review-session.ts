@@ -98,7 +98,8 @@ export function goToNextTask(
     );
     if (
       task &&
-      (task.status === "active" || session.answeredTaskIds.includes(task.id))
+      task.status === "active" &&
+      !session.answeredTaskIds.includes(task.id)
     ) {
       return { ...session, currentIndex: index, updatedAt: now };
     }

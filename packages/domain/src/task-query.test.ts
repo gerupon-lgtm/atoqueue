@@ -61,6 +61,27 @@ describe("listTasks", () => {
     expect(listTasks(tasks, { ...input, category: "home" }).map(({ id }) => id)).toEqual(["none"]);
   });
 
+  it("derives the overdue filter only for active tasks", () => {
+    const overdue = {
+      dueMode: "scheduled" as const,
+      dueAt: "2026-08-02T23:59:00.000Z",
+    };
+    const tasks = [
+      task("active", overdue),
+      task("completed", { ...overdue, status: "completed", completedAt: now }),
+      task("archived", { ...overdue, status: "archived", archivedAt: now }),
+    ];
+
+    expect(
+      listTasks(tasks, { tab: "all", due: "overdue", now, calendar }).map(
+        ({ id }) => id,
+      ),
+    ).toEqual(["active"]);
+    expect(
+      listTasks(tasks, { tab: "completed", due: "overdue", now, calendar }),
+    ).toEqual([]);
+  });
+
   it("finds a Unicode substring without changing the selected task state", () => {
     const tasks = [task("match", { title: "買い物：牛乳" }), task("other", { title: "会議資料" })];
 

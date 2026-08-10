@@ -97,11 +97,10 @@ test("keeps an unneeded capture recoverable until confirmed permanent deletion",
   await page.goto("/inbox");
   await page.getByRole("button", { name: "不要" }).click();
 
-  await page.getByRole("tab", { name: "すべて" }).click();
+  await page.getByRole("tab", { name: "不要" }).click();
   await expect(
     page.getByRole("listitem").filter({ hasText: "履歴テスト" }),
   ).toBeVisible();
-  await page.getByRole("tab", { name: "不要" }).click();
   await page.getByRole("button", { name: "未整理に戻す" }).click();
 
   await page.getByRole("tab", { name: "未整理" }).click();

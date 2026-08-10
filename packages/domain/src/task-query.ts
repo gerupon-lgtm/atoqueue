@@ -32,7 +32,7 @@ export function listTasks(tasks: readonly Task[], query: TaskQuery, captures: re
 function matchesDueFilter(task: Task, query: TaskQuery): boolean {
   switch (query.due) {
     case "overdue":
-      return task.dueMode === "scheduled" && task.dueAt !== undefined && task.dueAt < query.now;
+      return task.status === "active" && task.dueMode === "scheduled" && task.dueAt !== undefined && task.dueAt < query.now;
     case "today":
       return task.dueMode === "scheduled" && task.dueAt !== undefined && query.calendar.today(task.dueAt) === query.calendar.today(query.now);
     case "unset": return task.dueMode === "unset";
