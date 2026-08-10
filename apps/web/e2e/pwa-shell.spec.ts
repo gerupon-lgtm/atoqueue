@@ -212,4 +212,45 @@ test.describe("PWA shell", () => {
       ]),
     );
   });
+
+  test("publishes iOS launch screens for common iPhone and iPad sizes", async ({
+    page,
+    request,
+  }) => {
+    await page.goto("/");
+
+    const launchScreens = await page
+      .locator('link[rel="apple-touch-startup-image"]')
+      .evaluateAll((links) =>
+        links.map((link) => ({
+          href: (link as HTMLLinkElement).href,
+          media: (link as HTMLLinkElement).media,
+        })),
+      );
+
+    expect(launchScreens.length).toBeGreaterThanOrEqual(17);
+    expect(launchScreens).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          media: expect.stringContaining("(device-width: 390px)"),
+        }),
+        expect.objectContaining({
+          media: expect.stringContaining("(device-width: 430px)"),
+        }),
+        expect.objectContaining({
+          media: expect.stringContaining("(device-width: 1024px)"),
+        }),
+      ]),
+    );
+
+    for (const launchScreen of launchScreens) {
+      expect(launchScreen.media).toContain("orientation:");
+      const response = await request.get(launchScreen.href);
+      expect(response.ok()).toBe(true);
+      expect(response.headers()["content-type"]).toContain("image/png");
+      expect((await response.body()).subarray(0, 8)).toEqual(
+        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+      );
+    }
+  });
 });
