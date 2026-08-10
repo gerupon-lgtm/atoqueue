@@ -23,6 +23,11 @@ describe("CategorySettings", () => {
     expect(screen.getByText("仕事")).toBeTruthy();
     expect(screen.getByText("0 / 10件")).toBeTruthy();
     expect(
+      screen.getByText(
+        "追加・削除した内容は、「カテゴリを保存」を押すと確定します。",
+      ),
+    ).toBeTruthy();
+    expect(
       (
         screen.getByRole("button", {
           name: "カテゴリを保存",

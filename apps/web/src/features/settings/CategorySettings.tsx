@@ -213,7 +213,7 @@ export function CategorySettings({ repository }: CategorySettingsProps) {
         </button>
       </form>
       <p className="category-settings__note">
-        1〜12文字。削除は「カテゴリを保存」で確定します。
+        追加・削除した内容は、「カテゴリを保存」を押すと確定します。
       </p>
       <button
         disabled={busy || !snapshot || !isDirty}

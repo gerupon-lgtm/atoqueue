@@ -549,3 +549,8 @@ Run:
 Expected: PWA HTTP 200 and API `status: ok`. Open Settings > App Information and verify `mvp-1.5.0` after the Pages cache updates.
 
 **配置結果（2026-08-10）:** release commit `db809a3` をpushし、GitHub Actions Deploy #77（run `31342182972`）を手動実行した。Test and build、GitHub Pages、OCI notification APIの3ジョブはすべて成功した。本番API `/healthz` はHTTP 200で `version: mvp-1.5.0` を返し、公開PWAの配信JavaScriptにも `mvp-1.5.0` が含まれることを確認した。
+
+### Patch follow-up: mvp-1.5.1
+
+- カテゴリ追加・削除の確定操作が伝わるよう、設定画面の補足文を「追加・削除した内容は、『カテゴリを保存』を押すと確定します。」へ変更する。
+- 単一画面の文言修正でロジック変更はないため、版はパッチ更新の `mvp-1.5.1` とする。

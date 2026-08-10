@@ -1396,3 +1396,9 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 - 【確定】未完了の当日ReviewSessionは、再読込み時に新しく対象となったTaskを末尾へ追加する。複数対象では「次のタスク」を表示する。
 - 【確定】表示・Web・API・ワークスペースのバージョンを `mvp-1.5.0` / `1.5.0` へ揃える。
 - 詳細計画: `docs/superpowers/plans/2026-08-10-custom-task-categories-and-backup-restore.md`。
+
+### 2026-08-10 patch follow-up: category save guidance
+
+- 対象要件: F-005、F-017、NF-012。
+- 【確定】設定画面に「追加・削除した内容は、『カテゴリを保存』を押すと確定します。」と表示し、確定操作を明示する。
+- 【確定】単一画面の文言修正でロジック変更がないため、表示・Web・API・ワークスペースのバージョンを `mvp-1.5.1` / `1.5.1` へ揃える。
