@@ -67,7 +67,7 @@ MVPでは利用者アカウントを持たないため、端末シークレッ�
 ```json
 {
   "status": "ok",
-  "version": "mvp-1.5.1",
+  "version": "mvp-1.6.0",
   "time": "2026-08-03T09:00:00.000Z"
 }
 ```
@@ -179,7 +179,8 @@ Response `200` または `201`:
 {
   "type": "review_due",
   "reminderId": "34f55ed6-ddf9-481d-8b49-5b520683a8d8",
-  "url": "/today?reminder=34f55ed6-ddf9-481d-8b49-5b520683a8d8"
+  "url": "/today?reminder=34f55ed6-ddf9-481d-8b49-5b520683a8d8",
+  "groupId": "0240ed4ae646d5c0"
 }
 ```
 
@@ -189,13 +190,13 @@ Response `200` または `201`:
 {
   title: "あとキュー",
   body: "確認したい項目があります",
-  tag: "atoqueue-review",
+  tag: `atoqueue-review-${groupId}`,
   renotify: false,
   data: { url, reminderId }
 }
 ```
 
-タスク本文、メモ本文、期限、カテゴリ、タスクID、キャプチャIDはpayloadへ入れない。Service Workerは通知タップ時に同一オリジンの既存ウィンドウをフォーカスし、なければ新規に開く。
+`groupId` は `notification_type`、NUL区切り、`scheduled_at` のSHA-256先頭16桁とする。同じ通知種別・予定時刻の予約は同じタグへ集約し、異なる種別・時刻は別タグで新しく通知する。移行中は `groupId` のない従来payloadも受理し、固定タグへフォールバックする。タスク本文、メモ本文、期限、カテゴリ、タスクID、キャプチャIDはpayloadへ入れない。Service Workerは通知タップ時に同一オリジンの既存ウィンドウをフォーカスし、なければ新規に開く。
 
 ## 7. 配送処理
 

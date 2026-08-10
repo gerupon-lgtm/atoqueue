@@ -1331,7 +1331,7 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 
 **Implementation steps:** Add a versioned local model migration, plan anonymous schedules in the domain package, rebuild reservation outbox after settings or task changes, preserve schedule kinds during error recovery, and cover the API prefetch window with fake-clock tests. No task title, task ID, deadline meaning, or history may cross the API boundary.
 
-**Open assumption:** Whether same-timestamp generic notifications should be coalesced is retained as 【想定】 until pilot feedback confirms the preferred behavior.
+**Confirmed follow-up:** Pilot feedback confirmed that same-type, same-timestamp generic notifications should be coalesced into one visible notification, while a different type or timestamp must use a different notification tag.
 
 ### 2026-08-09 implementation follow-up: initial reminder deadline boundary
 

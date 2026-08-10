@@ -10,14 +10,26 @@ declare const self: { __WB_MANIFEST: PrecacheEntry[] };
 const precacheEntries = self.__WB_MANIFEST;
 const precacheName = "atoqueue-public-shell-v1";
 
-export interface PushPayload { type: "review_due"; reminderId: string; url: string; }
+export interface PushPayload {
+  type: "review_due";
+  reminderId: string;
+  url: string;
+  groupId?: string;
+}
 export interface WorkerClients { matchAll(options?: ClientQueryOptions): Promise<Array<{ url: string; focus(): Promise<unknown> | unknown }>>; openWindow(url: string): Promise<unknown> | unknown; }
 
 /** Ignores malformed or private payload fields before rendering OS-visible text. */
 export async function handlePush(raw: string, showNotification: (title: string, options: NotificationOptions) => Promise<unknown> | unknown): Promise<void> {
   const payload = parsePayload(raw);
   const url = payload?.url ?? "/today";
-  await showNotification(genericNotification.title, { body: genericNotification.body, tag: genericNotification.tag, data: payload ? { url, reminderId: payload.reminderId } : { url } });
+  const tag = payload?.groupId
+    ? `${genericNotification.tag}-${payload.groupId}`
+    : genericNotification.tag;
+  await showNotification(genericNotification.title, {
+    body: genericNotification.body,
+    tag,
+    data: payload ? { url, reminderId: payload.reminderId } : { url },
+  });
 }
 
 export async function handleNotificationClick(data: Partial<Pick<PushPayload, "url" | "reminderId">>, clients: WorkerClients): Promise<void> {
@@ -32,7 +44,16 @@ function parsePayload(raw: string): PushPayload | undefined {
     const value: unknown = JSON.parse(raw);
     if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
     const record = value as Record<string, unknown>;
-    if (Object.keys(record).length !== 3 || record.type !== "review_due" || typeof record.reminderId !== "string" || typeof record.url !== "string" || !validReminderUrl(record.url, record.reminderId)) return undefined;
+    const keys = Object.keys(record);
+    if (
+      (keys.length !== 3 && keys.length !== 4)
+      || record.type !== "review_due"
+      || typeof record.reminderId !== "string"
+      || typeof record.url !== "string"
+      || (keys.length === 4 && !validGroupId(record.groupId))
+      || (keys.length === 3 && record.groupId !== undefined)
+      || !validReminderUrl(record.url, record.reminderId)
+    ) return undefined;
     return record as unknown as PushPayload;
   } catch { return undefined; }
 }
@@ -46,6 +67,9 @@ function validReminderUrl(url: unknown, reminderId: unknown): url is string {
       && parsed.searchParams.size === 1
       && parsed.searchParams.get("reminder") === reminderId;
   } catch { return false; }
+}
+function validGroupId(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{16}$/.test(value);
 }
 function isUuid(value: string): boolean { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
 function sameOriginPath(clientUrl: string, target: string): boolean {

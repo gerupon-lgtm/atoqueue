@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { PushClient } from "../push/push-client.js";
 import type { ReminderRepository } from "../reminders/reminder-repository.js";
 
@@ -29,7 +31,15 @@ export class ReminderDispatcher {
     if (!claimedAt) return;
     try {
       const path = job.notificationType === "inbox_review" ? "/inbox" : "/today";
-      const result = await this.push.send({ subscription: job.subscription, payload: { type: "review_due", reminderId: job.id, url: `${path}?reminder=${job.id}` } });
+      const result = await this.push.send({
+        subscription: job.subscription,
+        payload: {
+          type: "review_due",
+          reminderId: job.id,
+          url: `${path}?reminder=${job.id}`,
+          groupId: notificationGroupId(job.notificationType, job.scheduledAt),
+        },
+      });
       if (result.statusCode >= 200 && result.statusCode < 300) {
         if (job.repeatCadence) await this.repository.rescheduleAfterSend(job.id, claimedAt, nextScheduledAt(now, job.repeatCadence), now.toISOString());
         else await this.repository.markSent(job.id, claimedAt, now.toISOString());
@@ -48,6 +58,16 @@ export class ReminderDispatcher {
     const minutes = RETRY_MINUTES[currentAttempts]!;
     await this.repository.retry(id, claimedAt, new Date(now.getTime() + minutes * 60_000).toISOString(), attemptCount, now.toISOString(), code);
   }
+}
+
+function notificationGroupId(
+  notificationType: string,
+  scheduledAt: string,
+): string {
+  return createHash("sha256")
+    .update(`${notificationType}\0${scheduledAt}`)
+    .digest("hex")
+    .slice(0, 16);
 }
 
 function nextScheduledAt(now: Date, cadence: "weekly" | "monthly"): string {
