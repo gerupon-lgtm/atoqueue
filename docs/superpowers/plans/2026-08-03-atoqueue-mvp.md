@@ -1333,6 +1333,8 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 
 **Confirmed follow-up:** Pilot feedback confirmed that same-type, same-timestamp generic notifications should be coalesced into one visible notification, while a different type or timestamp must use a different notification tag.
 
+**Delivery-attention follow-up:** `mvp-1.7.0` requests high Web Push urgency, retains pending Push messages for 24 hours, and requests a short vibration from supporting clients. It does not force `silent`, persistent notifications, or DND bypass; OS and user settings remain authoritative.
+
 ### 2026-08-09 implementation follow-up: initial reminder deadline boundary
 
 - 【確定】`initial` は期限ありタスクの期限より前に到来する場合だけ作る。同時刻または期限後なら省略し、期限時の `review` を残す。

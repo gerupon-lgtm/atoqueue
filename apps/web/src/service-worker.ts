@@ -16,10 +16,11 @@ export interface PushPayload {
   url: string;
   groupId?: string;
 }
+type WebNotificationOptions = NotificationOptions & { vibrate?: number[] };
 export interface WorkerClients { matchAll(options?: ClientQueryOptions): Promise<Array<{ url: string; focus(): Promise<unknown> | unknown }>>; openWindow(url: string): Promise<unknown> | unknown; }
 
 /** Ignores malformed or private payload fields before rendering OS-visible text. */
-export async function handlePush(raw: string, showNotification: (title: string, options: NotificationOptions) => Promise<unknown> | unknown): Promise<void> {
+export async function handlePush(raw: string, showNotification: (title: string, options: WebNotificationOptions) => Promise<unknown> | unknown): Promise<void> {
   const payload = parsePayload(raw);
   const url = payload?.url ?? "/today";
   const tag = payload?.groupId
@@ -28,6 +29,7 @@ export async function handlePush(raw: string, showNotification: (title: string, 
   await showNotification(genericNotification.title, {
     body: genericNotification.body,
     tag,
+    vibrate: [200, 100, 200],
     data: payload ? { url, reminderId: payload.reminderId } : { url },
   });
 }
@@ -91,7 +93,7 @@ interface ServiceWorkerEvent {
 
 const worker = globalThis as unknown as {
   addEventListener?: (type: string, listener: (event: ServiceWorkerEvent) => void) => void;
-  registration?: { showNotification(title: string, options: NotificationOptions): Promise<void> };
+  registration?: { showNotification(title: string, options: WebNotificationOptions): Promise<void> };
   clients?: WorkerClients;
   caches?: CacheStorage;
   fetch?: typeof fetch;

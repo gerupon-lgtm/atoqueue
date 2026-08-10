@@ -15,8 +15,12 @@ describe("service worker notification behavior", () => {
     expect(showNotification).toHaveBeenCalledWith(genericNotification.title, expect.objectContaining({
       body: genericNotification.body,
       tag: "atoqueue-review-0240ed4ae646d5c0",
+      vibrate: [200, 100, 200],
       data: { url: `/today?reminder=${reminderId}`, reminderId },
     }));
+    const options = showNotification.mock.calls[0]?.[1];
+    expect(options).not.toHaveProperty("silent");
+    expect(options).not.toHaveProperty("requireInteraction");
   });
 
   it("uses one tag for four same-time reminders and a different tag for another delivery group", async () => {
