@@ -90,7 +90,7 @@ describe("classification", () => {
     ]);
   });
 
-  it("F-014 queues the initial and deadline reminders only as anonymous local records when notifications are enabled", () => {
+  it("F-014 cancels the inbox initial reminder without replacing it after the capture becomes a task", () => {
     const snapshot = snapshotWithCapture();
     snapshot.settings.notificationEnabled = true;
     const next = confirmTask({
@@ -103,15 +103,14 @@ describe("classification", () => {
       idFactory: (kind, scheduleKind) => `${kind}-${scheduleKind ?? "event"}`,
     });
 
-    expect(next.notificationOutbox.filter((item) => item.operation === "upsert")).toHaveLength(3);
+    expect(next.notificationOutbox.filter((item) => item.operation === "upsert")).toHaveLength(2);
     expect(next.notificationOutbox.filter((item) => item.operation === "cancel")).toHaveLength(4);
-    expect(next.reminderMap.map((entry) => entry.kind)).toEqual(["initial", "deadline_before", "review"]);
+    expect(next.reminderMap.map((entry) => entry.kind)).toEqual(["deadline_before", "review"]);
     expect(next.notificationOutbox.filter((item) => item.operation === "upsert" && item.taskRevision === 1).map((item) => ({
       operation: item.operation,
       scheduledAt: item.scheduledAt,
       notificationType: item.notificationType,
     }))).toEqual([
-      { operation: "upsert", scheduledAt: "2026-08-03T10:00:00.000Z", notificationType: "task_review" },
       { operation: "upsert", scheduledAt: "2026-08-03T13:59:00.000Z", notificationType: "deadline_review" },
       { operation: "upsert", scheduledAt: "2026-08-03T14:59:00.000Z", notificationType: "deadline_review" },
     ]);

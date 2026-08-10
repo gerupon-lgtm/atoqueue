@@ -37,7 +37,7 @@ function scheduledTask(overrides: Partial<Task> = {}): Task {
 }
 
 describe("notification scheduling policy", () => {
-  it("creates anonymous initial, deadline-before, and deadline-time schedules without task content", () => {
+  it("creates anonymous deadline-before and deadline-time schedules without task content", () => {
     const schedules = planNotificationSchedules({
       task: scheduledTask(),
       settings,
@@ -45,11 +45,6 @@ describe("notification scheduling policy", () => {
     });
 
     expect(schedules).toEqual([
-      {
-        kind: "initial",
-        scheduledAt: "2026-08-08T10:00:00.000Z",
-        notificationType: "task_review",
-      },
       {
         kind: "deadline_before",
         scheduledAt: "2026-08-08T14:00:00.000Z",
@@ -121,7 +116,7 @@ describe("notification scheduling policy", () => {
     ]);
   });
 
-  it("keeps the initial reminder when it is earlier than the task deadline", () => {
+  it("does not create a new initial reminder after the capture has become a task", () => {
     const schedules = planNotificationSchedules({
       task: scheduledTask({
         dueAt: "2026-08-08T10:30:00.000Z",
@@ -131,17 +126,13 @@ describe("notification scheduling policy", () => {
       now,
     });
 
-    expect(schedules).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: "initial",
-          scheduledAt: "2026-08-08T10:00:00.000Z",
-        }),
-      ]),
-    );
+    expect(schedules.map((schedule) => schedule.kind)).toEqual([
+      "deadline_before",
+      "review",
+    ]);
   });
 
-  it("omits an initial reminder at the deadline so only the deadline-time reminder remains", () => {
+  it("omits a deadline-before reminder when its calculated time is now", () => {
     const schedules = planNotificationSchedules({
       task: scheduledTask({
         dueAt: "2026-08-08T10:00:00.000Z",
@@ -160,7 +151,7 @@ describe("notification scheduling policy", () => {
     ]);
   });
 
-  it("omits an initial reminder later than the task deadline", () => {
+  it("omits a deadline-before reminder when its calculated time has passed", () => {
     const schedules = planNotificationSchedules({
       task: scheduledTask({
         dueAt: "2026-08-08T09:30:00.000Z",
@@ -174,7 +165,7 @@ describe("notification scheduling policy", () => {
   });
 
   it.each(["none", "unset"] as const)(
-    "keeps the initial reminder for a task with due mode %s",
+    "keeps only the normal review reminder for an organized task with due mode %s",
     (dueMode) => {
       const schedules = planNotificationSchedules({
         task: scheduledTask({
@@ -186,10 +177,7 @@ describe("notification scheduling policy", () => {
         now,
       });
 
-      expect(schedules.map((schedule) => schedule.kind)).toEqual([
-        "initial",
-        "review",
-      ]);
+      expect(schedules.map((schedule) => schedule.kind)).toEqual(["review"]);
     },
   );
 });

@@ -52,8 +52,8 @@ describe("anonymous notification queue", () => {
     expect(JSON.stringify(queued.notificationOutbox)).not.toContain("capture-secret");
   });
 
-  // Break caught: prompt does not include the +1 day escalation or does not remove disabled scope reservations.
-  it("replaces the inbox scope when its frequency changes", () => {
+  // Break caught: "no repeats" also removes the one initial reminder.
+  it("replaces the inbox scope with one initial reminder when repeats are disabled", () => {
     const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
     snapshot.settings.inboxReminderFrequency = "prompt";
     snapshot.captures = [{ id: "private", body: "private", classification: "unclassified", createdAt: now, updatedAt: now }];
@@ -65,10 +65,16 @@ describe("anonymous notification queue", () => {
 
     snapshot.settings.inboxReminderFrequency = "none";
     const disabled = rebuildInboxReminderNotifications({ snapshot: { ...snapshot, ...prompt }, now, createId: ids() });
-    expect(disabled.reminderMap).toEqual([]);
+    expect(disabled.reminderMap).toHaveLength(1);
+    const oneShot = disabled.notificationOutbox.find((item) => item.operation === "upsert");
     expect(disabled.notificationOutbox).toEqual(expect.arrayContaining([
       expect.objectContaining({ operation: "cancel" }),
+      expect.objectContaining({
+        operation: "upsert",
+        scheduledAt: "2026-08-08T10:00:00.000Z",
+      }),
     ]));
+    expect(oneShot?.repeatCadence).toBeUndefined();
   });
 
   // Break caught: elapsed one-shots are re-sent together instead of yielding one immediate recurring reservation.
@@ -157,14 +163,14 @@ describe("anonymous notification queue", () => {
     expect(queued.reminderMap.every((entry) => entry.scope === "memo")).toBe(true);
   });
 
-  it("queues all three schedules locally and maps each opaque reminder to one task", () => {
+  it("queues deadline-before and review schedules without recreating an initial reminder", () => {
     const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
     snapshot.settings.notificationEnabled = true;
     const queued = queueTaskNotifications({ snapshot, task: task(), now, createId: ids() });
 
-    expect(queued.notificationOutbox).toHaveLength(3);
-    expect(queued.reminderMap.map((entry) => entry.kind)).toEqual(["initial", "deadline_before", "review"]);
-    expect(queued.notificationOutbox.map((item) => item.operation)).toEqual(["upsert", "upsert", "upsert"]);
+    expect(queued.notificationOutbox).toHaveLength(2);
+    expect(queued.reminderMap.map((entry) => entry.kind)).toEqual(["deadline_before", "review"]);
+    expect(queued.notificationOutbox.map((item) => item.operation)).toEqual(["upsert", "upsert"]);
     expect(JSON.stringify(queued.notificationOutbox)).not.toContain("SECRET_TASK_CANARY");
     expect(JSON.stringify(queued.notificationOutbox)).not.toContain("task-private");
   });
@@ -181,24 +187,19 @@ describe("anonymous notification queue", () => {
     });
 
     expect(queued.reminderMap).toEqual([]);
-    expect(queued.notificationOutbox).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ operation: "cancel", reminderId: active.reminderMap[0]?.reminderId }),
-        expect.objectContaining({ operation: "cancel", reminderId: active.reminderMap[1]?.reminderId }),
-        expect.objectContaining({ operation: "cancel", reminderId: active.reminderMap[2]?.reminderId }),
-      ]),
+    expect(queued.notificationOutbox.map((item) => item.reminderId).sort()).toEqual(
+      active.reminderMap.map((entry) => entry.reminderId).sort(),
     );
+    expect(queued.notificationOutbox.every((item) => item.operation === "cancel")).toBe(true);
   });
 
-  it("cancels an existing initial reminder when a changed deadline moves before it", () => {
+  it("cancels a legacy task initial reminder during the next task update", () => {
     const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
     snapshot.settings.notificationEnabled = true;
-    const active = queueTaskNotifications({ snapshot, task: task(), now, createId: ids() });
-    const initial = active.reminderMap.find((entry) => entry.kind === "initial");
-    expect(initial).toBeDefined();
+    snapshot.reminderMap = [{ reminderId: "legacy-initial", taskId: "task-private", kind: "initial", taskRevision: 1, createdAt: now }];
 
     const queued = queueTaskNotifications({
-      snapshot: { ...snapshot, reminderMap: active.reminderMap },
+      snapshot,
       task: task({
         dueAt: "2026-08-08T09:30:00.000Z",
         nextReviewAt: "2026-08-08T09:30:00.000Z",
@@ -213,24 +214,21 @@ describe("anonymous notification queue", () => {
       expect.arrayContaining([
         expect.objectContaining({
           operation: "cancel",
-          reminderId: initial?.reminderId,
+          reminderId: "legacy-initial",
         }),
       ]),
     );
   });
 
-  it("cancels an existing initial reminder when a timing setting moves it to the deadline", () => {
+  it("cancels a legacy task initial reminder during a settings rebuild", () => {
     const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
     snapshot.settings.notificationEnabled = true;
     const activeTask = task();
-    const active = queueTaskNotifications({ snapshot, task: activeTask, now, createId: ids() });
-    const initial = active.reminderMap.find((entry) => entry.kind === "initial");
-    expect(initial).toBeDefined();
-    snapshot.settings.initialReminderDelayMinutes = 360;
     snapshot.tasks = [activeTask];
+    snapshot.reminderMap = [{ reminderId: "legacy-initial", taskId: "task-private", kind: "initial", taskRevision: 1, createdAt: now }];
 
     const rebuilt = rebuildActiveTaskNotifications({
-      snapshot: { ...snapshot, reminderMap: active.reminderMap },
+      snapshot,
       now,
       createId: ids(),
     });
@@ -240,7 +238,7 @@ describe("anonymous notification queue", () => {
       expect.arrayContaining([
         expect.objectContaining({
           operation: "cancel",
-          reminderId: initial?.reminderId,
+          reminderId: "legacy-initial",
         }),
       ]),
     );

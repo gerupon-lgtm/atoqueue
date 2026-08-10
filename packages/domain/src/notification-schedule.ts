@@ -15,13 +15,11 @@ export interface PlannedNotificationSchedule {
 export function planNotificationSchedules(input: {
   task: Pick<
     Task,
-    "status" | "dueMode" | "dueAt" | "nextReviewAt" | "createdAt"
+    "status" | "dueMode" | "dueAt" | "nextReviewAt"
   >;
   settings: Pick<
     Settings,
-    | "notificationEnabled"
-    | "initialReminderDelayMinutes"
-    | "deadlineReminderLeadMinutes"
+    "notificationEnabled" | "deadlineReminderLeadMinutes"
   >;
   now: string;
 }): PlannedNotificationSchedule[] {
@@ -29,21 +27,6 @@ export function planNotificationSchedules(input: {
 
   const schedules: PlannedNotificationSchedule[] = [];
   if (input.settings.notificationEnabled) {
-    const initialAt = addMinutes(
-      input.task.createdAt,
-      input.settings.initialReminderDelayMinutes ?? 60,
-    );
-    const isBeforeDeadline =
-      input.task.dueMode !== "scheduled" ||
-      !input.task.dueAt ||
-      initialAt < input.task.dueAt;
-    if (initialAt > input.now && isBeforeDeadline) {
-      schedules.push({
-        kind: "initial",
-        scheduledAt: initialAt,
-        notificationType: "task_review",
-      });
-    }
     if (input.task.dueMode === "scheduled" && input.task.dueAt) {
       const leadMinutes = input.settings.deadlineReminderLeadMinutes ?? 60;
       if (leadMinutes > 0) {

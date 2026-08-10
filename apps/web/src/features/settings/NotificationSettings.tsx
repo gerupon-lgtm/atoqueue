@@ -355,7 +355,9 @@ export function NotificationSettings({
           </div>
         </details>
         <div className="notification-settings__timing-row">
-          <label htmlFor="initial-reminder-delay">初回通知まで（分）</label>
+          <label htmlFor="initial-reminder-delay">
+            記録の初回通知まで（分）
+          </label>
           <div className="notification-settings__number-field">
             <input
               id="initial-reminder-delay"

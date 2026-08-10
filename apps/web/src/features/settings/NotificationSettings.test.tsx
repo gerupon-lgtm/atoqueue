@@ -131,7 +131,7 @@ describe("NotificationSettings", () => {
     const user = userEvent.setup();
     render(<NotificationSettings repository={repository} />);
 
-    const initial = await screen.findByLabelText("初回通知まで（分）");
+    const initial = await screen.findByLabelText("記録の初回通知まで（分）");
     const deadline = screen.getByLabelText("期限前通知（分）");
     await user.clear(initial);
     await user.type(initial, "90");
@@ -181,7 +181,7 @@ describe("NotificationSettings", () => {
   it("groups each timing label, minute input, and unit into a compact setting row", async () => {
     render(<NotificationSettings repository={memory()} />);
 
-    const initial = await screen.findByLabelText("初回通知まで（分）");
+    const initial = await screen.findByLabelText("記録の初回通知まで（分）");
     const deadline = screen.getByLabelText("期限前通知（分）");
     expect(
       initial.closest(".notification-settings__timing-row"),

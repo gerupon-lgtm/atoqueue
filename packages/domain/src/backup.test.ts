@@ -149,12 +149,6 @@ describe("local backup", () => {
         }),
         expect.objectContaining({
           operation: "upsert",
-          notificationType: "task_review",
-          scheduledAt: "2026-08-04T10:00:00.000Z",
-          taskRevision: 3,
-        }),
-        expect.objectContaining({
-          operation: "upsert",
           notificationType: "deadline_review",
           scheduledAt: "2026-08-05T08:00:00.000Z",
           taskRevision: 3,
@@ -167,13 +161,12 @@ describe("local backup", () => {
         }),
       ]),
     );
-    expect(restored.notificationOutbox).toHaveLength(4);
+    expect(restored.notificationOutbox).toHaveLength(3);
     expect(JSON.stringify(restored.notificationOutbox)).not.toContain(taskId);
     expect(JSON.stringify(restored.notificationOutbox)).not.toContain(
       "牛乳を買う",
     );
     expect(restored.reminderMap.map((entry) => entry.kind)).toEqual([
-      "initial",
       "deadline_before",
       "review",
     ]);
@@ -368,7 +361,7 @@ describe("local backup", () => {
 
     expect(
       restored.reminderMap.filter((entry) => entry.taskId === taskId),
-    ).toHaveLength(3);
+    ).toHaveLength(2);
     expect(
       restored.reminderMap.filter((entry) => entry.scope === "inbox").length,
     ).toBeGreaterThan(0);

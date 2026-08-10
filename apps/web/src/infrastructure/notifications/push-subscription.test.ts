@@ -146,7 +146,7 @@ describe("enableNotifications", () => {
     expect((await repository.load()).device.pushDeviceSecret).toBeUndefined();
   });
 
-  it("rebuilds anonymous future reminder records for active local tasks after registration", async () => {
+  it("rebuilds only deadline-before and review records for active local tasks after registration", async () => {
     const repository = memory();
     const snapshot = await repository.load();
     snapshot.tasks = [
@@ -184,7 +184,11 @@ describe("enableNotifications", () => {
     });
 
     const saved = await repository.load();
-    expect(saved.notificationOutbox).toHaveLength(3);
+    expect(saved.notificationOutbox).toHaveLength(2);
+    expect(saved.reminderMap.map((entry) => entry.kind)).toEqual([
+      "deadline_before",
+      "review",
+    ]);
     expect(JSON.stringify(saved.notificationOutbox)).not.toContain(
       "SECRET_TASK_CANARY",
     );

@@ -111,14 +111,14 @@ export function rebuildPendingCaptureNotifications(input: {
 export function rebuildInboxReminderNotifications(input: GlobalRebuildInput): Pick<AppSnapshot, "notificationOutbox" | "reminderMap"> {
   const oldest = oldestCapture(input.snapshot.captures, "unclassified");
   const frequency = input.snapshot.settings.inboxReminderFrequency;
-  const offsets = frequency === "gentle" ? [0, 3, 7] : frequency === "prompt" ? [0, 1, 3, 7] : [];
+  const offsets = frequency === "gentle" ? [0, 3, 7] : frequency === "prompt" ? [0, 1, 3, 7] : [0];
   const initial = oldest ? addMinutes(oldest.createdAt, input.snapshot.settings.initialReminderDelayMinutes ?? 60) : undefined;
-  const oneShots = initial && frequency !== "none"
+  const oneShots = initial
     ? keepUpcomingOneShots(offsets.map((days) => addDays(initial, days)), input.now)
     : [];
-  const schedules: GlobalSchedule[] = initial && frequency !== "none"
-    ? [...oneShots.map((scheduledAt) => ({ scheduledAt })), { scheduledAt: oneShots.length === 0 ? input.now : addDays(initial, 14), repeatCadence: "weekly" }]
-    : [];
+  const schedules: GlobalSchedule[] = !initial ? []
+    : frequency === "none" ? oneShots.map((scheduledAt) => ({ scheduledAt }))
+      : [...oneShots.map((scheduledAt) => ({ scheduledAt })), { scheduledAt: oneShots.length === 0 ? input.now : addDays(initial, 14), repeatCadence: "weekly" }];
   return replaceScope(input, "inbox", schedules);
 }
 

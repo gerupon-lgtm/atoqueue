@@ -1327,7 +1327,7 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 
 **Requirements:** F-014, F-018, NF-003, NF-004, NF-005, NF-007, NF-010, NF-013
 
-**Confirmed design:** Every active task can have anonymous `initial`, `deadline_before`, and `review` reservations. The initial and deadline-before delays are global device settings, both initially 60 minutes. Completion, archival, and unneeded actions cancel every reservation for that task. The API claims reservations up to `DEADLINE_DELIVERY_LEAD_SECONDS` (default 300) ahead of the current time so a five-minute poll can attempt delivery before the deadline. This does not guarantee OS delivery time.
+**Confirmed design at the time:** Every active task could have anonymous `initial`, `deadline_before`, and `review` reservations. The initial and deadline-before delays were global device settings, both initially 60 minutes. Completion, archival, and unneeded actions cancel every reservation for that task. The API claims reservations up to `DEADLINE_DELIVERY_LEAD_SECONDS` (default 300) ahead of the current time so a five-minute poll can attempt delivery before the deadline. This does not guarantee OS delivery time. The task-owned `initial` portion was superseded by the 2026-08-10 follow-up below.
 
 **Implementation steps:** Add a versioned local model migration, plan anonymous schedules in the domain package, rebuild reservation outbox after settings or task changes, preserve schedule kinds during error recovery, and cover the API prefetch window with fake-clock tests. No task title, task ID, deadline meaning, or history may cross the API boundary.
 
@@ -1342,6 +1342,14 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 - 【確定】期限または初回通知設定の変更で不要になった既存 `initial` は、全予約再計算時に取消Outboxへ積む。
 - 検証は予定生成の境界、期限変更、設定変更、期限なし・期限未設定をドメインテストで固定する。API・PostgreSQL・Push payloadの契約は変更しない。
 - 実装結果: 上記境界をドメインテストでREDから確認して実装し、Web・Domain・Contracts 349件、API通常70件、Chromium E2E 27件、型検査、Lint、直接ビルドを通過した。表示バージョンを `mvp-1.0.1` へ更新した。
+
+### 2026-08-10 implementation follow-up: inbox-only initial reminder
+
+- 対象要件: F-004、F-006、F-014、NF-004、NF-010、NF-013。
+- 【確定】`initial` は未整理の記録を思い出す受信箱系列だけで使う。初回通知前にタスク化した場合は受信箱系列を取消し、タスク側へ `initial` を作り直さない。
+- 【確定】タスクは `deadline_before` と `review` の最大2予約を持つ。旧版のタスク所有 `initial` は次回のタスク更新または通知設定保存で取消す。
+- 【確定】受信箱の「再通知しない」は初回通知を1回だけ予約し、その後は繰り返さない。
+- TDDでは、タスク化後に3件のタスク予約が作られていた失敗、および「再通知しない」で0件だった失敗を先に再現し、期待をそれぞれ2件と1件へ修正した。表示・パッケージ・APIバージョンは `mvp-1.8.0` とする。全58ファイル480テスト、型検査、Lint、本番ビルドを通過した。
 
 ### 2026-08-09 implementation follow-up: operation feedback and version policy
 
