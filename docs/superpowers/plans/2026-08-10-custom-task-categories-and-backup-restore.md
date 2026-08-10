@@ -554,3 +554,4 @@ Expected: PWA HTTP 200 and API `status: ok`. Open Settings > App Information and
 
 - カテゴリ追加・削除の確定操作が伝わるよう、設定画面の補足文を「追加・削除した内容は、『カテゴリを保存』を押すと確定します。」へ変更する。
 - 単一画面の文言修正でロジック変更はないため、版はパッチ更新の `mvp-1.5.1` とする。
+- **配置結果（2026-08-10）:** release commit `6928b8e` をpushし、GitHub Actions Deploy run `31355031028` を完全SHA指定で実行した。Test and build、GitHub Pages、OCI notification APIの3ジョブはすべて成功した。本番API `/healthz` はHTTP 200で `version: mvp-1.5.1` を返し、公開PWAの配信JavaScriptにも `mvp-1.5.1` と上記のカテゴリ確定説明が含まれることを確認した。
