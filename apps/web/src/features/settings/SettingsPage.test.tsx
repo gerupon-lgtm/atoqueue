@@ -38,7 +38,7 @@ describe("SettingsPage", () => {
     await userEvent.setup().click(appSummary);
     expect(screen.getByText("あとキュー")).not.toBeNull();
     expect(screen.getByText(/バージョン/)).not.toBeNull();
-    expect(screen.getByText("mvp-1.10.0")).not.toBeNull();
+    expect(screen.getByText("mvp-1.11.0")).not.toBeNull();
     expect(screen.getByText("© 2026 SIKUMI LAB").closest("details")).toBeNull();
   });
 

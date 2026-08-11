@@ -65,6 +65,23 @@
 .reviewTaskCard > :not(.reviewProgress) {
   margin-block: 0;
 }
+.reviewCurrentStatus {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  color: #46554d;
+}
+.reviewCurrentStatus__value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.reviewCurrentStatus__value--completed {
+  color: #146044;
+}
+.reviewCurrentStatus__value--archived {
+  color: #963f3a;
+}
 .reviewActionSheet {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

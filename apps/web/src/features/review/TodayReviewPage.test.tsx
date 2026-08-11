@@ -144,7 +144,16 @@ describe("TodayReviewPage", () => {
     ).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "前のタスク" }));
     expect(await screen.findByText("タスク one")).toBeTruthy();
-    expect(screen.getByText("現在: 完了")).toBeTruthy();
+    expect(screen.getByText("このタスクは完了マーク済みです。")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "少し時間が経っています。今日やるか、日付を変えましょう",
+      ),
+    ).toBeNull();
+    expect(screen.getByText("現在：")).toBeTruthy();
+    expect(screen.getByText("完了", { selector: "strong" }).className).toContain(
+      "reviewCurrentStatus__value--completed",
+    );
     fireEvent.click(screen.getByRole("button", { name: "期限なし" }));
 
     await waitFor(async () => {
@@ -157,6 +166,32 @@ describe("TodayReviewPage", () => {
         "task_marked_no_due",
       ]);
     });
+  });
+
+  it("F-010 gives an archived previous task its own message and status color", async () => {
+    const repository = repositoryWithSession([task("one"), task("two")]);
+    render(
+      <TodayReviewPage
+        calendar={calendar}
+        now={() => now}
+        repository={repository}
+      />,
+    );
+
+    await screen.findByText("タスク one");
+    fireEvent.click(screen.getByRole("button", { name: "アーカイブ" }));
+    await screen.findByText("タスク two");
+    fireEvent.click(screen.getByRole("button", { name: "前のタスク" }));
+
+    expect(
+      await screen.findByText("このタスクはアーカイブマーク済みです。"),
+    ).toBeTruthy();
+    expect(screen.getByText("現在：")).toBeTruthy();
+    expect(
+      screen.getByText("アーカイブ", { selector: "strong" }).className,
+    ).toContain(
+      "reviewCurrentStatus__value--archived",
+    );
   });
 
   it("F-012 resumes an unfinished session at the next unanswered task", async () => {
@@ -199,6 +234,60 @@ describe("TodayReviewPage", () => {
     expect(screen.queryByText("タスク one")).toBeNull();
     await waitFor(async () => {
       expect((await repository.load()).reviewSessions[0]?.currentIndex).toBe(1);
+    });
+  });
+
+  it("F-012 starts a new local-day review without previous-day completed cards", async () => {
+    const previousDay = "2026-08-03T09:00:00.000Z";
+    const nextDay = "2026-08-04T09:00:00.000Z";
+    const first = task("one", {
+      status: "completed",
+      completedAt: previousDay,
+    });
+    const second = task("two");
+    const initial = createEmptySnapshot({
+      appVersion: "mvp-1.10.0",
+      localDeviceId: "device-1",
+      timeZone: "UTC",
+      now: previousDay,
+    });
+    const started = startReviewSession({
+      sessionId: "previous-day-session",
+      now: previousDay,
+      calendar,
+      tasks: [task("one"), second],
+    });
+    const repository = repositoryWithSnapshot({
+      ...initial,
+      tasks: [first, second],
+      reviewSessions: [
+        {
+          ...started,
+          currentIndex: 1,
+          visitedTaskIds: ["one"],
+          answeredTaskIds: ["one"],
+        },
+      ],
+    });
+
+    render(
+      <TodayReviewPage
+        calendar={calendar}
+        createId={() => "next-day-session"}
+        now={() => nextDay}
+        repository={repository}
+      />,
+    );
+
+    expect(await screen.findByText("タスク two")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "前のタスク" })).toBeNull();
+    expect(screen.queryByText("タスク one")).toBeNull();
+    await waitFor(async () => {
+      expect((await repository.load()).reviewSessions.at(-1)).toMatchObject({
+        id: "next-day-session",
+        localDate: "2026-08-04",
+        orderedTaskIds: ["two"],
+      });
     });
   });
 
@@ -401,7 +490,8 @@ describe("TodayReviewPage", () => {
         />,
       );
 
-      expect(await screen.findByText(`現在: ${label}`)).toBeTruthy();
+      expect(await screen.findByText("現在：")).toBeTruthy();
+      expect(screen.getByText(label, { selector: "strong" })).toBeTruthy();
     },
   );
 });

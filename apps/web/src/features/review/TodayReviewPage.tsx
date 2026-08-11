@@ -60,10 +60,14 @@ export function TodayReviewPage({
         const loaded = await repository.load();
         const selectedCalendar =
           reviewCalendar ?? createReviewCalendar(loaded.settings.timeZone);
+        const timestamp = now();
+        const localDate = selectedCalendar.today(timestamp);
         const unfinished = [...loaded.reviewSessions]
           .reverse()
-          .find((candidate) => !candidate.completedAt);
-        const timestamp = now();
+          .find(
+            (candidate) =>
+              !candidate.completedAt && candidate.localDate === localDate,
+          );
         if (unfinished && unfinished.orderedTaskIds.length > 0) {
           const refreshed = refreshReviewSession({
             session: unfinished,
@@ -288,6 +292,18 @@ export function TodayReviewPage({
     now: now(),
     calendar: selectedCalendar,
   });
+  const stateMessage =
+    task.status === "completed"
+      ? "このタスクは完了マーク済みです。"
+      : task.status === "archived"
+        ? "このタスクはアーカイブマーク済みです。"
+        : choosePrompt(level).message;
+  const statusClassName =
+    task.status === "completed"
+      ? "reviewCurrentStatus__value reviewCurrentStatus__value--completed"
+      : task.status === "archived"
+        ? "reviewCurrentStatus__value reviewCurrentStatus__value--archived"
+        : "reviewCurrentStatus__value";
   return (
     <section aria-labelledby="today-review-title">
       <header className="reviewHeader" data-testid="review-header">
@@ -324,11 +340,16 @@ export function TodayReviewPage({
           {Math.min(session.currentIndex + 1, session.orderedTaskIds.length)} /{" "}
           {session.orderedTaskIds.length}
         </p>
-        <p>{choosePrompt(level).message}</p>
+        <p>{stateMessage}</p>
         <h2>{task.title}</h2>
         <p>{presentation.deadline}</p>
         <p>{presentation.elapsed}</p>
-        {priorAnswer ? <p>現在: {priorAnswer}</p> : null}
+        {priorAnswer ? (
+          <p className="reviewCurrentStatus">
+            <span>現在：</span>
+            <strong className={statusClassName}>{priorAnswer}</strong>
+          </p>
+        ) : null}
         <ReviewActionSheet
           key={task.id}
           disabled={isSaving}
