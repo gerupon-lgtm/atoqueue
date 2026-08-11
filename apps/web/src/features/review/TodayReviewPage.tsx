@@ -4,6 +4,7 @@ import {
   calculateNeglectLevel,
   choosePrompt,
   currentReviewTask,
+  findNextUnansweredReviewIndex,
   goToNextTask,
   goToPreviousTask,
   refreshReviewSession,
@@ -63,33 +64,52 @@ export function TodayReviewPage({
           .reverse()
           .find((candidate) => !candidate.completedAt);
         const timestamp = now();
-        if (
-          unfinished &&
-          unfinished.orderedTaskIds.length > 0 &&
-          currentReviewTask({ session: unfinished, tasks: loaded.tasks })
-        ) {
+        if (unfinished && unfinished.orderedTaskIds.length > 0) {
           const refreshed = refreshReviewSession({
             session: unfinished,
             now: timestamp,
             calendar: selectedCalendar,
             tasks: loaded.tasks,
           });
-          const next =
-            refreshed === unfinished
-              ? loaded
-              : {
-                  ...loaded,
-                  reviewSessions: loaded.reviewSessions.map((candidate) =>
-                    candidate.id === unfinished.id ? refreshed : candidate,
-                  ),
-                  savedAt: timestamp,
-                };
-          if (next !== loaded) await repository.save(next);
-          if (active) {
-            setSnapshot(next);
-            setSession(refreshed);
+          const currentTaskId =
+            refreshed.orderedTaskIds[refreshed.currentIndex];
+          const currentTask = loaded.tasks.find(
+            (candidate) => candidate.id === currentTaskId,
+          );
+          const resumeIndex =
+            currentTask?.status === "active"
+              ? refreshed.currentIndex
+              : findNextUnansweredReviewIndex(
+                  refreshed,
+                  loaded.tasks,
+                  refreshed.currentIndex,
+                );
+          if (resumeIndex < refreshed.orderedTaskIds.length) {
+            const resumed =
+              resumeIndex === refreshed.currentIndex
+                ? refreshed
+                : {
+                    ...refreshed,
+                    currentIndex: resumeIndex,
+                    updatedAt: timestamp,
+                  };
+            const next =
+              resumed === unfinished
+                ? loaded
+                : {
+                    ...loaded,
+                    reviewSessions: loaded.reviewSessions.map((candidate) =>
+                      candidate.id === unfinished.id ? resumed : candidate,
+                    ),
+                    savedAt: timestamp,
+                  };
+            if (next !== loaded) await repository.save(next);
+            if (active) {
+              setSnapshot(next);
+              setSession(resumed);
+            }
+            return;
           }
-          return;
         }
         const started = startReviewSession({
           sessionId: createId(),

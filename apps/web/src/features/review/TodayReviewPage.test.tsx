@@ -159,6 +159,49 @@ describe("TodayReviewPage", () => {
     });
   });
 
+  it("F-012 resumes an unfinished session at the next unanswered task", async () => {
+    const first = task("one", { status: "completed", completedAt: now });
+    const second = task("two");
+    const initial = createEmptySnapshot({
+      appVersion: "mvp-1.9.0",
+      localDeviceId: "device-1",
+      timeZone: "UTC",
+      now,
+    });
+    const started = startReviewSession({
+      sessionId: "session-1",
+      now,
+      calendar,
+      tasks: [task("one"), second],
+    });
+    const repository = repositoryWithSnapshot({
+      ...initial,
+      tasks: [first, second],
+      reviewSessions: [
+        {
+          ...started,
+          currentIndex: 0,
+          visitedTaskIds: ["one"],
+          answeredTaskIds: ["one"],
+        },
+      ],
+    });
+
+    render(
+      <TodayReviewPage
+        calendar={calendar}
+        now={() => now}
+        repository={repository}
+      />,
+    );
+
+    expect(await screen.findByText("タスク two")).toBeTruthy();
+    expect(screen.queryByText("タスク one")).toBeNull();
+    await waitFor(async () => {
+      expect((await repository.load()).reviewSessions[0]?.currentIndex).toBe(1);
+    });
+  });
+
   it("refreshes an unfinished one-task session and exposes next navigation for a newly taskified item", async () => {
     const first = task("one");
     const second = task("new-today");
@@ -182,17 +225,20 @@ describe("TodayReviewPage", () => {
     });
 
     render(
-      <TodayReviewPage calendar={calendar} now={() => now} repository={repository} />,
+      <TodayReviewPage
+        calendar={calendar}
+        now={() => now}
+        repository={repository}
+      />,
     );
 
     expect(await screen.findByText("タスク one")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "次のタスク" }));
     expect(await screen.findByText("タスク new-today")).toBeTruthy();
     await waitFor(async () => {
-      expect((await repository.load()).reviewSessions[0]?.orderedTaskIds).toEqual([
-        "one",
-        "new-today",
-      ]);
+      expect(
+        (await repository.load()).reviewSessions[0]?.orderedTaskIds,
+      ).toEqual(["one", "new-today"]);
     });
   });
 
