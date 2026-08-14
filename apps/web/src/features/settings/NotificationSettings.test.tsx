@@ -178,6 +178,36 @@ describe("NotificationSettings", () => {
     ).toBeTruthy();
   });
 
+  it("does not select timing text on touch focus and replaces it with the first typed digit", async () => {
+    render(<NotificationSettings repository={memory()} />);
+
+    const time = (await screen.findByLabelText(
+      "期限の既定時刻",
+    )) as HTMLInputElement;
+    fireEvent.pointerDown(time, { pointerType: "touch" });
+    fireEvent.focus(time);
+    expect(time.selectionStart).toBe(time.selectionEnd);
+
+    fireEvent.input(time, {
+      data: "1",
+      inputType: "insertText",
+      target: { value: "23:591" },
+    });
+    expect(time.value).toBe("1");
+
+    const minutes = screen.getByLabelText(
+      "記録の初回通知まで（分）",
+    ) as HTMLInputElement;
+    fireEvent.pointerDown(minutes, { pointerType: "touch" });
+    fireEvent.focus(minutes);
+    fireEvent.input(minutes, {
+      data: "9",
+      inputType: "insertText",
+      target: { value: "609" },
+    });
+    expect(minutes.value).toBe("9");
+  });
+
   it("groups each timing label, minute input, and unit into a compact setting row", async () => {
     render(<NotificationSettings repository={memory()} />);
 

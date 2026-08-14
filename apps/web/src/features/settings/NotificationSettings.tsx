@@ -17,6 +17,7 @@ import {
 import "./NotificationSettings.css";
 import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 import { formatTimeZone } from "../../presentation/format-time-zone";
+import { useTouchReplaceInput } from "../../presentation/use-touch-replace-input";
 import {
   digits,
   formatTimeDigits,
@@ -67,6 +68,9 @@ export function NotificationSettings({
   const [frequenciesSaved, setFrequenciesSaved] = useState(false);
   const [frequencyError, setFrequencyError] = useState<string>();
   const defaultDeadlineTimePicker = useRef<HTMLInputElement>(null);
+  const initialDelayInput = useTouchReplaceInput();
+  const defaultDeadlineTimeInput = useTouchReplaceInput();
+  const deadlineLeadInput = useTouchReplaceInput();
   const [hasRegisteredDevice, setHasRegisteredDevice] = useState(false);
   const [setupCompleted, setSetupCompleted] = useState(false);
   const [registeredAt, setRegisteredAt] = useState<string>();
@@ -362,11 +366,14 @@ export function NotificationSettings({
             <input
               id="initial-reminder-delay"
               min="0"
+              onBlur={initialDelayInput.onBlur}
               onChange={(event) => {
                 clearTimingResult();
-                setInitialDelay(event.target.value);
+                setInitialDelay(initialDelayInput.valueForChange(event));
               }}
-              onFocus={(event) => event.currentTarget.select()}
+              onFocus={initialDelayInput.onFocus}
+              onPointerDown={initialDelayInput.onPointerDown}
+              onTouchStart={initialDelayInput.onTouchStart}
               step="1"
               type="number"
               value={initialDelay}
@@ -382,11 +389,16 @@ export function NotificationSettings({
               id="default-deadline-time"
               inputMode="numeric"
               maxLength={5}
+              onBlur={defaultDeadlineTimeInput.onBlur}
               onChange={(event) => {
                 clearTimingResult();
-                setDefaultDeadlineTime(digits(event.target.value, 4));
+                setDefaultDeadlineTime(
+                  digits(defaultDeadlineTimeInput.valueForChange(event), 4),
+                );
               }}
-              onFocus={(event) => event.currentTarget.select()}
+              onFocus={defaultDeadlineTimeInput.onFocus}
+              onPointerDown={defaultDeadlineTimeInput.onPointerDown}
+              onTouchStart={defaultDeadlineTimeInput.onTouchStart}
               pattern="[0-9:]*"
               placeholder="例: 23:59"
               value={formatTimeDigits(defaultDeadlineTime)}
@@ -420,11 +432,14 @@ export function NotificationSettings({
             <input
               id="deadline-reminder-lead"
               min="0"
+              onBlur={deadlineLeadInput.onBlur}
               onChange={(event) => {
                 clearTimingResult();
-                setDeadlineLead(event.target.value);
+                setDeadlineLead(deadlineLeadInput.valueForChange(event));
               }}
-              onFocus={(event) => event.currentTarget.select()}
+              onFocus={deadlineLeadInput.onFocus}
+              onPointerDown={deadlineLeadInput.onPointerDown}
+              onTouchStart={deadlineLeadInput.onTouchStart}
               step="1"
               type="number"
               value={deadlineLead}

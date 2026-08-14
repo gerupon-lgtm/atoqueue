@@ -1,4 +1,5 @@
-import { useRef, type FocusEvent } from "react";
+import { useRef } from "react";
+import { useTouchReplaceInput } from "../../presentation/use-touch-replace-input";
 
 export interface DeadlineInputFieldsProps {
   idPrefix: string;
@@ -26,6 +27,8 @@ export function DeadlineInputFields({
 }: DeadlineInputFieldsProps) {
   const datePicker = useRef<HTMLInputElement>(null);
   const timePicker = useRef<HTMLInputElement>(null);
+  const dateInput = useTouchReplaceInput();
+  const timeInput = useTouchReplaceInput();
   const datePickerValue = dateFromDigits(dateDigits) ?? "";
   const timePickerValue = timeFromDigits(timeDigits) ?? "";
   const touchTarget = { minHeight: "44px", minWidth: "44px" };
@@ -40,10 +43,13 @@ export function DeadlineInputFields({
               id={`${idPrefix}-date-digits`}
               inputMode="numeric"
               maxLength={10}
+              onBlur={dateInput.onBlur}
               onChange={(event) =>
-                onDateDigitsChange(digits(event.currentTarget.value, 8))
+                onDateDigitsChange(digits(dateInput.valueForChange(event), 8))
               }
-              onFocus={selectAll}
+              onFocus={dateInput.onFocus}
+              onPointerDown={dateInput.onPointerDown}
+              onTouchStart={dateInput.onTouchStart}
               pattern="[0-9/]*"
               placeholder="例: 2026/08/10"
               style={touchTarget}
@@ -93,10 +99,13 @@ export function DeadlineInputFields({
               id={`${idPrefix}-time-digits`}
               inputMode="numeric"
               maxLength={5}
+              onBlur={timeInput.onBlur}
               onChange={(event) =>
-                onTimeDigitsChange(digits(event.currentTarget.value, 4))
+                onTimeDigitsChange(digits(timeInput.valueForChange(event), 4))
               }
-              onFocus={selectAll}
+              onFocus={timeInput.onFocus}
+              onPointerDown={timeInput.onPointerDown}
+              onTouchStart={timeInput.onTouchStart}
               pattern="[0-9:]*"
               placeholder="例: 09:30"
               style={touchTarget}
@@ -198,8 +207,4 @@ function ClockIcon() {
       <path d="M12 7v5l3 2" />
     </svg>
   );
-}
-
-function selectAll(event: FocusEvent<HTMLInputElement>): void {
-  event.currentTarget.select();
 }

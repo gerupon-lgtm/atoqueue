@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DeadlineInputFields } from "./DeadlineInputFields";
 
@@ -77,5 +78,44 @@ describe("DeadlineInputFields", () => {
         "時刻を指定しない場合は、設定の既定時刻（18:30）を使います。",
       ),
     ).toBeTruthy();
+  });
+
+  it("keeps a collapsed caret on touch focus and replaces the value with the first typed digit", () => {
+    function ControlledDeadlineInput() {
+      const [dateDigits, setDateDigits] = useState("20260810");
+      return (
+        <DeadlineInputFields
+          dateDigits={dateDigits}
+          defaultDeadlineTime="18:30"
+          idPrefix="candidate"
+          onDateDigitsChange={setDateDigits}
+          onTimeDigitsChange={vi.fn()}
+          onTimeEnabledChange={vi.fn()}
+          timeDigits=""
+          timeEnabled={false}
+        />
+      );
+    }
+
+    render(<ControlledDeadlineInput />);
+    const date = screen.getByLabelText("期限日（8桁）") as HTMLInputElement;
+
+    fireEvent.pointerDown(date, { pointerType: "touch" });
+    fireEvent.focus(date);
+    expect(date.selectionStart).toBe(date.selectionEnd);
+
+    fireEvent.input(date, {
+      data: "2",
+      inputType: "insertText",
+      target: { value: "2026/08/102" },
+    });
+    expect(date.value).toBe("2");
+
+    fireEvent.input(date, {
+      data: "0",
+      inputType: "insertText",
+      target: { value: "20" },
+    });
+    expect(date.value).toBe("20");
   });
 });

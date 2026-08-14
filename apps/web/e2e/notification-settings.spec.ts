@@ -112,7 +112,7 @@ test("mobile settings keeps notification help actionable and app information on 
 
   await page.getByText("アプリ情報", { exact: true }).click();
   const information = page.getByLabel("アプリ情報");
-  await expect(information.getByText("mvp-1.11.0")).toBeVisible();
+  await expect(information.getByText("mvp-1.12.0")).toBeVisible();
   await expect(
     information.locator("dt").filter({ hasText: "バージョン" }),
   ).toHaveCSS("white-space", "nowrap");
