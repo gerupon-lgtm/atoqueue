@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DeadlineInputFields } from "./DeadlineInputFields";
@@ -38,7 +44,7 @@ describe("DeadlineInputFields", () => {
     expect(screen.queryByText("時計から時刻を選ぶ")).toBeNull();
   });
 
-  it("selects the formatted date on focus and enables a time input", () => {
+  it("selects the formatted date on focus and enables a time input", async () => {
     const onDateDigitsChange = vi.fn();
     const onTimeEnabledChange = vi.fn();
     const onTimeDigitsChange = vi.fn();
@@ -57,8 +63,10 @@ describe("DeadlineInputFields", () => {
 
     const date = screen.getByLabelText("期限日（8桁）") as HTMLInputElement;
     fireEvent.focus(date);
-    expect(date.selectionStart).toBe(0);
-    expect(date.selectionEnd).toBe(10);
+    await waitFor(() => {
+      expect(date.selectionStart).toBe(0);
+      expect(date.selectionEnd).toBe(10);
+    });
     fireEvent.click(screen.getByLabelText("期限時刻を指定する"));
     expect(onTimeEnabledChange).toHaveBeenCalledWith(true);
     rerender(
@@ -80,19 +88,20 @@ describe("DeadlineInputFields", () => {
     ).toBeTruthy();
   });
 
-  it("keeps a collapsed caret on touch focus and replaces the value with the first typed digit", () => {
+  it("selects the whole touch-focused value after a short delay and accepts a new time", async () => {
     function ControlledDeadlineInput() {
       const [dateDigits, setDateDigits] = useState("20260810");
+      const [timeDigits, setTimeDigits] = useState("2359");
       return (
         <DeadlineInputFields
           dateDigits={dateDigits}
           defaultDeadlineTime="18:30"
           idPrefix="candidate"
           onDateDigitsChange={setDateDigits}
-          onTimeDigitsChange={vi.fn()}
+          onTimeDigitsChange={setTimeDigits}
           onTimeEnabledChange={vi.fn()}
-          timeDigits=""
-          timeEnabled={false}
+          timeDigits={timeDigits}
+          timeEnabled
         />
       );
     }
@@ -102,20 +111,29 @@ describe("DeadlineInputFields", () => {
 
     fireEvent.pointerDown(date, { pointerType: "touch" });
     fireEvent.focus(date);
-    expect(date.selectionStart).toBe(date.selectionEnd);
-
-    fireEvent.input(date, {
-      data: "2",
-      inputType: "insertText",
-      target: { value: "2026/08/102" },
+    await waitFor(() => {
+      expect(date.selectionStart).toBe(0);
+      expect(date.selectionEnd).toBe(10);
     });
-    expect(date.value).toBe("2");
 
-    fireEvent.input(date, {
-      data: "0",
-      inputType: "insertText",
-      target: { value: "20" },
+    const time = screen.getByLabelText("期限時刻（4桁）") as HTMLInputElement;
+    fireEvent.pointerDown(time, { pointerType: "touch" });
+    fireEvent.focus(time);
+    await waitFor(() => {
+      expect(time.selectionStart).toBe(0);
+      expect(time.selectionEnd).toBe(5);
     });
-    expect(date.value).toBe("20");
+
+    fireEvent.input(time, { inputType: "insertText", target: { value: "1" } });
+    fireEvent.input(time, { inputType: "insertText", target: { value: "18" } });
+    fireEvent.input(time, {
+      inputType: "insertText",
+      target: { value: "18:3" },
+    });
+    fireEvent.input(time, {
+      inputType: "insertText",
+      target: { value: "18:30" },
+    });
+    expect(time.value).toBe("18:30");
   });
 });

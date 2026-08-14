@@ -112,7 +112,7 @@ test("mobile settings keeps notification help actionable and app information on 
 
   await page.getByText("アプリ情報", { exact: true }).click();
   const information = page.getByLabel("アプリ情報");
-  await expect(information.getByText("mvp-1.12.0")).toBeVisible();
+  await expect(information.getByText("mvp-1.13.0")).toBeVisible();
   await expect(
     information.locator("dt").filter({ hasText: "バージョン" }),
   ).toHaveCSS("white-space", "nowrap");
@@ -123,4 +123,39 @@ test("mobile settings keeps notification help actionable and app information on 
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);
+});
+
+test("numeric timing fields select their full value before accepting replacement input", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/settings");
+
+  const time = page.getByLabel("期限の既定時刻");
+  await time.click();
+  await expect
+    .poll(() =>
+      time.evaluate((input: HTMLInputElement) => [
+        input.selectionStart,
+        input.selectionEnd,
+      ]),
+    )
+    .toEqual([0, 5]);
+  await page.keyboard.type("1830");
+  await expect(time).toHaveValue("18:30");
+
+  const minutes = page.getByLabel("記録の初回通知まで（分）");
+  await expect(minutes).toHaveAttribute("inputmode", "numeric");
+  await expect(minutes).toHaveAttribute("type", "text");
+  await minutes.click();
+  await expect
+    .poll(() =>
+      minutes.evaluate((input: HTMLInputElement) => [
+        input.selectionStart,
+        input.selectionEnd,
+      ]),
+    )
+    .toEqual([0, 2]);
+  await page.keyboard.type("90");
+  await expect(minutes).toHaveValue("90");
 });

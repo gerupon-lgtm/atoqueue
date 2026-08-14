@@ -17,7 +17,7 @@ import {
 import "./NotificationSettings.css";
 import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 import { formatTimeZone } from "../../presentation/format-time-zone";
-import { useTouchReplaceInput } from "../../presentation/use-touch-replace-input";
+import { useDelayedSelectInput } from "../../presentation/use-delayed-select-input";
 import {
   digits,
   formatTimeDigits,
@@ -68,9 +68,9 @@ export function NotificationSettings({
   const [frequenciesSaved, setFrequenciesSaved] = useState(false);
   const [frequencyError, setFrequencyError] = useState<string>();
   const defaultDeadlineTimePicker = useRef<HTMLInputElement>(null);
-  const initialDelayInput = useTouchReplaceInput();
-  const defaultDeadlineTimeInput = useTouchReplaceInput();
-  const deadlineLeadInput = useTouchReplaceInput();
+  const initialDelayInput = useDelayedSelectInput();
+  const defaultDeadlineTimeInput = useDelayedSelectInput();
+  const deadlineLeadInput = useDelayedSelectInput();
   const [hasRegisteredDevice, setHasRegisteredDevice] = useState(false);
   const [setupCompleted, setSetupCompleted] = useState(false);
   const [registeredAt, setRegisteredAt] = useState<string>();
@@ -364,18 +364,18 @@ export function NotificationSettings({
           </label>
           <div className="notification-settings__number-field">
             <input
+              autoComplete="off"
               id="initial-reminder-delay"
-              min="0"
+              inputMode="numeric"
+              maxLength={5}
               onBlur={initialDelayInput.onBlur}
               onChange={(event) => {
                 clearTimingResult();
-                setInitialDelay(initialDelayInput.valueForChange(event));
+                setInitialDelay(digits(event.currentTarget.value, 5));
               }}
               onFocus={initialDelayInput.onFocus}
-              onPointerDown={initialDelayInput.onPointerDown}
-              onTouchStart={initialDelayInput.onTouchStart}
-              step="1"
-              type="number"
+              pattern="[0-9]*"
+              type="text"
               value={initialDelay}
             />
             <span aria-hidden="true">分後</span>
@@ -392,13 +392,9 @@ export function NotificationSettings({
               onBlur={defaultDeadlineTimeInput.onBlur}
               onChange={(event) => {
                 clearTimingResult();
-                setDefaultDeadlineTime(
-                  digits(defaultDeadlineTimeInput.valueForChange(event), 4),
-                );
+                setDefaultDeadlineTime(digits(event.currentTarget.value, 4));
               }}
               onFocus={defaultDeadlineTimeInput.onFocus}
-              onPointerDown={defaultDeadlineTimeInput.onPointerDown}
-              onTouchStart={defaultDeadlineTimeInput.onTouchStart}
               pattern="[0-9:]*"
               placeholder="例: 23:59"
               value={formatTimeDigits(defaultDeadlineTime)}
@@ -430,18 +426,18 @@ export function NotificationSettings({
           <label htmlFor="deadline-reminder-lead">期限前通知（分）</label>
           <div className="notification-settings__number-field">
             <input
+              autoComplete="off"
               id="deadline-reminder-lead"
-              min="0"
+              inputMode="numeric"
+              maxLength={5}
               onBlur={deadlineLeadInput.onBlur}
               onChange={(event) => {
                 clearTimingResult();
-                setDeadlineLead(deadlineLeadInput.valueForChange(event));
+                setDeadlineLead(digits(event.currentTarget.value, 5));
               }}
               onFocus={deadlineLeadInput.onFocus}
-              onPointerDown={deadlineLeadInput.onPointerDown}
-              onTouchStart={deadlineLeadInput.onTouchStart}
-              step="1"
-              type="number"
+              pattern="[0-9]*"
+              type="text"
               value={deadlineLead}
             />
             <span aria-hidden="true">分前</span>

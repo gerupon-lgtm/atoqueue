@@ -169,8 +169,10 @@ describe("NotificationSettings", () => {
     )) as HTMLInputElement;
     expect(time.value).toBe("23:59");
     fireEvent.focus(time);
-    expect(time.selectionStart).toBe(0);
-    expect(time.selectionEnd).toBe(5);
+    await waitFor(() => {
+      expect(time.selectionStart).toBe(0);
+      expect(time.selectionEnd).toBe(5);
+    });
     expect(
       screen.getByRole("button", {
         name: "時計で日付だけの期限に使う時刻を選ぶ",
@@ -178,7 +180,7 @@ describe("NotificationSettings", () => {
     ).toBeTruthy();
   });
 
-  it("does not select timing text on touch focus and replaces it with the first typed digit", async () => {
+  it("selects touch-focused time and minute values after a short delay", async () => {
     render(<NotificationSettings repository={memory()} />);
 
     const time = (await screen.findByLabelText(
@@ -186,24 +188,29 @@ describe("NotificationSettings", () => {
     )) as HTMLInputElement;
     fireEvent.pointerDown(time, { pointerType: "touch" });
     fireEvent.focus(time);
-    expect(time.selectionStart).toBe(time.selectionEnd);
-
-    fireEvent.input(time, {
-      data: "1",
-      inputType: "insertText",
-      target: { value: "23:591" },
+    await waitFor(() => {
+      expect(time.selectionStart).toBe(0);
+      expect(time.selectionEnd).toBe(5);
     });
+
+    fireEvent.input(time, { inputType: "insertText", target: { value: "1" } });
     expect(time.value).toBe("1");
 
     const minutes = screen.getByLabelText(
       "記録の初回通知まで（分）",
     ) as HTMLInputElement;
+    expect(minutes.type).toBe("text");
+    expect(minutes.inputMode).toBe("numeric");
     fireEvent.pointerDown(minutes, { pointerType: "touch" });
     fireEvent.focus(minutes);
+    await waitFor(() => {
+      expect(minutes.selectionStart).toBe(0);
+      expect(minutes.selectionEnd).toBe(2);
+    });
+
     fireEvent.input(minutes, {
-      data: "9",
       inputType: "insertText",
-      target: { value: "609" },
+      target: { value: "9a" },
     });
     expect(minutes.value).toBe("9");
   });
