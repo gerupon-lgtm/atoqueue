@@ -40,7 +40,7 @@
 
 ```ts
 export interface AppSnapshot {
-  schemaVersion: 7;
+  schemaVersion: 9;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -80,6 +80,8 @@ export interface Settings {
   weeklyReviewDay: 0;
   /** 未整理の受信箱全体に対する再通知頻度。 */
   inboxReminderFrequency: "none" | "gentle" | "prompt";
+  /** 対応中の期限ありタスクごとに持つ期限超過後の再通知頻度。 */
+  overdueTaskReminderFrequency: "none" | "gentle" | "prompt";
   /** note に分類したメモ一覧全体に対する棚卸し頻度。 */
   memoReviewFrequency: "none" | "weekly" | "monthly";
   /** true のとき Enter で記録し、Shift+Enter は改行とする。 */
@@ -237,7 +239,7 @@ export interface NotificationOutboxItem {
   notificationType?:
     "inbox_review" | "task_review" | "deadline_review" | "unset_due_review";
   /** 省略時は一回限り。サーバーへ送ってよい繰り返し情報だけを表す。 */
-  repeatCadence?: "weekly" | "monthly";
+  repeatCadence?: "daily" | "weekly" | "monthly";
   taskRevision: number;
   attemptCount: number;
   nextAttemptAt: string;
@@ -250,13 +252,21 @@ export interface ReminderMapEntry {
   captureId?: string;
   /** 受信箱・メモ一覧の全体予約。局所IDはサーバーへ送らない。 */
   scope?: "inbox" | "memo";
-  kind?: "capture_initial" | "initial" | "deadline_before" | "review";
+  kind?:
+    | "capture_initial"
+    | "initial"
+    | "deadline_before"
+    | "review"
+    | "overdue_first"
+    | "overdue_second"
+    | "overdue_third"
+    | "overdue_repeat";
   taskRevision: number;
   createdAt: string;
 }
 ```
 
-`reminderId` は推測困難なUUIDとする。マッピングは `taskId`、`captureId`、`scope` のいずれか一つだけを所有者として持つ。サーバーはこれらのローカルIDを受け取らない。Push payloadの `reminderId` を端末側の `ReminderMapEntry` で解決し、解決できない場合は「今日の確認」全体を開く。1タスクは `deadline_before`、`review` の最大2件を持ち、完了・アーカイブ時は全件を取消す。旧版で作られたタスク所有の `initial` は移行互換のため読み込めるが、次回のタスク通知再構築時に取消す。
+`reminderId` は推測困難なUUIDとする。マッピングは `taskId`、`captureId`、`scope` のいずれか一つだけを所有者として持つ。サーバーはこれらのローカルIDを受け取らない。Push payloadの `reminderId` を端末側の `ReminderMapEntry` で解決し、解決できない場合は「今日の確認」全体を開く。1タスクは期限前、通常確認、期限超過後の節目3件と繰り返し1件の最大6件を持つ。完了・アーカイブでは全件を取消す。期限なしでは期限関連kindを取消して通常の `review` 1件へ置換し、期限変更では同じkindの匿名予約を更新して不要なkindを取消す。旧版で作られたタスク所有の `initial` は移行互換のため読み込めるが、次回のタスク通知再構築時に取消す。
 
 ## 4. リマインド計算規則
 
@@ -292,6 +302,8 @@ export interface ReminderMapEntry {
 - 【確定】通知予約とPush購読は端末単位で扱う。MVPではタスク本文・タスク状態を端末間同期しないため、ある端末で作ったタスクの通知を別端末へ配送しない。
 - 【確定】端末データ削除では、保存済みの匿名端末識別子と秘密値でサーバー側のPush端末登録を先に無効化する。無効化に失敗した場合はローカルのスナップショットを消さず、再試行できるようにする。無効化後はブラウザのPush購読もベストエフォートで解除する。
 - 【確定】期限ありタスクは、利用者が設定した期限前の分数で予約する。初期値は60分。期限時は通常の `review` 予約を使う。
+- 【確定】期限超過タスクの再通知はタスクごとの匿名予約とし、`none` は追加予約なし、`gentle` は期限の1日後・3日後・7日後と14日後から7日ごと、`prompt` は期限の4時間後と翌日から毎日期限時刻に予約する。過去の節目は復活させず、次に来る節目または繰り返し時刻から予約する。新規端末とv8からの移行値は `gentle` とする。
+- 【確定】期限超過再通知は対応中かつ期限ありの間だけ維持する。完了・アーカイブでは当該タスクの全予約を取消す。期限なしでは期限関連予約を取消して通常の週次見直し1件へ置換し、期限変更では旧時刻の予約を置換して新期限から再構築する。「今回は閉じる」では系列を止めない。
 - 【確定】設定は端末全体に適用する。頻度変更は明示保存時にのみ、古い全体予約を取消して新頻度で組み直す。通知設定前に保存した未整理記録は、設定完了時に初回通知時刻を過ぎていれば直ちに予約する。
 - 【確定】サーバーへ送るのは匿名予約ID、予定時刻、通知種別、繰り返し間隔、端末IDだけであり、タスクID・キャプチャID・本文・期限の意味は送らない。
 - 【確定】同一通知種別・同一予定時刻の複数予約は、`notification_type` と `scheduled_at` から作る16桁の匿名SHA-256接頭辞をPushの `groupId` として共有し、一つのOS通知へ集約する。通知種別または予定時刻が異なる場合は別の `groupId` とし、以前の通知を静かに上書きしない。`groupId` にタスク本文・局所ID・期限内容を含めない。
@@ -322,7 +334,7 @@ export interface ReminderMapEntry {
 | `device_id`         | TEXT      | `device_subscriptions.device_id` 外部キー               |
 | `scheduled_at`      | TEXT      | UTC、検索索引                                           |
 | `notification_type` | TEXT      | 汎用通知種別                                            |
-| `repeat_cadence`    | TEXT NULL | `weekly` / `monthly`。NULLは一回限り                    |
+| `repeat_cadence`    | TEXT NULL | `daily` / `weekly` / `monthly`。NULLは一回限り          |
 | `status`            | TEXT      | `pending` / `claimed` / `sent` / `cancelled` / `failed` |
 | `idempotency_key`   | TEXT      | 一意                                                    |
 | `attempt_count`     | INTEGER   | 0以上                                                   |
@@ -398,6 +410,7 @@ export interface BackupEnvelopeV1 {
    - v5 → v6: 受信箱リマインドのローカル対応情報を扱える形式へ移行する。既存の未整理記録は次回の通知設定または時刻設定変更時に匿名予約を作成する。
    - v6 → v7: 受信箱再通知を `none`、メモ棚卸しを `none`、Enter登録を `true` で補う。新規スナップショットは `gentle`、`weekly`、`true` で開始する。全体予約は `ReminderMapEntry.scope` で表す。
    - v7 → v8: `customTaskCategories` を空配列で補い、Taskのカテゴリをプリセット限定型から文字列へ拡張する。既存Taskのカテゴリ値は保持する。
+   - v8 → v9: `overdueTaskReminderFrequency` を `gentle` で補う。既存の繰り返しOutboxにある `repeatCadence` は保持する。
 2. 新しい未知バージョンは上書きせず、読み取り停止とJSON退避を案内する。
 3. JSON解析失敗時は破損値を別キー `atoqueue:corrupt:<timestamp>` へ退避して初期化可否を確認する。
 4. 破損復旧や復元では元データを直ちに削除しない。

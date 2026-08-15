@@ -67,7 +67,7 @@ MVPでは利用者アカウントを持たないため、端末シークレッ�
 ```json
 {
   "status": "ok",
-  "version": "mvp-1.13.0",
+  "version": "mvp-1.14.0",
   "time": "2026-08-03T09:00:00.000Z"
 }
 ```
@@ -151,7 +151,7 @@ Request:
 - `deadline_review`
 - `unset_due_review`
 
-Requestの `repeatCadence` は省略時だけ一回限りとし、`null` は受け付けない。指定時は `weekly` または `monthly` だけを許可する。Responseの `repeatCadence` は一回限りなら `null` を返す。これは匿名系列の配送後に次回予約へ進めるための値であり、タスク・キャプチャ・メモのローカルIDは受け取らない。
+Requestの `repeatCadence` は省略時だけ一回限りとし、`null` は受け付けない。指定時は `daily`、`weekly`、`monthly` だけを許可する。Responseの `repeatCadence` は一回限りなら `null` を返す。これは匿名系列の配送後に次回予約へ進めるための値であり、タスク・キャプチャ・メモのローカルIDは受け取らない。`daily` は期限超過タスクの「こまめ」系列、`weekly` は受信箱・メモ・期限超過タスクの週次系列に使える。
 
 Response `200` または `201`:
 
@@ -207,7 +207,7 @@ Pushサービスへの送信オプションは `urgency="high"`、`TTL=86400` �
 1. 5分ごとに `status=pending AND scheduled_at<=now` を最大100件取得する。
 2. トランザクション内で `claimed` にし、`claimed_at` を記録する。
 3. Web Pushへ送信する。
-4. 一回限りの成功時は `sent`。`repeatCadence` を持つ成功時は同じ匿名予約を `pending` に戻し、`weekly` は7日後、`monthly` はUTC暦月を一つ進めた同日（存在しない日は月末）へ移す。一時失敗時は `pending` に戻して予定を5分、15分、60分後へ移す。
+4. 一回限りの成功時は `sent`。`repeatCadence` を持つ成功時は同じ匿名予約を `pending` に戻し、実際の配送時刻ではなく直前の予定時刻を基準に、`daily` は24時間後、`weekly` は7日後、`monthly` はUTC暦月を一つ進めた同日（存在しない日は月末）へ移す。一時失敗時は `pending` に戻して予定を5分、15分、60分後へ移す。
 5. 3回失敗で `failed` とする。
 6. Push endpointが404/410なら端末購読を `disabled` にし、対象端末の未配送予約を `failed` にする。この場合、繰り返し予約も次回へ進めない。
 7. 15分以上 `claimed` のままのジョブは起動時に `pending` へ戻す。

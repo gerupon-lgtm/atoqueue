@@ -103,9 +103,16 @@ describe("classification", () => {
       idFactory: (kind, scheduleKind) => `${kind}-${scheduleKind ?? "event"}`,
     });
 
-    expect(next.notificationOutbox.filter((item) => item.operation === "upsert")).toHaveLength(2);
+    expect(next.notificationOutbox.filter((item) => item.operation === "upsert")).toHaveLength(6);
     expect(next.notificationOutbox.filter((item) => item.operation === "cancel")).toHaveLength(4);
-    expect(next.reminderMap.map((entry) => entry.kind)).toEqual(["deadline_before", "review"]);
+    expect(next.reminderMap.map((entry) => entry.kind)).toEqual([
+      "deadline_before",
+      "review",
+      "overdue_first",
+      "overdue_second",
+      "overdue_third",
+      "overdue_repeat",
+    ]);
     expect(next.notificationOutbox.filter((item) => item.operation === "upsert" && item.taskRevision === 1).map((item) => ({
       operation: item.operation,
       scheduledAt: item.scheduledAt,
@@ -113,6 +120,10 @@ describe("classification", () => {
     }))).toEqual([
       { operation: "upsert", scheduledAt: "2026-08-03T13:59:00.000Z", notificationType: "deadline_review" },
       { operation: "upsert", scheduledAt: "2026-08-03T14:59:00.000Z", notificationType: "deadline_review" },
+      { operation: "upsert", scheduledAt: "2026-08-04T14:59:00.000Z", notificationType: "deadline_review" },
+      { operation: "upsert", scheduledAt: "2026-08-06T14:59:00.000Z", notificationType: "deadline_review" },
+      { operation: "upsert", scheduledAt: "2026-08-10T14:59:00.000Z", notificationType: "deadline_review" },
+      { operation: "upsert", scheduledAt: "2026-08-17T14:59:00.000Z", notificationType: "deadline_review" },
     ]);
     expect(JSON.stringify(next.notificationOutbox)).not.toContain("SECRET_TASK_CANARY");
     expect(JSON.stringify(next.notificationOutbox)).not.toContain("task-1");

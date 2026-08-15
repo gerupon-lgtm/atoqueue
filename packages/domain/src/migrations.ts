@@ -26,50 +26,54 @@ export function migrateSnapshot(input: unknown): AppSnapshot {
   if (version === 1) {
     validateSnapshot(snapshot, false);
     return normalizeSnapshot(
-      upgradeV7ToV8(upgradeV6ToV7(
+      upgradeV8ToV9(upgradeV7ToV8(upgradeV6ToV7(
         upgradeV5ToV6(
           upgradeV4ToV5(upgradeV3ToV4(upgradeV2ToV3(upgradeV1ToV2(snapshot)))),
         ),
-      )),
+      ))),
     );
   }
   if (version === 2) {
     validateSnapshot(snapshot, true);
     return normalizeSnapshot(
-      upgradeV7ToV8(upgradeV6ToV7(
+      upgradeV8ToV9(upgradeV7ToV8(upgradeV6ToV7(
         upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(upgradeV2ToV3(snapshot)))),
-      )),
+      ))),
     );
   }
   if (version === 3) {
     validateSnapshot(snapshot, true);
     return normalizeSnapshot(
-      upgradeV7ToV8(upgradeV6ToV7(upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(snapshot))))),
+      upgradeV8ToV9(upgradeV7ToV8(upgradeV6ToV7(upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(snapshot)))))),
     );
   }
   if (version === 4) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV7ToV8(upgradeV6ToV7(upgradeV5ToV6(upgradeV4ToV5(snapshot)))));
+    return normalizeSnapshot(upgradeV8ToV9(upgradeV7ToV8(upgradeV6ToV7(upgradeV5ToV6(upgradeV4ToV5(snapshot))))));
   }
   if (version === 5) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV7ToV8(upgradeV6ToV7(upgradeV5ToV6(snapshot))));
+    return normalizeSnapshot(upgradeV8ToV9(upgradeV7ToV8(upgradeV6ToV7(upgradeV5ToV6(snapshot)))));
   }
   if (version === 6) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV7ToV8(upgradeV6ToV7(snapshot)));
+    return normalizeSnapshot(upgradeV8ToV9(upgradeV7ToV8(upgradeV6ToV7(snapshot))));
   }
   if (version === 7) {
     validateSnapshot(snapshot, true, true);
-    return normalizeSnapshot(upgradeV7ToV8(snapshot));
+    return normalizeSnapshot(upgradeV8ToV9(upgradeV7ToV8(snapshot)));
   }
   if (version === 8) {
     validateSnapshot(snapshot, true, true, true);
+    return normalizeSnapshot(upgradeV8ToV9(snapshot));
+  }
+  if (version === 9) {
+    validateSnapshot(snapshot, true, true, true, true);
     return normalizeSnapshot(snapshot);
   }
   if (typeof version === "number")
     throw new UnsupportedSchemaVersionError(version);
-  throw corrupt("schemaVersion must be 1, 2, 3, 4, 5, 6, 7, or 8");
+  throw corrupt("schemaVersion must be 1, 2, 3, 4, 5, 6, 7, 8, or 9");
 }
 
 function validateSnapshot(
@@ -77,10 +81,11 @@ function validateSnapshot(
   requireReviewEventIds: boolean,
   requireV7Fields = false,
   requireV8Fields = false,
+  requireV9Fields = false,
 ): void {
   string(snapshot.appVersion, "appVersion");
   device(snapshot.device);
-  settings(snapshot.settings, requireV7Fields, requireV8Fields);
+  settings(snapshot.settings, requireV7Fields, requireV8Fields, requireV9Fields);
   entities(snapshot.captures, "captures", capture);
   entities(snapshot.tasks, "tasks", task);
   entities(snapshot.reviewSessions, "reviewSessions", (value, index) =>
@@ -141,6 +146,7 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
     "onboardingCompletedAt",
     "weeklyReviewDay",
     "inboxReminderFrequency",
+    "overdueTaskReminderFrequency",
     "memoReviewFrequency",
     "enterSavesCapture",
     "customTaskCategories",
@@ -220,6 +226,7 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
       "reminderId",
       "scheduledAt",
       "notificationType",
+      "repeatCadence",
       "taskRevision",
       "attemptCount",
       "nextAttemptAt",
@@ -293,6 +300,7 @@ function settings(
   value: unknown,
   requireV7Fields: boolean,
   requireV8Fields: boolean,
+  requireV9Fields: boolean,
 ): void {
   const entity = object(value, "settings");
   oneOf(entity.locale, "settings.locale", ["ja-JP"]);
@@ -341,6 +349,13 @@ function settings(
           : "settings.customTaskCategories is invalid",
       );
     }
+  }
+  if (requireV9Fields) {
+    oneOf(
+      entity.overdueTaskReminderFrequency,
+      "settings.overdueTaskReminderFrequency",
+      ["none", "gentle", "prompt"],
+    );
   }
   if (entity.quietHours !== undefined) {
     const quietHours = object(entity.quietHours, "settings.quietHours");
@@ -425,6 +440,19 @@ function upgradeV7ToV8(snapshot: RecordValue): RecordValue {
     settings: {
       ...settingsValue,
       customTaskCategories: [],
+    },
+  };
+}
+
+/** Version 9 adds task-owned overdue reminder frequency. */
+function upgradeV8ToV9(snapshot: RecordValue): RecordValue {
+  const settingsValue = object(snapshot.settings, "settings");
+  return {
+    ...snapshot,
+    schemaVersion: 9,
+    settings: {
+      ...settingsValue,
+      overdueTaskReminderFrequency: "gentle",
     },
   };
 }
@@ -636,6 +664,11 @@ function notificationOutboxItem(value: unknown, index: number): void {
     entity.scheduledAt,
     `notificationOutbox[${index}].scheduledAt`,
   );
+  optionalOneOf(
+    entity.repeatCadence,
+    `notificationOutbox[${index}].repeatCadence`,
+    ["daily", "weekly", "monthly"],
+  );
   numbers(entity, ["taskRevision", "attemptCount"]);
 }
 
@@ -667,6 +700,10 @@ function reminderMapEntry(
     "initial",
     "deadline_before",
     "review",
+    "overdue_first",
+    "overdue_second",
+    "overdue_third",
+    "overdue_repeat",
   ]);
 }
 

@@ -7,7 +7,7 @@ import type { PushClient } from "../push/push-client.js";
 const now = new Date("2026-08-06T09:00:00.000Z");
 const pushSubscription = { endpoint: "https://push.example/subscription", p256dh: "private-p256dh", auth: "private-auth" };
 
-function seed(repository: InMemoryReminderRepository, input: Partial<{ id: string; scheduledAt: string; status: "pending" | "claimed" | "cancelled"; attemptCount: number; claimedAt: string | null; notificationType: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review"; repeatCadence: "weekly" | "monthly" | null }> = {}) {
+function seed(repository: InMemoryReminderRepository, input: Partial<{ id: string; scheduledAt: string; status: "pending" | "claimed" | "cancelled"; attemptCount: number; claimedAt: string | null; notificationType: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review"; repeatCadence: "daily" | "weekly" | "monthly" | null }> = {}) {
   const id = input.id ?? randomUUID();
   repository.seedDevice({ deviceId: "device-1", status: "active", subscription: pushSubscription });
   repository.seed({ id, deviceId: "device-1", scheduledAt: input.scheduledAt ?? "2026-08-06T08:59:00.000Z", notificationType: input.notificationType ?? "task_review", repeatCadence: input.repeatCadence ?? null, status: input.status ?? "pending", attemptCount: input.attemptCount ?? 0, claimedAt: input.claimedAt ?? null });
@@ -107,7 +107,7 @@ describe("ReminderDispatcher", () => {
 
     await new ReminderDispatcher(repository, client(201, sends), () => now).dispatchDue();
 
-    expect(repository.get(id)).toMatchObject({ status: "pending", claimedAt: null, scheduledAt: "2026-08-13T09:00:00.000Z" });
+    expect(repository.get(id)).toMatchObject({ status: "pending", claimedAt: null, scheduledAt: "2026-08-13T08:59:00.000Z" });
     expect(sends[0]?.payload).toEqual({
       type: "review_due",
       reminderId: id,
@@ -124,6 +124,21 @@ describe("ReminderDispatcher", () => {
     await new ReminderDispatcher(repository, client(201), () => januaryNow).dispatchDue();
 
     expect(repository.get(id)).toMatchObject({ status: "pending", claimedAt: null, scheduledAt: "2026-02-28T09:00:00.000Z" });
+  });
+
+  it("reschedules a successful daily reminder from its planned time instead of its delayed delivery time", async () => {
+    const repository = new InMemoryReminderRepository();
+    const id = seed(repository, {
+      scheduledAt: "2026-08-06T08:30:00.000Z",
+      repeatCadence: "daily",
+    });
+
+    await new ReminderDispatcher(repository, client(201), () => now).dispatchDue();
+
+    expect(repository.get(id)).toMatchObject({
+      status: "pending",
+      scheduledAt: "2026-08-07T08:30:00.000Z",
+    });
   });
 
   it.each([[0, 5], [1, 15], [2, 60]])("reschedules temporary failure %s after %s minutes", async (attemptCount, minutes) => {

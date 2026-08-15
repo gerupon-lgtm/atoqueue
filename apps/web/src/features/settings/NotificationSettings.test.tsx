@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -277,14 +278,19 @@ describe("NotificationSettings", () => {
   it("uses accurate review-frequency labels and explains the compact default-deadline field", async () => {
     render(<NotificationSettings repository={memory()} />);
 
+    const inbox = await screen.findByLabelText("未整理の受信箱の確認頻度");
+    const overdue = screen.getByLabelText("期限超過タスクの再通知");
     expect(
-      await screen.findByRole("option", { name: "再通知しない" }),
+      within(inbox).getByRole("option", { name: "再通知しない" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("option", { name: "ゆっくり確認する" }),
+      within(inbox).getByRole("option", { name: "ゆっくり確認する" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("option", { name: "こまめに確認する" }),
+      within(inbox).getByRole("option", { name: "こまめに確認する" }),
+    ).toBeTruthy();
+    expect(
+      within(overdue).getByRole("option", { name: "再通知しない" }),
     ).toBeTruthy();
     expect(screen.getByRole("option", { name: "見直し通知なし" })).toBeTruthy();
     expect(screen.getByText("日付だけの期限に使います。")).toBeTruthy();
@@ -307,7 +313,7 @@ describe("NotificationSettings", () => {
     ).toBeNull();
   });
 
-  it("saves the inbox and memo review frequencies only after explicit confirmation", async () => {
+  it("saves inbox, memo, and overdue task frequencies only after explicit confirmation", async () => {
     const snapshot = createEmptySnapshot({
       appVersion: "test",
       localDeviceId: "local",
@@ -342,8 +348,10 @@ describe("NotificationSettings", () => {
 
     const inbox = await screen.findByLabelText("未整理の受信箱の確認頻度");
     const memo = screen.getByLabelText("メモの見直し頻度");
+    const overdue = screen.getByLabelText("期限超過タスクの再通知");
     await user.selectOptions(inbox, "prompt");
     await user.selectOptions(memo, "monthly");
+    await user.selectOptions(overdue, "prompt");
     expect(screen.getByText("変更を保存してください")).not.toBeNull();
     expect(
       inbox
@@ -360,6 +368,7 @@ describe("NotificationSettings", () => {
       expect((await repository.load()).settings).toMatchObject({
         inboxReminderFrequency: "prompt",
         memoReviewFrequency: "monthly",
+        overdueTaskReminderFrequency: "prompt",
       }),
     );
     expect((await repository.load()).notificationOutbox).toEqual(

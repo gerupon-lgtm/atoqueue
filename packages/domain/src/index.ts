@@ -1,4 +1,4 @@
-export const DOMAIN_SCHEMA_VERSION = 8 as const;
+export const DOMAIN_SCHEMA_VERSION = 9 as const;
 
 export * from "./errors";
 export * from "./backup";

@@ -161,7 +161,7 @@ describe("local backup", () => {
         }),
       ]),
     );
-    expect(restored.notificationOutbox).toHaveLength(3);
+    expect(restored.notificationOutbox).toHaveLength(7);
     expect(JSON.stringify(restored.notificationOutbox)).not.toContain(taskId);
     expect(JSON.stringify(restored.notificationOutbox)).not.toContain(
       "牛乳を買う",
@@ -169,6 +169,10 @@ describe("local backup", () => {
     expect(restored.reminderMap.map((entry) => entry.kind)).toEqual([
       "deadline_before",
       "review",
+      "overdue_first",
+      "overdue_second",
+      "overdue_third",
+      "overdue_repeat",
     ]);
   });
 
@@ -361,7 +365,7 @@ describe("local backup", () => {
 
     expect(
       restored.reminderMap.filter((entry) => entry.taskId === taskId),
-    ).toHaveLength(2);
+    ).toHaveLength(6);
     expect(
       restored.reminderMap.filter((entry) => entry.scope === "inbox").length,
     ).toBeGreaterThan(0);

@@ -41,7 +41,7 @@ export class ReminderDispatcher {
         },
       });
       if (result.statusCode >= 200 && result.statusCode < 300) {
-        if (job.repeatCadence) await this.repository.rescheduleAfterSend(job.id, claimedAt, nextScheduledAt(now, job.repeatCadence), now.toISOString());
+        if (job.repeatCadence) await this.repository.rescheduleAfterSend(job.id, claimedAt, nextScheduledAt(new Date(job.scheduledAt), job.repeatCadence), now.toISOString());
         else await this.repository.markSent(job.id, claimedAt, now.toISOString());
         return;
       }
@@ -70,10 +70,11 @@ function notificationGroupId(
     .slice(0, 16);
 }
 
-function nextScheduledAt(now: Date, cadence: "weekly" | "monthly"): string {
-  if (cadence === "weekly") return new Date(now.getTime() + 7 * 24 * 60 * 60_000).toISOString();
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth() + 1;
+function nextScheduledAt(scheduledAt: Date, cadence: "daily" | "weekly" | "monthly"): string {
+  if (cadence === "daily") return new Date(scheduledAt.getTime() + 24 * 60 * 60_000).toISOString();
+  if (cadence === "weekly") return new Date(scheduledAt.getTime() + 7 * 24 * 60 * 60_000).toISOString();
+  const year = scheduledAt.getUTCFullYear();
+  const month = scheduledAt.getUTCMonth() + 1;
   const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(year, month, Math.min(now.getUTCDate(), lastDay), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), now.getUTCMilliseconds())).toISOString();
+  return new Date(Date.UTC(year, month, Math.min(scheduledAt.getUTCDate(), lastDay), scheduledAt.getUTCHours(), scheduledAt.getUTCMinutes(), scheduledAt.getUTCSeconds(), scheduledAt.getUTCMilliseconds())).toISOString();
 }

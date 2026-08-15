@@ -12,6 +12,7 @@ const settings: Settings = {
   deadlineReminderLeadMinutes: 60,
   weeklyReviewDay: 0,
   inboxReminderFrequency: "none",
+  overdueTaskReminderFrequency: "none",
   memoReviewFrequency: "none",
   enterSavesCapture: true,
   customTaskCategories: [],
@@ -37,6 +38,53 @@ function scheduledTask(overrides: Partial<Task> = {}): Task {
 }
 
 describe("notification scheduling policy", () => {
+  it("F-014 plans prompt overdue reminders four hours after the deadline and then daily at the deadline time", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask(),
+      settings: { ...settings, overdueTaskReminderFrequency: "prompt" },
+      now,
+    });
+
+    expect(schedules).toEqual([
+      { kind: "deadline_before", scheduledAt: "2026-08-08T14:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "review", scheduledAt: "2026-08-08T15:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "overdue_first", scheduledAt: "2026-08-08T19:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "overdue_repeat", scheduledAt: "2026-08-09T15:00:00.000Z", notificationType: "deadline_review", repeatCadence: "daily" },
+    ]);
+  });
+
+  it("F-014 plans gentle overdue reminders at one, three, and seven days before weekly reminders", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask(),
+      settings: { ...settings, overdueTaskReminderFrequency: "gentle" },
+      now,
+    });
+
+    expect(schedules).toEqual([
+      { kind: "deadline_before", scheduledAt: "2026-08-08T14:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "review", scheduledAt: "2026-08-08T15:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "overdue_first", scheduledAt: "2026-08-09T15:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "overdue_second", scheduledAt: "2026-08-11T15:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "overdue_third", scheduledAt: "2026-08-15T15:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "overdue_repeat", scheduledAt: "2026-08-22T15:00:00.000Z", notificationType: "deadline_review", repeatCadence: "weekly" },
+    ]);
+  });
+
+  it("F-014 keeps an overdue prompt task on its next original deadline time without reviving elapsed notifications", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask({
+        dueAt: "2026-08-06T15:00:00.000Z",
+        nextReviewAt: "2026-08-06T15:00:00.000Z",
+      }),
+      settings: { ...settings, overdueTaskReminderFrequency: "prompt" },
+      now,
+    });
+
+    expect(schedules).toEqual([
+      { kind: "overdue_repeat", scheduledAt: "2026-08-08T15:00:00.000Z", notificationType: "deadline_review", repeatCadence: "daily" },
+    ]);
+  });
+
   it("creates anonymous deadline-before and deadline-time schedules without task content", () => {
     const schedules = planNotificationSchedules({
       task: scheduledTask(),

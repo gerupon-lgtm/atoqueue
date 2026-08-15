@@ -67,12 +67,12 @@ function answer(snapshot: AppSnapshot, action: "complete" | "do_today" | "resche
 describe("review task actions", () => {
   it.each([
     ["complete", {}, { status: "completed", completedAt: now }, "task_completed", "cancel"],
-    ["reopen", {}, { status: "active" }, "task_reopened", "upsert"],
+    ["reopen", {}, { status: "active" }, "task_reopened", "cancel"],
     ["reschedule", { due: { dueMode: "scheduled", dueAt: "2026-08-10T23:59:00.000Z", nextReviewAt: "2026-08-10T23:59:00.000Z" } }, { status: "active", dueAt: "2026-08-10T23:59:00.000Z" }, "task_rescheduled", "upsert"],
     ["no_due", {}, { dueMode: "none" }, "task_marked_no_due", "upsert"],
     ["dismiss", {}, { status: "active", dismissCount: 1 }, "task_dismissed", "upsert"],
     ["archive", {}, { status: "archived", archivedAt: now }, "task_archived", "cancel"],
-    ["edit", { title: "new title", category: "home" }, { title: "new title", category: "home" }, "task_edited", "upsert"],
+    ["edit", { title: "new title", category: "home" }, { title: "new title", category: "home" }, "task_edited", "cancel"],
   ] as const)("F-015 changes a task directly with %s and keeps its anonymous sync record", (change, extra, expected, action, operation) => {
     const initial = {
       ...snapshotWithSession([task("task-1", { status: change === "reopen" ? "completed" : "active", completedAt: change === "reopen" ? now : undefined })]),

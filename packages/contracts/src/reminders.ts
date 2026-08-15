@@ -7,7 +7,7 @@ const UtcTimestampSchema = z
   .refine((value) => value.endsWith("Z"), "must be an ISO 8601 UTC timestamp");
 
 export const NotificationTypeSchema = z.enum(["inbox_review", "task_review", "deadline_review", "unset_due_review"]);
-export const RepeatCadenceSchema = z.enum(["weekly", "monthly"]);
+export const RepeatCadenceSchema = z.enum(["daily", "weekly", "monthly"]);
 export type RepeatCadence = z.infer<typeof RepeatCadenceSchema>;
 
 export const CreateReminderRequestSchema = z

@@ -7,7 +7,7 @@ export function createEmptySnapshot(params: {
   now: string;
 }): AppSnapshot {
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     appVersion: params.appVersion,
     device: {
       localDeviceId: params.localDeviceId,
@@ -22,6 +22,7 @@ export function createEmptySnapshot(params: {
       defaultDeadlineTime: "23:59",
       weeklyReviewDay: 0,
       inboxReminderFrequency: "gentle",
+      overdueTaskReminderFrequency: "gentle",
       memoReviewFrequency: "weekly",
       enterSavesCapture: true,
       customTaskCategories: [],

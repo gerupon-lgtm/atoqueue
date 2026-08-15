@@ -63,6 +63,7 @@ export function queueTaskNotifications(input: {
       reminderId: mapping.reminderId,
       scheduledAt: schedule.scheduledAt,
       notificationType: schedule.notificationType,
+      ...(schedule.repeatCadence ? { repeatCadence: schedule.repeatCadence } : {}),
       taskRevision: input.task.revision,
       attemptCount: 0,
       nextAttemptAt: input.now,
@@ -223,7 +224,13 @@ function createId(input: { createId?: NotificationIdFactory }, kind: "outbox" | 
 }
 
 function scheduleKind(entry: ReminderMapEntry): ReminderScheduleKind {
-  return entry.kind === "initial" || entry.kind === "deadline_before" || entry.kind === "review"
+  return entry.kind === "initial"
+    || entry.kind === "deadline_before"
+    || entry.kind === "review"
+    || entry.kind === "overdue_first"
+    || entry.kind === "overdue_second"
+    || entry.kind === "overdue_third"
+    || entry.kind === "overdue_repeat"
     ? entry.kind
     : "review";
 }

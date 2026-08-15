@@ -166,6 +166,7 @@ describe("anonymous notification queue", () => {
   it("queues deadline-before and review schedules without recreating an initial reminder", () => {
     const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
     snapshot.settings.notificationEnabled = true;
+    snapshot.settings.overdueTaskReminderFrequency = "none";
     const queued = queueTaskNotifications({ snapshot, task: task(), now, createId: ids() });
 
     expect(queued.notificationOutbox).toHaveLength(2);
@@ -178,6 +179,7 @@ describe("anonymous notification queue", () => {
   it("cancels every previous anonymous reservation when the task becomes complete", () => {
     const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
     snapshot.settings.notificationEnabled = true;
+    snapshot.settings.overdueTaskReminderFrequency = "gentle";
     const active = queueTaskNotifications({ snapshot, task: task(), now, createId: ids() });
     const queued = queueTaskNotifications({
       snapshot: { ...snapshot, reminderMap: active.reminderMap },
@@ -186,11 +188,33 @@ describe("anonymous notification queue", () => {
       createId: ids(),
     });
 
+    expect(active.reminderMap).toHaveLength(6);
     expect(queued.reminderMap).toEqual([]);
     expect(queued.notificationOutbox.map((item) => item.reminderId).sort()).toEqual(
       active.reminderMap.map((entry) => entry.reminderId).sort(),
     );
     expect(queued.notificationOutbox.every((item) => item.operation === "cancel")).toBe(true);
+  });
+
+  it("replaces deadline-owned reservations with only the normal review when the task becomes no-due", () => {
+    const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
+    snapshot.settings.notificationEnabled = true;
+    snapshot.settings.overdueTaskReminderFrequency = "gentle";
+    const active = queueTaskNotifications({ snapshot, task: task(), now, createId: ids() });
+    const queued = queueTaskNotifications({
+      snapshot: { ...snapshot, reminderMap: active.reminderMap },
+      task: task({ dueMode: "none", dueAt: undefined, nextReviewAt: "2026-08-09T09:00:00.000Z", revision: 2 }),
+      now,
+      createId: ids(),
+    });
+
+    expect(queued.reminderMap).toEqual([
+      expect.objectContaining({ kind: "review", taskRevision: 2 }),
+    ]);
+    expect(queued.notificationOutbox.filter((item) => item.operation === "cancel")).toHaveLength(5);
+    expect(queued.notificationOutbox.filter((item) => item.operation === "upsert")).toEqual([
+      expect.objectContaining({ scheduledAt: "2026-08-09T09:00:00.000Z", notificationType: "task_review" }),
+    ]);
   });
 
   it("cancels a legacy task initial reminder during the next task update", () => {

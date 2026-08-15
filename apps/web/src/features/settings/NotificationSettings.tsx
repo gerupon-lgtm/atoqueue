@@ -3,6 +3,7 @@ import {
   rebuildActiveTaskNotifications,
   rebuildGlobalNotificationSchedules,
   type AppRepository,
+  type ReminderFrequency,
 } from "../../../../../packages/domain/src";
 import { NotificationApi } from "../../infrastructure/notifications/notification-api";
 import {
@@ -56,9 +57,12 @@ export function NotificationSettings({
   const [memoReviewFrequency, setMemoReviewFrequency] = useState<
     "none" | "weekly" | "monthly"
   >("weekly");
+  const [overdueTaskReminderFrequency, setOverdueTaskReminderFrequency] =
+    useState<ReminderFrequency>("gentle");
   const [savedFrequencies, setSavedFrequencies] = useState({
     inbox: "gentle" as "none" | "gentle" | "prompt",
     memo: "weekly" as "none" | "weekly" | "monthly",
+    overdue: "gentle" as ReminderFrequency,
   });
   const [syncStatus, setSyncStatus] = useState<"success" | "error">();
   const [syncArea, setSyncArea] = useState<"timing" | "frequency">();
@@ -96,9 +100,13 @@ export function NotificationSettings({
       );
       setInboxReminderFrequency(snapshot.settings.inboxReminderFrequency);
       setMemoReviewFrequency(snapshot.settings.memoReviewFrequency);
+      setOverdueTaskReminderFrequency(
+        snapshot.settings.overdueTaskReminderFrequency,
+      );
       setSavedFrequencies({
         inbox: snapshot.settings.inboxReminderFrequency,
         memo: snapshot.settings.memoReviewFrequency,
+        overdue: snapshot.settings.overdueTaskReminderFrequency,
       });
 
       if (
@@ -249,6 +257,7 @@ export function NotificationSettings({
           ...snapshot.settings,
           inboxReminderFrequency,
           memoReviewFrequency,
+          overdueTaskReminderFrequency,
         },
       };
       const savedAt = new Date().toISOString();
@@ -269,6 +278,7 @@ export function NotificationSettings({
       setSavedFrequencies({
         inbox: inboxReminderFrequency,
         memo: memoReviewFrequency,
+        overdue: overdueTaskReminderFrequency,
       });
       setFrequenciesSaved(true);
       await synchronizeNotifications("frequency");
@@ -322,7 +332,8 @@ export function NotificationSettings({
 
   const reviewFrequenciesDirty =
     inboxReminderFrequency !== savedFrequencies.inbox ||
-    memoReviewFrequency !== savedFrequencies.memo;
+    memoReviewFrequency !== savedFrequencies.memo ||
+    overdueTaskReminderFrequency !== savedFrequencies.overdue;
   const isConfigured = state === "granted" && hasRegisteredDevice;
 
   return (
@@ -483,6 +494,26 @@ export function NotificationSettings({
           <option value="gentle">ゆっくり確認する</option>
           <option value="prompt">こまめに確認する</option>
         </select>
+        <label htmlFor="overdue-task-reminder-frequency">
+          期限超過タスクの再通知
+        </label>
+        <select
+          id="overdue-task-reminder-frequency"
+          value={overdueTaskReminderFrequency}
+          onChange={(event) => {
+            clearFrequencyResult();
+            setOverdueTaskReminderFrequency(
+              event.target.value as ReminderFrequency,
+            );
+          }}
+        >
+          <option value="none">再通知しない</option>
+          <option value="gentle">ゆっくり確認する</option>
+          <option value="prompt">こまめに確認する</option>
+        </select>
+        <p className="notification-settings__frequency-note">
+          ゆっくりは期限の1・3・7日後から週1回、こまめは4時間後から毎日期限時刻に通知します。
+        </p>
         <label htmlFor="memo-review-frequency">メモの見直し頻度</label>
         <select
           id="memo-review-frequency"
