@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEmptySnapshot } from "./repository";
-import { rebuildActiveTaskNotifications, rebuildGlobalNotificationSchedules, rebuildInboxReminderNotifications, rebuildMemoReviewNotifications, queueTaskNotifications } from "./notification-queue";
+import { backfillMissingOverdueTaskNotifications, rebuildActiveTaskNotifications, rebuildGlobalNotificationSchedules, rebuildInboxReminderNotifications, rebuildMemoReviewNotifications, queueTaskNotifications } from "./notification-queue";
 import type { Task } from "./model";
 
 const now = "2026-08-08T09:00:00.000Z";
@@ -215,6 +215,33 @@ describe("anonymous notification queue", () => {
     expect(queued.notificationOutbox.filter((item) => item.operation === "upsert")).toEqual([
       expect.objectContaining({ scheduledAt: "2026-08-09T09:00:00.000Z", notificationType: "task_review" }),
     ]);
+  });
+
+  it("backfills overdue reservations once for an existing v8 task after migration", () => {
+    const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
+    snapshot.settings.notificationEnabled = true;
+    snapshot.settings.overdueTaskReminderFrequency = "gentle";
+    snapshot.tasks = [task()];
+    snapshot.reminderMap = [
+      { reminderId: "deadline", taskId: "task-private", kind: "deadline_before", taskRevision: 1, createdAt: now },
+      { reminderId: "review", taskId: "task-private", kind: "review", taskRevision: 1, createdAt: now },
+    ];
+
+    const backfilled = backfillMissingOverdueTaskNotifications({ snapshot, now, createId: ids() });
+
+    expect(backfilled?.reminderMap.map((entry) => entry.kind)).toEqual([
+      "deadline_before",
+      "review",
+      "overdue_first",
+      "overdue_second",
+      "overdue_third",
+      "overdue_repeat",
+    ]);
+    expect(backfillMissingOverdueTaskNotifications({
+      snapshot: { ...snapshot, ...backfilled },
+      now,
+      createId: ids(),
+    })).toBeUndefined();
   });
 
   it("cancels a legacy task initial reminder during the next task update", () => {

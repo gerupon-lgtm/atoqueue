@@ -99,6 +99,42 @@ export function rebuildActiveTaskNotifications(input: {
   return { notificationOutbox, reminderMap };
 }
 
+/** Adds the v9 overdue series once for active tasks whose older mappings lack it. */
+export function backfillMissingOverdueTaskNotifications(input: {
+  snapshot: AppSnapshot;
+  now: string;
+  createId?: NotificationIdFactory;
+}): Pick<AppSnapshot, "notificationOutbox" | "reminderMap"> | undefined {
+  if (
+    !input.snapshot.settings.notificationEnabled
+    || input.snapshot.settings.overdueTaskReminderFrequency === "none"
+  ) return undefined;
+
+  const missing = input.snapshot.tasks.filter((task) =>
+    task.status === "active"
+    && task.dueMode === "scheduled"
+    && Boolean(task.dueAt)
+    && !input.snapshot.reminderMap.some((entry) =>
+      entry.taskId === task.id && isOverdueScheduleKind(entry.kind),
+    ),
+  );
+  if (missing.length === 0) return undefined;
+
+  let reminderMap = input.snapshot.reminderMap;
+  const notificationOutbox = [...input.snapshot.notificationOutbox];
+  for (const task of missing) {
+    const queued = queueTaskNotifications({
+      snapshot: { ...input.snapshot, reminderMap },
+      task,
+      now: input.now,
+      createId: input.createId,
+    });
+    notificationOutbox.push(...queued.notificationOutbox);
+    reminderMap = queued.reminderMap;
+  }
+  return { notificationOutbox, reminderMap };
+}
+
 /** Requeues unresolved captures after notification setup or a timing change. */
 export function rebuildPendingCaptureNotifications(input: {
   snapshot: AppSnapshot;
@@ -233,6 +269,13 @@ function scheduleKind(entry: ReminderMapEntry): ReminderScheduleKind {
     || entry.kind === "overdue_repeat"
     ? entry.kind
     : "review";
+}
+
+function isOverdueScheduleKind(kind: ReminderMapEntry["kind"]): boolean {
+  return kind === "overdue_first"
+    || kind === "overdue_second"
+    || kind === "overdue_third"
+    || kind === "overdue_repeat";
 }
 
 function addMinutes(iso: string, minutes: number): string {

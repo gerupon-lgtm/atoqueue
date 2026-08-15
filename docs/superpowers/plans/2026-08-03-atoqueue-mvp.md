@@ -1472,4 +1472,5 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 - タスク単位の匿名予約kindを節目3件と繰り返し1件へ拡張し、完了・アーカイブで全取消、期限なしで通常の週次見直しへ置換、期限変更で新期限から再構築、「今回は閉じる」で維持する。
 - 契約・DB・Dispatcherへ `daily` cadenceを追加し、次回時刻は遅延した実配送時刻ではなく直前の予定時刻を基準に計算する。
 - TDDでは頻度別時刻、既に期限超過したタスクの次回時刻、完了時の最大6件取消、v8からv9への移行、日次契約・DB制約・Dispatcher、設定保存を先に失敗させてから実装する。
-- リリース版は `mvp-1.14.0` / `1.14.0`、端末保存スキーマはv9とする。本番デプロイ時にPostgreSQL migration 003で `daily / weekly / monthly` 制約へ更新する。
+- v8からv9へ更新した既存端末は、起動時に期限超過kindがない対応中・期限ありタスクだけを一度補完し、通常の起動時Outbox同期へ渡す。
+- リリース版は `mvp-1.15.0` / `1.15.0`、端末保存スキーマはv9とする。本番デプロイ時にPostgreSQL migration 003で `daily / weekly / monthly` 制約へ更新する。
