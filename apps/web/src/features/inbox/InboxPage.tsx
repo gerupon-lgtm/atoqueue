@@ -89,7 +89,7 @@ export function InboxPage({
             : markAsUnneeded({ snapshot, captureId, now: now() });
       await repository.save(next);
       await reload();
-      await synchronize(
+      void synchronize(
         type === "unneeded" ? "不要にしました。" : "メモにしました。",
         type === "unneeded"
           ? "不要にしました。通知の取消は送信待ちです。"
@@ -109,7 +109,7 @@ export function InboxPage({
       });
       await repository.save(next);
       await reload();
-      await synchronize(
+      void synchronize(
         "未整理に戻しました。",
         "未整理に戻しました。通知の更新は送信待ちです。",
       );
@@ -128,7 +128,7 @@ export function InboxPage({
       });
       await repository.save(next);
       await reload();
-      await synchronize(
+      void synchronize(
         "完全に削除しました。",
         "完全に削除しました。通知の取消は送信待ちです。",
       );
@@ -180,7 +180,7 @@ export function InboxPage({
       await repository.save(next);
       await reload();
       cancelSelection();
-      await synchronize(
+      void synchronize(
         `${captureIds.length}件を未整理に戻しました。`,
         `${captureIds.length}件を未整理に戻しました。通知の更新は送信待ちです。`,
       );
@@ -208,7 +208,7 @@ export function InboxPage({
       await repository.save(next);
       await reload();
       cancelSelection();
-      await synchronize(
+      void synchronize(
         `${captureIds.length}件を完全に削除しました。`,
         `${captureIds.length}件を完全に削除しました。通知の取消は送信待ちです。`,
       );

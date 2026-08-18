@@ -408,6 +408,23 @@ describe("InboxPage", () => {
     ).toBeLessThan(sync.mock.invocationCallOrder[0]!);
   });
 
+  it("F-004 re-enables the remaining inbox actions after the local unneeded save while notification sync is pending", async () => {
+    const repository = repositoryWithCaptures();
+    const sync = vi.fn(() => new Promise<never>(() => undefined));
+    render(<InboxPage now={() => now} repository={repository} sync={sync} />);
+
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "不要" }))[0]!,
+    );
+
+    await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "不要" }).hasAttribute("disabled"),
+      ).toBe(false),
+    );
+  });
+
   it("F-014 keeps the unneeded classification and reports a queued cancellation when sync fails", async () => {
     const repository = repositoryWithCaptures();
     const sync = vi.fn().mockRejectedValue(new Error("offline"));
