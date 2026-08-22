@@ -1,4 +1,5 @@
 import { CorruptDataError, UnsupportedSchemaVersionError } from "./errors";
+import { validateCustomTaskCategories } from "./task-categories";
 import type { AppSnapshot } from "./model";
 
 type RecordValue = Record<string, unknown>;
@@ -25,33 +26,66 @@ export function migrateSnapshot(input: unknown): AppSnapshot {
   if (version === 1) {
     validateSnapshot(snapshot, false);
     return normalizeSnapshot(
-      upgradeV3ToV4(upgradeV2ToV3(upgradeV1ToV2(snapshot))),
+      upgradeV8ToV9(upgradeV7ToV8(upgradeV6ToV7(
+        upgradeV5ToV6(
+          upgradeV4ToV5(upgradeV3ToV4(upgradeV2ToV3(upgradeV1ToV2(snapshot)))),
+        ),
+      ))),
     );
   }
   if (version === 2) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV3ToV4(upgradeV2ToV3(snapshot)));
+    return normalizeSnapshot(
+      upgradeV8ToV9(upgradeV7ToV8(upgradeV6ToV7(
+        upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(upgradeV2ToV3(snapshot)))),
+      ))),
+    );
   }
   if (version === 3) {
     validateSnapshot(snapshot, true);
-    return normalizeSnapshot(upgradeV3ToV4(snapshot));
+    return normalizeSnapshot(
+      upgradeV8ToV9(upgradeV7ToV8(upgradeV6ToV7(upgradeV5ToV6(upgradeV4ToV5(upgradeV3ToV4(snapshot)))))),
+    );
   }
   if (version === 4) {
     validateSnapshot(snapshot, true);
+    return normalizeSnapshot(upgradeV8ToV9(upgradeV7ToV8(upgradeV6ToV7(upgradeV5ToV6(upgradeV4ToV5(snapshot))))));
+  }
+  if (version === 5) {
+    validateSnapshot(snapshot, true);
+    return normalizeSnapshot(upgradeV8ToV9(upgradeV7ToV8(upgradeV6ToV7(upgradeV5ToV6(snapshot)))));
+  }
+  if (version === 6) {
+    validateSnapshot(snapshot, true);
+    return normalizeSnapshot(upgradeV8ToV9(upgradeV7ToV8(upgradeV6ToV7(snapshot))));
+  }
+  if (version === 7) {
+    validateSnapshot(snapshot, true, true);
+    return normalizeSnapshot(upgradeV8ToV9(upgradeV7ToV8(snapshot)));
+  }
+  if (version === 8) {
+    validateSnapshot(snapshot, true, true, true);
+    return normalizeSnapshot(upgradeV8ToV9(snapshot));
+  }
+  if (version === 9) {
+    validateSnapshot(snapshot, true, true, true, true);
     return normalizeSnapshot(snapshot);
   }
   if (typeof version === "number")
     throw new UnsupportedSchemaVersionError(version);
-  throw corrupt("schemaVersion must be 1, 2, 3, or 4");
+  throw corrupt("schemaVersion must be 1, 2, 3, 4, 5, 6, 7, 8, or 9");
 }
 
 function validateSnapshot(
   snapshot: RecordValue,
   requireReviewEventIds: boolean,
+  requireV7Fields = false,
+  requireV8Fields = false,
+  requireV9Fields = false,
 ): void {
   string(snapshot.appVersion, "appVersion");
   device(snapshot.device);
-  settings(snapshot.settings);
+  settings(snapshot.settings, requireV7Fields, requireV8Fields, requireV9Fields);
   entities(snapshot.captures, "captures", capture);
   entities(snapshot.tasks, "tasks", task);
   entities(snapshot.reviewSessions, "reviewSessions", (value, index) =>
@@ -69,7 +103,9 @@ function validateSnapshot(
     "notificationOutbox",
     notificationOutboxItem,
   );
-  entities(snapshot.reminderMap, "reminderMap", reminderMapEntry);
+  entities(snapshot.reminderMap, "reminderMap", (value, index) =>
+    reminderMapEntry(value, index, requireV7Fields),
+  );
   string(snapshot.savedAt, "savedAt");
 }
 
@@ -106,8 +142,14 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
     "notificationEnabled",
     "initialReminderDelayMinutes",
     "deadlineReminderLeadMinutes",
+    "defaultDeadlineTime",
     "onboardingCompletedAt",
     "weeklyReviewDay",
+    "inboxReminderFrequency",
+    "overdueTaskReminderFrequency",
+    "memoReviewFrequency",
+    "enterSavesCapture",
+    "customTaskCategories",
   ]);
   if (settingsValue.quietHours !== undefined) {
     normalizedSettings.quietHours = copyKnown(
@@ -184,6 +226,7 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
       "reminderId",
       "scheduledAt",
       "notificationType",
+      "repeatCadence",
       "taskRevision",
       "attemptCount",
       "nextAttemptAt",
@@ -193,6 +236,8 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
   normalized.reminderMap = normalizedEntities(snapshot.reminderMap, [
     "reminderId",
     "taskId",
+    "captureId",
+    "scope",
     "kind",
     "taskRevision",
     "createdAt",
@@ -251,7 +296,12 @@ function device(value: unknown): void {
   optionalString(entity.registeredAt, "device.registeredAt");
 }
 
-function settings(value: unknown): void {
+function settings(
+  value: unknown,
+  requireV7Fields: boolean,
+  requireV8Fields: boolean,
+  requireV9Fields: boolean,
+): void {
   const entity = object(value, "settings");
   oneOf(entity.locale, "settings.locale", ["ja-JP"]);
   string(entity.timeZone, "settings.timeZone");
@@ -260,6 +310,7 @@ function settings(value: unknown): void {
     entity.initialReminderDelayMinutes,
     "settings.initialReminderDelayMinutes",
   );
+  optionalClockTime(entity.defaultDeadlineTime, "settings.defaultDeadlineTime");
   optionalReminderMinutes(
     entity.deadlineReminderLeadMinutes,
     "settings.deadlineReminderLeadMinutes",
@@ -270,6 +321,41 @@ function settings(value: unknown): void {
   );
   if (entity.weeklyReviewDay !== 0) {
     throw corrupt("settings.weeklyReviewDay must be 0");
+  }
+  if (requireV7Fields) {
+    oneOf(entity.inboxReminderFrequency, "settings.inboxReminderFrequency", [
+      "none",
+      "gentle",
+      "prompt",
+    ]);
+    oneOf(entity.memoReviewFrequency, "settings.memoReviewFrequency", [
+      "none",
+      "weekly",
+      "monthly",
+    ]);
+    boolean(entity.enterSavesCapture, "settings.enterSavesCapture");
+  }
+  if (requireV8Fields) {
+    stringArray(
+      entity.customTaskCategories,
+      "settings.customTaskCategories",
+    );
+    try {
+      validateCustomTaskCategories(entity.customTaskCategories as string[]);
+    } catch (reason) {
+      throw corrupt(
+        reason instanceof Error
+          ? reason.message
+          : "settings.customTaskCategories is invalid",
+      );
+    }
+  }
+  if (requireV9Fields) {
+    oneOf(
+      entity.overdueTaskReminderFrequency,
+      "settings.overdueTaskReminderFrequency",
+      ["none", "gentle", "prompt"],
+    );
   }
   if (entity.quietHours !== undefined) {
     const quietHours = object(entity.quietHours, "settings.quietHours");
@@ -312,6 +398,65 @@ function upgradeV3ToV4(snapshot: RecordValue): RecordValue {
   };
 }
 
+/** Version 5 lets date-only deadlines follow an explicit local default time. */
+function upgradeV4ToV5(snapshot: RecordValue): RecordValue {
+  const settingsValue = object(snapshot.settings, "settings");
+  return {
+    ...snapshot,
+    schemaVersion: 5,
+    settings: {
+      ...settingsValue,
+      defaultDeadlineTime: settingsValue.defaultDeadlineTime ?? "23:59",
+    },
+  };
+}
+
+/** Version 6 adds capture-owned anonymous inbox reminders. */
+function upgradeV5ToV6(snapshot: RecordValue): RecordValue {
+  return { ...snapshot, schemaVersion: 6 };
+}
+
+/** Version 7 adds opt-in recurring inbox and memo review preferences. */
+function upgradeV6ToV7(snapshot: RecordValue): RecordValue {
+  const settingsValue = object(snapshot.settings, "settings");
+  return {
+    ...snapshot,
+    schemaVersion: 7,
+    settings: {
+      ...settingsValue,
+      inboxReminderFrequency: "none",
+      memoReviewFrequency: "none",
+      enterSavesCapture: true,
+    },
+  };
+}
+
+/** Version 8 adds device-local custom task category names. */
+function upgradeV7ToV8(snapshot: RecordValue): RecordValue {
+  const settingsValue = object(snapshot.settings, "settings");
+  return {
+    ...snapshot,
+    schemaVersion: 8,
+    settings: {
+      ...settingsValue,
+      customTaskCategories: [],
+    },
+  };
+}
+
+/** Version 9 adds task-owned overdue reminder frequency. */
+function upgradeV8ToV9(snapshot: RecordValue): RecordValue {
+  const settingsValue = object(snapshot.settings, "settings");
+  return {
+    ...snapshot,
+    schemaVersion: 9,
+    settings: {
+      ...settingsValue,
+      overdueTaskReminderFrequency: "gentle",
+    },
+  };
+}
+
 function optionalReminderMinutes(value: unknown, name: string): void {
   if (value === undefined) return;
   if (
@@ -322,6 +467,12 @@ function optionalReminderMinutes(value: unknown, name: string): void {
   ) {
     throw corrupt(`${name} must be an integer between 0 and 10080`);
   }
+}
+
+function optionalClockTime(value: unknown, name: string): void {
+  if (value === undefined) return;
+  if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value))
+    throw corrupt(`${name} must use HH:MM.`);
 }
 
 function capture(value: unknown, index: number): void {
@@ -357,12 +508,7 @@ function task(value: unknown, index: number): void {
     "scheduled",
     "none",
   ]);
-  optionalOneOf(entity.category, `tasks[${index}].category`, [
-    "work",
-    "home",
-    "shopping",
-    "other",
-  ]);
+  optionalTaskCategory(entity.category, `tasks[${index}].category`);
   optionalStrings(
     entity,
     ["dueAt", "lastPromptedAt", "completedAt", "archivedAt"],
@@ -512,23 +658,52 @@ function notificationOutboxItem(value: unknown, index: number): void {
   optionalOneOf(
     entity.notificationType,
     `notificationOutbox[${index}].notificationType`,
-    ["task_review", "deadline_review", "unset_due_review"],
+    ["inbox_review", "task_review", "deadline_review", "unset_due_review"],
   );
   optionalString(
     entity.scheduledAt,
     `notificationOutbox[${index}].scheduledAt`,
   );
+  optionalOneOf(
+    entity.repeatCadence,
+    `notificationOutbox[${index}].repeatCadence`,
+    ["daily", "weekly", "monthly"],
+  );
   numbers(entity, ["taskRevision", "attemptCount"]);
 }
 
-function reminderMapEntry(value: unknown, index: number): void {
+function reminderMapEntry(
+  value: unknown,
+  index: number,
+  allowGlobalScope: boolean,
+): void {
   const entity = object(value, `reminderMap[${index}]`);
-  strings(entity, ["reminderId", "taskId", "createdAt"]);
+  strings(entity, ["reminderId", "createdAt"]);
+  const hasTask = entity.taskId !== undefined;
+  const hasCapture = entity.captureId !== undefined;
+  const hasScope = entity.scope !== undefined;
+  if (hasTask) string(entity.taskId, `reminderMap[${index}].taskId`);
+  if (hasCapture)
+    string(entity.captureId, `reminderMap[${index}].captureId`);
+  if (!allowGlobalScope && hasScope) {
+    throw corrupt(`reminderMap[${index}].scope is invalid`);
+  }
+  if (hasScope) {
+    oneOf(entity.scope, `reminderMap[${index}].scope`, ["inbox", "memo"]);
+  }
+  if (Number(hasTask) + Number(hasCapture) + Number(hasScope) !== 1) {
+    throw corrupt(`reminderMap[${index}] must have exactly one local owner`);
+  }
   number(entity.taskRevision, `reminderMap[${index}].taskRevision`);
   optionalOneOf(entity.kind, `reminderMap[${index}].kind`, [
+    "capture_initial",
     "initial",
     "deadline_before",
     "review",
+    "overdue_first",
+    "overdue_second",
+    "overdue_third",
+    "overdue_repeat",
   ]);
 }
 
@@ -618,6 +793,15 @@ function optionalOneOf(
   allowed: readonly string[] | ReadonlySet<string>,
 ): void {
   if (value !== undefined) oneOf(value, name, allowed);
+}
+
+function optionalTaskCategory(value: unknown, name: string): void {
+  if (value === undefined) return;
+  string(value, name);
+  const length = [...(value as string)].length;
+  if (length < 1 || length > 12 || (value as string).trim() !== value) {
+    throw corrupt(`${name} must be a trimmed string between 1 and 12 characters`);
+  }
 }
 
 function corrupt(message: string): CorruptDataError {

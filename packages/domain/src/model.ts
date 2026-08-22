@@ -1,5 +1,5 @@
 export interface AppSnapshot {
-  schemaVersion: 4;
+  schemaVersion: 9;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -29,11 +29,27 @@ export interface Settings {
   initialReminderDelayMinutes?: number;
   /** Minutes before a scheduled deadline. The user currently prefers 60 minutes. */
   deadlineReminderLeadMinutes?: number;
+  /** Local wall-clock time used when a deadline date has no explicit time. */
+  defaultDeadlineTime?: string;
   /** Local dismissal marker for the first-use guide. */
   onboardingCompletedAt?: string;
   quietHours?: { start: string; end: string };
   weeklyReviewDay: 0;
+  inboxReminderFrequency: InboxReminderFrequency;
+  /** Active scheduled tasks keep reminding after their deadline until resolved. */
+  overdueTaskReminderFrequency: ReminderFrequency;
+  memoReviewFrequency: MemoReviewFrequency;
+  enterSavesCapture: boolean;
+  customTaskCategories: string[];
 }
+
+export type ReminderFrequency = "none" | "gentle" | "prompt";
+
+export type InboxReminderFrequency = ReminderFrequency;
+
+export type MemoReviewFrequency = "none" | "weekly" | "monthly";
+
+export type RepeatCadence = "daily" | "weekly" | "monthly";
 
 export interface Capture {
   id: string;
@@ -49,7 +65,7 @@ export interface Task {
   id: string;
   sourceCaptureId: string;
   title: string;
-  category?: "work" | "home" | "shopping" | "other";
+  category?: string;
   status: "active" | "completed" | "archived";
   dueMode: "unset" | "scheduled" | "none";
   dueAt?: string;
@@ -109,7 +125,9 @@ export interface NotificationOutboxItem {
   operation: "upsert" | "cancel";
   reminderId: string;
   scheduledAt?: string;
-  notificationType?: "task_review" | "deadline_review" | "unset_due_review";
+  notificationType?: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review";
+  /** Server-side recurrence is anonymous; only its cadence leaves the device. */
+  repeatCadence?: RepeatCadence;
   taskRevision: number;
   attemptCount: number;
   nextAttemptAt: string;
@@ -118,8 +136,19 @@ export interface NotificationOutboxItem {
 
 export interface ReminderMapEntry {
   reminderId: string;
-  taskId: string;
-  kind?: "initial" | "deadline_before" | "review";
+  /** One local owner only. Mappings are never sent to the server. */
+  taskId?: string;
+  captureId?: string;
+  scope?: "inbox" | "memo";
+  kind?:
+    | "capture_initial"
+    | "initial"
+    | "deadline_before"
+    | "review"
+    | "overdue_first"
+    | "overdue_second"
+    | "overdue_third"
+    | "overdue_repeat";
   taskRevision: number;
   createdAt: string;
 }

@@ -9,7 +9,9 @@ import {
   completeOnboarding,
   createCapture,
   type AppRepository,
+  type AppSnapshot,
 } from "../../../../../packages/domain/src";
+import type { NotificationSetupResult } from "../../infrastructure/notifications/push-subscription";
 import "./QuickCapturePage.css";
 
 const SUCCESS_MESSAGE = "保存しました。いまの作業に戻って大丈夫です";
@@ -21,29 +23,36 @@ export interface QuickCapturePageProps {
   repository: AppRepository;
   now?: () => string;
   createId?: () => string;
+  onNotificationChanged?: () => Promise<unknown>;
+  setupNotifications?: () => Promise<NotificationSetupResult>;
 }
 
 export function QuickCapturePage({
   repository,
   now = () => new Date().toISOString(),
   createId = defaultCreateId,
+  onNotificationChanged,
+  setupNotifications,
 }: QuickCapturePageProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lastPersistedDraft = useRef<string | undefined>(undefined);
   const draftGeneration = useRef(0);
   const draftWriteQueue = useRef<Promise<void>>(Promise.resolve());
   const pendingDraftClear = useRef<string | undefined>(undefined);
+  const preferenceSaveInProgress = useRef(false);
   const [body, setBody] = useState("");
   const [unclassifiedCount, setUnclassifiedCount] = useState(0);
   const [isDraftLoaded, setIsDraftLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [loadedSnapshot, setLoadedSnapshot] = useState<AppSnapshot>();
+  const [enterSavesCapture, setEnterSavesCapture] = useState(true);
+  const [isSavingEnterPreference, setIsSavingEnterPreference] = useState(false);
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
   const [showOnboarding, setShowOnboarding] = useState(false);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  const [showNotificationSetup, setShowNotificationSetup] = useState(false);
+  const [isConfiguringNotifications, setIsConfiguringNotifications] =
+    useState(false);
 
   useEffect(() => {
     let isCurrent = true;
@@ -51,12 +60,23 @@ export function QuickCapturePage({
     void Promise.all([repository.load(), repository.loadDraft()])
       .then(async ([snapshot, draft]) => {
         if (!isCurrent) return;
+        setLoadedSnapshot(snapshot);
+        setEnterSavesCapture(snapshot.settings.enterSavesCapture);
+        if (snapshot.device.pushSubscriptionStatus !== "not_requested") {
+          inputRef.current?.focus();
+        }
         setUnclassifiedCount(
           snapshot.captures.filter(
             (capture) => capture.classification === "unclassified",
           ).length,
         );
         setShowOnboarding(!snapshot.settings.onboardingCompletedAt);
+        setShowNotificationSetup(
+          Boolean(
+            setupNotifications &&
+            snapshot.device.pushSubscriptionStatus === "not_requested",
+          ),
+        );
 
         if (!draft) {
           lastPersistedDraft.current = "";
@@ -117,7 +137,12 @@ export function QuickCapturePage({
   }, [body, isDraftLoaded, repository]);
 
   async function saveCapture(): Promise<void> {
-    if (body.trim().length === 0 || body.trim().length > 280 || isSaving)
+    if (
+      body.trim().length === 0 ||
+      body.trim().length > 280 ||
+      isSaving ||
+      preferenceSaveInProgress.current
+    )
       return;
 
     setIsSaving(true);
@@ -145,6 +170,8 @@ export function QuickCapturePage({
         createId(),
       );
       await repository.save(next);
+      setLoadedSnapshot(next);
+      void onNotificationChanged?.();
       pendingDraftClear.current = body;
       await repository.clearDraft();
       pendingDraftClear.current = undefined;
@@ -166,18 +193,84 @@ export function QuickCapturePage({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
-    if (event.key === "Enter" && !event.shiftKey && !event.altKey) {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.altKey &&
+      (enterSavesCapture || event.ctrlKey || event.metaKey)
+    ) {
       event.preventDefault();
       void saveCapture();
     }
   }
 
+  async function saveEnterSavesCapture(nextValue: boolean): Promise<void> {
+    if (preferenceSaveInProgress.current || !loadedSnapshot) return;
+
+    const previousValue = enterSavesCapture;
+    preferenceSaveInProgress.current = true;
+    setEnterSavesCapture(nextValue);
+    setIsSavingEnterPreference(true);
+    try {
+      const currentSnapshot = await repository.load();
+      const nextSnapshot: AppSnapshot = {
+        ...currentSnapshot,
+        settings: {
+          ...currentSnapshot.settings,
+          enterSavesCapture: nextValue,
+        },
+      };
+      await repository.save(nextSnapshot);
+      setLoadedSnapshot(nextSnapshot);
+    } catch {
+      setEnterSavesCapture(previousValue);
+      setError(FAILURE_MESSAGE);
+    } finally {
+      preferenceSaveInProgress.current = false;
+      setIsSavingEnterPreference(false);
+    }
+  }
+
   async function dismissOnboarding(): Promise<void> {
     try {
-      await repository.save(completeOnboarding(await repository.load(), now()));
+      const nextSnapshot = completeOnboarding(await repository.load(), now());
+      await repository.save(nextSnapshot);
+      setLoadedSnapshot(nextSnapshot);
       setShowOnboarding(false);
     } catch {
       setError(FAILURE_MESSAGE);
+    }
+  }
+
+  async function configureNotifications(): Promise<void> {
+    if (!setupNotifications || isConfiguringNotifications) return;
+
+    setIsConfiguringNotifications(true);
+    setError(undefined);
+    setMessage(undefined);
+    try {
+      const result = await setupNotifications();
+      const nextSnapshot = await repository.load();
+      setLoadedSnapshot(nextSnapshot);
+      setEnterSavesCapture(nextSnapshot.settings.enterSavesCapture);
+      setShowNotificationSetup(false);
+      if (result.state === "granted") {
+        void onNotificationChanged?.();
+        setMessage("通知を設定しました。");
+      } else if (result.state === "denied") {
+        setError("ブラウザの設定から通知を許可してください。");
+      } else if (result.state === "unavailable") {
+        setError("このブラウザでは通知を利用できません。");
+      } else {
+        setError(
+          "通知を設定できませんでした。設定からもう一度お試しください。",
+        );
+      }
+    } catch {
+      setShowNotificationSetup(false);
+      setError("通知を設定できませんでした。設定からもう一度お試しください。");
+    } finally {
+      setIsConfiguringNotifications(false);
     }
   }
 
@@ -200,6 +293,22 @@ export function QuickCapturePage({
           </button>
         </section>
       ) : null}
+      {showNotificationSetup ? (
+        <section
+          className="quick-capture__notification-setup"
+          aria-labelledby="capture-notification-setup-title"
+        >
+          <h2 id="capture-notification-setup-title">通知を設定する</h2>
+          <p>記録したことを後で思い出すために、この端末の通知を設定します。</p>
+          <button
+            disabled={isConfiguringNotifications}
+            onClick={() => void configureNotifications()}
+            type="button"
+          >
+            通知を設定する
+          </button>
+        </section>
+      ) : null}
       <p>受信箱の未整理: {unclassifiedCount}件</p>
       <form className="quick-capture__form" onSubmit={handleSubmit}>
         <label htmlFor="quick-capture-body">思いついたこと</label>
@@ -214,15 +323,33 @@ export function QuickCapturePage({
           ref={inputRef}
           rows={3}
           maxLength={280}
-          readOnly={isSaving}
+          readOnly={isSaving || isSavingEnterPreference}
           value={body}
         />
-        <button
-          disabled={body.trim().length === 0 || isTooLong || isSaving}
-          type="submit"
-        >
-          保存して戻る
-        </button>
+        <div className="quick-capture__actions">
+          <button
+            disabled={
+              body.trim().length === 0 ||
+              isTooLong ||
+              isSaving ||
+              isSavingEnterPreference
+            }
+            type="submit"
+          >
+            保存して戻る
+          </button>
+          <label className="quick-capture__enter-save">
+            <input
+              checked={enterSavesCapture}
+              disabled={isSaving || isSavingEnterPreference || !loadedSnapshot}
+              onChange={(event) => {
+                void saveEnterSavesCapture(event.target.checked);
+              }}
+              type="checkbox"
+            />
+            改行で登録
+          </label>
+        </div>
       </form>
       {message ? <p role="status">{message}</p> : null}
       {isTooLong ? <p role="alert">{LENGTH_MESSAGE}</p> : null}

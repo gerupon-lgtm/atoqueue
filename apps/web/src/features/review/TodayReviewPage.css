@@ -1,27 +1,196 @@
 .reviewHeader {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  gap: 0.375rem;
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
-.reviewHeader__previous { justify-self: start; min-height: 44px; }
-.reviewHeader__title { justify-self: center; margin: 0; text-align: center; }
-.reviewHeader__progress { justify-self: end; margin: 0; white-space: nowrap; }
-.reviewTaskCard { max-width: 42rem; margin: 0 auto; padding: 1rem; border: 1px solid #c6d0c8; border-radius: 0.75rem; background: #fff; }
-.reviewActionSheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-top: 1rem; }
-.reviewActionSheet button { min-height: 44px; }
+.app-shell__content .reviewHeader__previous,
+.app-shell__content .reviewHeader__next {
+  justify-self: end;
+  min-height: 44px;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.2;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
 
-@media (min-width: 768px) {
-  .reviewHeader {
-    width: 100vw;
-    margin-left: calc(-1 * (var(--app-navigation-width) + var(--app-content-padding)));
+@media (max-width: 359px) {
+  .reviewHeader__title {
+    font-size: 1.45rem;
+  }
+
+  .app-shell__content .reviewHeader__previous,
+  .app-shell__content .reviewHeader__next {
+    padding-inline: 0.35rem;
+    font-size: 0.75rem;
+  }
+}
+
+.app-shell__content .reviewHeader__next {
+  border-color: #b8c8bc;
+  background: #fffdf8;
+  color: #285c50;
+}
+.reviewHeader__title {
+  justify-self: start;
+  margin: 0;
+  text-align: left;
+}
+.reviewProgress {
+  justify-self: end;
+  margin: 0;
+  text-align: right;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+.reviewTaskCard {
+  display: grid;
+  gap: 0.625rem;
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1rem;
+  box-sizing: border-box;
+  border: 1px solid #c6d0c8;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.reviewTaskCard > :not(.reviewProgress) {
+  margin-block: 0;
+}
+.reviewTaskCategory {
+  display: inline-flex;
+  justify-self: start;
+  width: fit-content;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid #c8d0ca;
+  border-radius: 999px;
+  background: #f4f1e8;
+  color: #4c5f57;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.reviewCurrentStatus {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  color: #46554d;
+}
+.reviewCurrentStatus__value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.reviewCurrentStatus__value--completed {
+  color: #146044;
+}
+.reviewCurrentStatus__value--archived {
+  color: #963f3a;
+}
+.reviewActionSheet {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.app-shell__content .reviewActionSheet button {
+  width: 100%;
+  min-height: 48px;
+  justify-self: stretch;
+  padding: 0.5rem 0.625rem;
+  text-align: center;
+  line-height: 1.25;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+
+.app-shell__content .reviewActionSheet__complete {
+  border-color: #1f7257;
+  background: #d6ebdd;
+  color: #14523e;
+}
+.app-shell__content .reviewActionSheet__today {
+  border-color: #aa620c;
+  background: #f4d6b0;
+  color: #713b00;
+}
+.app-shell__content .reviewActionSheet__reschedule {
+  border-color: #39699e;
+  background: #d8e4f5;
+  color: #214d80;
+}
+.app-shell__content .reviewActionSheet__no-due {
+  border-color: #68746b;
+  background: #e4e8e3;
+  color: #46554d;
+}
+.app-shell__content .reviewActionSheet__dismiss {
+  border-color: #896f3d;
+  background: #ece3cf;
+  color: #614a1f;
+}
+.app-shell__content .reviewActionSheet__archive {
+  border-color: #9b514c;
+  background: #f0d9d6;
+  color: #703832;
+}
+
+.app-shell__content .reviewActionSheet__complete:is(:active, .is-pressed) {
+  border-color: #1f7257;
+  background: #1f7257;
+  color: #fff;
+}
+.app-shell__content .reviewActionSheet__today:is(:active, .is-pressed) {
+  border-color: #aa620c;
+  background: #aa620c;
+  color: #fff;
+}
+.app-shell__content .reviewActionSheet__reschedule:active {
+  border-color: #39699e;
+  background: #39699e;
+  color: #fff;
+}
+.app-shell__content .reviewActionSheet__no-due:is(:active, .is-pressed) {
+  border-color: #68746b;
+  background: #68746b;
+  color: #fff;
+}
+.app-shell__content .reviewActionSheet__dismiss:is(:active, .is-pressed) {
+  border-color: #896f3d;
+  background: #896f3d;
+  color: #fff;
+}
+.app-shell__content .reviewActionSheet__archive:is(:active, .is-pressed) {
+  border-color: #9b514c;
+  background: #9b514c;
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-shell__content .reviewActionSheet button {
+    transition:
+      background-color 90ms ease,
+      border-color 90ms ease,
+      color 90ms ease;
   }
 }
 
 @media (max-width: 359px) {
-  .reviewHeader { gap: 0.25rem; }
-  .reviewHeader__previous { padding-inline: 0.25rem; font-size: 0.875rem; }
-  .reviewHeader__progress { font-size: 0.875rem; }
+  .reviewHeader {
+    gap: 0.25rem;
+  }
+  .reviewHeader__previous {
+    padding-inline: 0.25rem;
+    font-size: 0.875rem;
+  }
+  .reviewProgress {
+    font-size: 0.875rem;
+  }
 }

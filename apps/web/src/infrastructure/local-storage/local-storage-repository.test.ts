@@ -31,11 +31,11 @@ function repositoryContract(
   describe(_name, () => {
     afterEach(() => window.localStorage.clear());
 
-    it("returns an empty version 3 snapshot when storage is missing", async () => {
+    it("returns an empty version 9 snapshot when storage is missing", async () => {
       const snapshot = await createRepository().load();
 
       expect(snapshot).toMatchObject({
-        schemaVersion: 4,
+        schemaVersion: 9,
         captures: [],
         tasks: [],
         actionHistory: [],
@@ -45,10 +45,12 @@ function repositoryContract(
     it("preserves Unicode task text and action history after save and load", async () => {
       const repository = createRepository();
       const snapshot = sampleSnapshot();
+      snapshot.settings.customTaskCategories = ["冷蔵庫"];
       snapshot.tasks.push({
         id: "task-1",
         sourceCaptureId: "capture-1",
         title: "牛乳を買う 🥛",
+        category: "冷蔵庫",
         status: "active",
         dueMode: "unset",
         nextReviewAt: "2026-08-04T00:00:00.000Z",
@@ -97,7 +99,7 @@ function repositoryContract(
     });
 
     it("rejects a future schema version without overwriting it", async () => {
-      const stored = JSON.stringify({ schemaVersion: 5 });
+      const stored = JSON.stringify({ schemaVersion: 10 });
       window.localStorage.setItem(DATA_KEY, stored);
 
       await expect(createRepository().load()).rejects.toBeInstanceOf(
@@ -150,7 +152,7 @@ describe("LocalStorageRepository persistence failures", () => {
   });
 
   it("preserves an unknown existing schema version when save is attempted", async () => {
-    const existing = JSON.stringify({ schemaVersion: 5 });
+    const existing = JSON.stringify({ schemaVersion: 10 });
     window.localStorage.setItem(DATA_KEY, existing);
 
     await expect(
@@ -236,11 +238,23 @@ describe("LocalStorageRepository persistence failures", () => {
     expect(persisted.actionHistory[0]?.before?.title).toBe("変更前");
     expect(persisted.actionHistory[0]?.after?.title).toBe("変更後");
   });
+
+  it("removes only this application's snapshot and draft keys when device data is cleared", async () => {
+    window.localStorage.setItem(DATA_KEY, JSON.stringify(sampleSnapshot()));
+    window.localStorage.setItem("atoqueue:draft:v1", "private draft");
+    window.localStorage.setItem("another-app", "keep");
+
+    await new LocalStorageRepository(window.localStorage).clearAppData();
+
+    expect(window.localStorage.getItem(DATA_KEY)).toBeNull();
+    expect(window.localStorage.getItem("atoqueue:draft:v1")).toBeNull();
+    expect(window.localStorage.getItem("another-app")).toBe("keep");
+  });
 });
 
 function sampleSnapshot(): AppSnapshot {
   return {
-    schemaVersion: 4,
+    schemaVersion: 9,
     appVersion: "0.1.0",
     device: {
       localDeviceId: "device-1",
@@ -252,7 +266,13 @@ function sampleSnapshot(): AppSnapshot {
       notificationEnabled: false,
       initialReminderDelayMinutes: 60,
       deadlineReminderLeadMinutes: 60,
+      defaultDeadlineTime: "23:59",
       weeklyReviewDay: 0,
+      inboxReminderFrequency: "none",
+      memoReviewFrequency: "none",
+      overdueTaskReminderFrequency: "gentle",
+      enterSavesCapture: true,
+      customTaskCategories: [],
     },
     captures: [],
     tasks: [],

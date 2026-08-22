@@ -664,10 +664,10 @@ git commit -m "feat: add reversible daily review session"
 
 Assert the following exact behaviors:
 
-- the header has three equal grid columns;
-- the centered heading text is `今日の確認`;
-- the left control text is `← 前のタスク`, not an arrow-only accessible name;
-- the previous control is disabled on item 1 and enabled on item 2;
+- the heading text `今日の確認` is left aligned consistently with other screens;
+- the right control text is `前のタスク`, without an arrow;
+- the previous control is absent on item 1 and visible from item 2 onward;
+- the progress count is inside the task card at its top-right;
 - one task card is rendered at a time;
 - level 0–4 messages match `choosePrompt()`;
 - `完了`, `今日やる`, `日付を変える`, `期限なし`, `今回は閉じる`, `不要` call the matching domain command;
@@ -734,7 +734,7 @@ git add apps/web/src/features/review apps/web/e2e/today-review.spec.ts apps/web/
 git commit -m "feat: add one-at-a-time today review"
 ```
 
-**実装結果（2026-08-03）:** Task 7の状態機械を`AppRepository`経由で画面化し、空セッションの再計算、戻った項目の最新回答表示、結果からの修正導線、期限・経過表示、DST境界、画面全体中央の見出しを実装した。Web50件、型検査、ビルドが成功した。単一E2EはCodex実行環境のChromium `spawn EPERM` で未完了のため、実機環境で再実行する。
+**実装結果（2026-08-09更新）:** Task 7の状態機械を`AppRepository`経由で画面化し、空セッションの再計算、戻った項目の最新回答表示、結果からの修正導線、期限・経過表示、DST境界を実装した。見出しは他画面と同じ左揃え、2件目以降の「前のタスク」は見出し右、進行件数はカード内右上とした。Today Reviewを含むWeb E2E全27件、単体・結合テスト、型検査、ビルドが成功した。
 
 ## Task 9: Build task list, detail, edits, and history（完了: 2026-08-04）
 
@@ -793,7 +793,7 @@ git add packages/domain/src/task-query.ts packages/domain/src/task-query.test.ts
 git commit -m "feat: add active task management and history"
 ```
 
-**実装結果（2026-08-04）:** 一覧・詳細・履歴・編集を端末内状態と匿名Outboxの境界を保って実装した。元メモを含むUnicode検索、IANAタイムゾーン基準の当日判定、選択日による期限変更、保存失敗の復旧表示、44px以上の主要操作をテストした。ドメイン126件、Web58件、型検査、Webビルドが成功した。対象E2EはCodex環境のChromium起動制約により未完了であり、実機環境で再実行する。
+**実装結果（2026-08-09再検証）:** 一覧・詳細・履歴・編集を端末内状態と匿名Outboxの境界を保って実装した。元メモを含むUnicode検索、IANAタイムゾーン基準の当日判定、選択日による期限変更、保存失敗の復旧表示、44px以上の主要操作をテストした。タスク管理を含むWeb E2E全27件、単体・結合テスト、型検査、Webビルドが成功した。
 
 ## Task 10: Define strict notification contracts and device registration API
 
@@ -1307,7 +1307,7 @@ Before claiming completion, answer each question with file/test evidence:
 3. Can any code path serialize task text into an HTTP request, API log, PostgreSQL row, or Push payload?
 4. Does the app remain useful when notification permission is denied, Push is late, or the API is down?
 5. Can a user return to the previous Today Review task and change the choice without an Undo toast?
-6. Is `今日の確認` centered independently from the left and right controls at supported widths?
+6. Is `今日の確認` left aligned, with an arrowless previous control shown only from item 2 onward and progress inside the task card?
 7. Can a completed review be modified from result, list, and detail screens?
 8. Are date/time functions tested at day, week, and time-zone boundaries?
 9. Does backup round-trip all user data while excluding all device secrets?
@@ -1327,11 +1327,56 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 
 **Requirements:** F-014, F-018, NF-003, NF-004, NF-005, NF-007, NF-010, NF-013
 
-**Confirmed design:** Every active task can have anonymous `initial`, `deadline_before`, and `review` reservations. The initial and deadline-before delays are global device settings, both initially 60 minutes. Completion, archival, and unneeded actions cancel every reservation for that task. The API claims reservations up to `DEADLINE_DELIVERY_LEAD_SECONDS` (default 300) ahead of the current time so a five-minute poll can attempt delivery before the deadline. This does not guarantee OS delivery time.
+**Confirmed design at the time:** Every active task could have anonymous `initial`, `deadline_before`, and `review` reservations. The initial and deadline-before delays were global device settings, both initially 60 minutes. Completion, archival, and unneeded actions cancel every reservation for that task. The API claims reservations up to `DEADLINE_DELIVERY_LEAD_SECONDS` (default 300) ahead of the current time so a five-minute poll can attempt delivery before the deadline. This does not guarantee OS delivery time. The task-owned `initial` portion was superseded by the 2026-08-10 follow-up below.
 
 **Implementation steps:** Add a versioned local model migration, plan anonymous schedules in the domain package, rebuild reservation outbox after settings or task changes, preserve schedule kinds during error recovery, and cover the API prefetch window with fake-clock tests. No task title, task ID, deadline meaning, or history may cross the API boundary.
 
-**Open assumption:** Whether same-timestamp generic notifications should be coalesced is retained as 【想定】 until pilot feedback confirms the preferred behavior.
+**Confirmed follow-up:** Pilot feedback confirmed that same-type, same-timestamp generic notifications should be coalesced into one visible notification, while a different type or timestamp must use a different notification tag.
+
+**Delivery-attention follow-up:** `mvp-1.7.0` requests high Web Push urgency, retains pending Push messages for 24 hours, and requests a short vibration from supporting clients. It does not force `silent`, persistent notifications, or DND bypass; OS and user settings remain authoritative.
+
+### 2026-08-09 implementation follow-up: initial reminder deadline boundary
+
+- 【確定】`initial` は期限ありタスクの期限より前に到来する場合だけ作る。同時刻または期限後なら省略し、期限時の `review` を残す。
+- 【確定】期限なし・期限未設定タスクの `initial` は従来どおり作る。
+- 【確定】期限または初回通知設定の変更で不要になった既存 `initial` は、全予約再計算時に取消Outboxへ積む。
+- 検証は予定生成の境界、期限変更、設定変更、期限なし・期限未設定をドメインテストで固定する。API・PostgreSQL・Push payloadの契約は変更しない。
+- 実装結果: 上記境界をドメインテストでREDから確認して実装し、Web・Domain・Contracts 349件、API通常70件、Chromium E2E 27件、型検査、Lint、直接ビルドを通過した。表示バージョンを `mvp-1.0.1` へ更新した。
+
+### 2026-08-10 implementation follow-up: inbox-only initial reminder
+
+- 対象要件: F-004、F-006、F-014、NF-004、NF-010、NF-013。
+- 【確定】`initial` は未整理の記録を思い出す受信箱系列だけで使う。初回通知前にタスク化した場合は受信箱系列を取消し、タスク側へ `initial` を作り直さない。
+- 【確定】タスクは `deadline_before` と `review` の最大2予約を持つ。旧版のタスク所有 `initial` は次回のタスク更新または通知設定保存で取消す。
+- 【確定】受信箱の「再通知しない」は初回通知を1回だけ予約し、その後は繰り返さない。
+- TDDでは、タスク化後に3件のタスク予約が作られていた失敗、および「再通知しない」で0件だった失敗を先に再現し、期待をそれぞれ2件と1件へ修正した。表示・パッケージ・APIバージョンは `mvp-1.8.0` とする。全58ファイル480テスト、型検査、Lint、本番ビルドを通過した。
+
+### 2026-08-09 implementation follow-up: operation feedback and version policy
+
+- 対象要件: F-004、F-015、F-017、F-018、NF-001、NF-006。
+- 【確定】保存・変更の処理中は対象ボタンの文言を切り替えて二重操作を防ぎ、成功・失敗を操作区画の直下へ表示する。
+- 【確定】端末内への保存と通知サーバーへの反映は別結果として表示する。通知同期だけが失敗した場合もローカル保存・復元は成功として扱う。
+- 【確定】表示バージョンは`mvp-1.1.0`。単一画面かつロジック変更なしはパッチ、複数画面またはロジック変更ありはマイナーとしてパッチを0へ戻し、メジャーは事前相談する。
+- 実装結果: 通知タイミング・確認頻度・通知端末設定、タスク内容・期限・状態、受信箱本文、バックアップ・復元・削除へ操作結果表示を追加した。既存設定の読込みだけで通知設定完了を誤表示しないようにし、「期限なし」は入力状態も解除する。全427テスト、Chromium E2E 27件、Lint、型検査、本番ビルドを通過した。
+
+## Follow-up: タスク一覧の全状態表示（2026-08-09）
+
+**Requirements:** F-014, F-015, F-016
+
+- 【確定】状態フィルターへ「すべて」を追加し、対応中・完了・アーカイブを同じ一覧で確認できるようにする。初期値は従来どおり「対応中」とする。
+- 【確定】検索・期限・カテゴリの各条件は、「すべて」を選んだ場合も同じように適用する。
+- 【確定】フィルターロジックを変更するためマイナー改修とし、表示・Web・API・ワークスペースのバージョンを`mvp-1.2.0`へ揃える。
+- 実装結果: ドメイン検索とタスク一覧画面の公開境界でREDを確認してから実装し、全429テスト、Chromium E2E 27件、Lint、型検査、本番ビルドを通過した。
+
+## Follow-up: 受信箱の全記録履歴と通知取消（2026-08-09）
+
+**Requirements:** F-004、F-006、F-014、NF-004、NF-006、NF-010、NF-013
+
+- 【確定】受信箱は `すべて / 未整理 / メモ / 不要` の4タブとし、初期値は未整理、全タブを登録日時の新しい順に表示する。
+- 【確定】`すべて` は全Captureを起点ごとに1件だけ表示する。タスク化済み行は紐づくTask詳細へ移動し、Taskを同じ一覧へ重複表示しない。
+- 【確定】不要記録は自動削除せず、未整理へ復元できる。完全削除は確認後だけ実行し、対象CaptureとそのCaptureの操作履歴を端末から削除する。
+- 【確定】不要化・復元・完全削除はローカル保存後に匿名通知Outboxを即時同期する。通信失敗時はローカル変更を維持し、送信待ちとして再送する。
+- 実装結果: Capture query、復元・削除ドメイン操作、4タブUI、タスク詳細導線、保存後同期、同期失敗表示をTDDで追加した。複数画面と通知ロジックを変更したため表示・API・ワークスペースのバージョンを `mvp-1.3.0` へ揃え、全442テスト、Chromium E2E 28件、Lint、型検査、本番ビルドを通過した。
 
 ## Follow-up: mobile UI, deadline time, and first-use guidance（2026-08-08）
 
@@ -1340,3 +1385,119 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 **Confirmed design:** The quick-capture screen keeps deadline entry out of the initial action. At task conversion and task editing, a user may add an optional `HH:MM` time to today, tomorrow, this Sunday, or a custom date. A blank time remains 23:59. The local IANA time zone converts that selection to UTC for persistence, and dates are rendered back in the device time zone. New v4 snapshots show a local-only guide covering notification timing, explicit browser notification setup, and inbox task conversion. Existing v3 data migrates as already guided.
 
 **Implementation steps:** Add time-aware due-choice tests before extending the domain calendar call; render an accessible time input in candidate and detail screens; add schema v4 migration tests; format local dates, time zones, and offsets at the presentation boundary; use Kosugi and a consistent settings-style card/form system across screens; replace fragile text icons with `2.5`-stroke SVG navigation icons. Explain the five-minute dispatcher poll and Android/PWA notification checks in Settings. No new task data may cross the notification boundary.
+
+## Follow-up: 受信箱3タブとレイアウト統一（2026-08-10）
+
+**Requirements:** F-004、F-006、F-009、F-010、F-014、F-015、NF-001、NF-004、NF-006、NF-010、NF-013
+
+- 【確定】受信箱は `未整理 / メモ / 不要` の3タブとし、タスク化済みCaptureは一覧・件数へ表示しない。Task本体とCapture参照は端末内に保持する。
+- 【確定】不要記録には `未整理から` または `メモから` の経路を表示し、個別操作に加えて全選択・選択解除・一括復元・確認付き一括完全削除を提供する。
+- 【確定】Captureを捨てる操作は `不要`、Taskを保管する操作は `アーカイブ` と表示する。
+- 【確定】ページタイトルから最初の要素までの間隔を `0.75rem` に統一し、PC左ナビの文字・アイコン・操作範囲を拡大する。スマホのフローティングフッター寸法は維持する。
+- 【確定】表示・Web・API・ワークスペースのバージョンを `mvp-1.4.0` / `1.4.0` へ揃える。
+- 実装結果: ドメインの一括操作を事前検証後の単一snapshot更新として実装し、画面では1回の保存と1回の通知同期に限定した。単体・結合テスト56ファイル452件、対象Chromium E2E 16件、Lint、型検査、本番ビルドを通過した。
+
+### 追補: 端末固有カテゴリ・復元改善・当日セッション更新（2026-08-10）
+
+- 対象要件: F-005、F-006、F-009、F-010、F-016、F-017、F-018、NF-003、NF-004、NF-005、NF-010。
+- 【確定】プリセット `仕事 / 家 / 買い物 / その他` は変更不可とし、端末固有カテゴリを最大10件まで追加する。本文への同一表記の完全包含だけを候補とし、自動確定しない。
+- 【確定】削除済みカテゴリは新規選択肢から外すが、既存Taskのカテゴリ値は保持し、画面では `（過去）` と表示する。
+- 【確定】バックアップ復元は追加ではなく洗い替えとし、復元先端末の通知資格情報を維持する。復元後はTask・未整理受信箱・メモ棚卸しの匿名通知予約を再構築する。
+- 【確定】未完了の当日ReviewSessionは、再読込み時に新しく対象となったTaskを末尾へ追加する。複数対象では「次のタスク」を表示する。
+- 【確定】表示・Web・API・ワークスペースのバージョンを `mvp-1.5.0` / `1.5.0` へ揃える。
+- 詳細計画: `docs/superpowers/plans/2026-08-10-custom-task-categories-and-backup-restore.md`。
+
+### 2026-08-10 patch follow-up: category save guidance
+
+- 対象要件: F-005、F-017、NF-012。
+- 【確定】設定画面に「追加・削除した内容は、『カテゴリを保存』を押すと確定します。」と表示し、確定操作を明示する。
+- 【確定】単一画面の文言修正でロジック変更がないため、表示・Web・API・ワークスペースのバージョンを `mvp-1.5.1` / `1.5.1` へ揃える。
+
+### 2026-08-10 patch follow-up: iOS launch screens
+
+- 対象要件: F-001、NF-001、NF-007、NF-012。
+- 【確定】iOS/iPadOSのホーム画面からの起動時に、生成りの背景中央へ既存の正式アイコンを置いた静的起動画面を表示する。
+- 【確定】主要iPhoneの縦向きと主要iPadの縦・横向きに対応する端末寸法別PNGを配信し、表示時間を意図的に延ばさない。
+- 【確定】単一のPWA起動表示に対するロジック変更なしの修正として、表示・Web・API・ワークスペースのバージョンを `mvp-1.8.1` / `1.8.1` へ揃える。
+- 実装結果: 既存アイコンから再生成可能なスクリプトで28枚のPNGを作成し、HTMLの端末寸法・向き別 `apple-touch-startup-image` として配信する。単体・結合テスト59ファイル481件、PWAシェルChromium E2E 10件、型検査、Lint、本番ビルドを通過した。
+
+## Follow-up: 今日の確認と完了タスクの期限状態修正（2026-08-11）
+
+- 対象要件: F-009、F-010、F-012、F-016、NF-010。
+- 【確定】「次のタスク」は未回答の対応中Taskだけを巡回し、回答済みの完了・アーカイブ済みTaskは「前のタスク」で明示的に戻った場合だけ再表示する。
+- 【確定】期限超過は `status="active" && dueMode="scheduled" && dueAt < now` で導出し、完了・アーカイブ済みTaskを期限超過フィルターや期限超過チップへ含めない。
+- 回帰テストは、回答済み完了Taskへの巡回、完了・アーカイブ済みTaskの期限超過フィルター除外、完了一覧の期限状態表示を実装前に失敗させ、修正後に成功させる。
+- 複数領域のロジック変更として、表示・Web・API・ワークスペースのバージョンを `mvp-1.9.0` / `1.9.0` へ揃える。
+
+### 2026-08-11 follow-up: 保存済みレビューの終端Task再表示を修正
+
+- 対象要件は F-012。既存利用端末の未完了セッションが回答済みの完了・アーカイブ済みTaskを現在位置として保持していても、そのTaskを再表示せず、次の未回答Taskから再開する。
+- `TodayReviewPage` の実際の再開経路を使う回帰テストを先に追加し、修正前は完了済みの1件目が表示されたままになることを確認した。再開位置を終端Taskの場合だけ正規化し、対応中Taskの前回回答表示と画面内の「前のタスク」による修正は維持した。
+- ロジック変更として、表示・Web・API・ワークスペースのバージョンを `mvp-1.10.0` / `1.10.0` へ揃える。
+
+## Follow-up: 今日の確認の日付境界と処理済み表示（2026-08-11）
+
+**Requirements:** F-009, F-010, F-012
+
+- 【確定】再開できる未完了ReviewSessionは、端末の現在ローカル日付と `localDate` が一致するものだけとする。日付が変わったら対応中Taskを再計算して当日分を開始し、前日までに完了・アーカイブしたTaskは当日の「前のタスク」へ持ち越さない。
+- 【確定】同日中に「前のタスク」で戻った完了済みカードは「このタスクは完了マーク済みです。」、アーカイブ済みカードは「このタスクはアーカイブマーク済みです。」と表示し、放置レベル案内は表示しない。
+- 【確定】「現在：」の状態名は太字・拡大し、完了を緑、アーカイブを赤系の異なる文字色で表示する。色だけでなく状態名と状態別メッセージを併記する。
+- ロジック変更として、表示・Web・API・ワークスペースのバージョンを `mvp-1.11.0` / `1.11.0` へ揃える。
+
+## Follow-up: タッチ端末の数値入力メニュー抑制（2026-08-15）
+
+**Requirements:** F-007、F-018、NF-001、NF-008、NF-009、NF-013
+
+- 【確定】Pixelで数値入力欄へフォーカスした際に表示されるAndroid標準選択メニューは、フォーカス時の全選択が原因である。CSSで選択機能を無効化せず、タッチ起点だけ選択範囲を作らない。
+- 【確定】タッチ起点では次の挿入入力を置換待機とし、最初に入力された数字で現在値を置換する。以降は通常入力へ戻す。削除やフォーカス解除では置換待機を解除する。
+- 【確定】マウス・キーボード起点では従来どおり全選択し、PCの編集操作を維持する。
+- 期限入力と通知設定の実画面回帰テストを先に失敗させてから共通入力処理を実装し、表示・Web・API・ワークスペースのバージョンを `mvp-1.12.0` / `1.12.0` へ揃える。
+- 実装結果: 単体・結合テスト59ファイル489件、Chromium E2E 33件、Lint、全ワークスペースの型検査・本番ビルド、配置成果物検査が成功した。
+
+## Follow-up: タッチ端末の全選択表示・時刻入力修正（2026-08-15）
+
+**Requirements:** F-007、F-018、NF-001、NF-008、NF-009、NF-013
+
+- 【確定】共有された参考HTMLを完全比較し、CSSによる選択抑止ではなく、`type=text`、`inputmode=numeric`、フォーカス50ms後の `select()` を採用する。
+- 【確定】タッチ時に選択範囲を作らず `InputEvent.data` で先頭入力を置換する方式は、視覚的に全選択されず、Android IMEが入力文字を公開しない場合に時刻を置換できないため廃止する。
+- 【確定】期限日、期限時刻、期限の既定時刻、通知分数は、青い全選択表示からブラウザ標準の置換入力へつなげる。日付・時刻の自動区切りとネイティブピッカーは維持する。
+- 期限入力と通知設定の回帰テストを先に失敗させてから共通遅延選択処理を実装し、表示・Web・API・ワークスペースのバージョンを `mvp-1.13.0` / `1.13.0` へ揃える。
+- 実装結果: 単体・結合テスト59ファイル489件、Chromium E2E 34件、Lint、全ワークスペースの型検査・本番ビルド、配置成果物検査が成功した。Android標準編集メニューは自動E2Eで観測できないため、Pixel実機確認を残す。
+
+## Follow-up: 期限超過タスクの継続再通知（2026-08-15）
+
+**Requirements:** F-012、F-014、F-015、F-018、NF-003、NF-004、NF-005、NF-009、NF-010
+
+- 期限超過再通知の端末設定を `none / gentle / prompt` で追加する。`gentle` は+1日、+3日、+7日と以降週次、`prompt` は+4時間と翌日以降の毎日期限時刻とする。
+- タスク単位の匿名予約kindを節目3件と繰り返し1件へ拡張し、完了・アーカイブで全取消、期限なしで通常の週次見直しへ置換、期限変更で新期限から再構築、「今回は閉じる」で維持する。
+- 契約・DB・Dispatcherへ `daily` cadenceを追加し、次回時刻は遅延した実配送時刻ではなく直前の予定時刻を基準に計算する。
+- TDDでは頻度別時刻、既に期限超過したタスクの次回時刻、完了時の最大6件取消、v8からv9への移行、日次契約・DB制約・Dispatcher、設定保存を先に失敗させてから実装する。
+- v8からv9へ更新した既存端末は、起動時に期限超過kindがない対応中・期限ありタスクだけを一度補完し、通常の起動時Outbox同期へ渡す。
+- リリース版は `mvp-1.15.0` / `1.15.0`、端末保存スキーマはv9とする。本番デプロイ時にPostgreSQL migration 003で `daily / weekly / monthly` 制約へ更新する。
+
+## Follow-up: 受信箱操作の通知同期待ち解消（2026-08-18）
+
+**Requirements:** F-004、F-006、F-014、NF-004、NF-010
+
+- 不要化を含む受信箱の状態変更は、端末内保存と一覧再読込みまでを直列化し、その完了時点で画面の操作ロックを解除する。
+- 通知Outbox同期は保存後に非同期で継続する。同期APIの応答待ちや失敗は端末内変更を巻き戻さず、残りの受信箱操作を妨げない。
+- 回帰テストでは通知同期を未解決Promiseに固定し、不要化後に残った記録の操作ボタンが有効へ戻ることを確認する。
+- ロジック変更として `mvp-1.16.0` / `1.16.0` へ更新する。schemaVersion、通知API、DB migrationは変更しない。
+
+## Follow-up: 設定保存の応答改善とカテゴリ可視化（2026-08-22）
+
+**Requirements:** F-014、F-016、F-018、NF-004、NF-010、NF-012
+
+- 通知タイミングと確認頻度の保存は端末内永続化までを操作ロック内で行い、通知Outbox同期は保存結果とは別の非同期処理として継続する。
+- タスク一覧は設定済みカテゴリを中立色チップで表示し、タスク詳細概要はカテゴリ未設定の `なし` を含めて常時表示する。削除済み端末固有カテゴリは既存値を維持して `（過去）` とする。
+- 回帰テストでは通知同期を未解決Promiseに固定して保存ボタンが有効へ戻ることと、プリセット・過去カテゴリが一覧／詳細で識別できることを確認する。
+- リリース版は既存の未配置変更とまとめて `mvp-1.16.0` / `1.16.0` とする。schemaVersion、通知API、DB migrationは変更しない。
+
+## Follow-up: 今日の確認のカテゴリ表示（2026-08-22）
+
+**Requirements:** F-005、F-009、NF-010、NF-012
+
+- 「今日の確認」のタスクカードで、設定済みカテゴリをタスク名直下の中立色チップとして表示する。未設定なら表示しない。
+- 既存のカテゴリ表示名変換を共用し、プリセットの日本語名と削除済み端末固有カテゴリの `（過去）` 表示を一覧・詳細と一致させる。
+- `TodayReviewPage` の画面回帰テストを先に失敗させ、カテゴリ名とカード内配置を公開UIから確認する。
+- 単一画面の表示変更として `mvp-1.16.1` / `1.16.1` へ更新する。schemaVersion、通知API、DB migrationは変更しない。

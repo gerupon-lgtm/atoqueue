@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   currentReviewTask,
+  goToNextTask,
   goToPreviousTask,
+  refreshReviewSession,
   startReviewSession,
   summarizeReview,
   type ReviewCalendar,
@@ -87,6 +89,63 @@ describe("review session", () => {
 
     expect(goToPreviousTask({ ...session, currentIndex: 1 }, now)).toMatchObject({ currentIndex: 0, updatedAt: now });
     expect(goToPreviousTask(session, now)).toMatchObject({ currentIndex: 0 });
+  });
+
+  it("refreshes an unfinished session with newly eligible tasks without losing progress", () => {
+    const original = {
+      ...startReviewSession({
+        sessionId: "session-1",
+        now,
+        calendar,
+        tasks: [task("first")],
+      }),
+      visitedTaskIds: ["first"],
+    };
+
+    const refreshed = refreshReviewSession({
+      session: original,
+      now,
+      calendar,
+      tasks: [task("first"), task("new-today")],
+    });
+
+    expect(refreshed).toMatchObject({
+      orderedTaskIds: ["first", "new-today"],
+      visitedTaskIds: ["first"],
+      updatedAt: now,
+    });
+  });
+
+  it("moves to the next available task and wraps so skipped items remain reachable", () => {
+    const tasks = [task("first"), task("second")];
+    const session = startReviewSession({ sessionId: "session-1", now, calendar, tasks });
+
+    expect(goToNextTask(session, tasks, now)).toMatchObject({ currentIndex: 1 });
+    expect(goToNextTask({ ...session, currentIndex: 1 }, tasks, now)).toMatchObject({
+      currentIndex: 0,
+    });
+  });
+
+  it("F-009 keeps next navigation on the remaining unanswered task instead of reopening an answered completion", () => {
+    const tasks = [
+      task("first", { status: "completed", completedAt: now }),
+      task("second"),
+    ];
+    const session = {
+      ...startReviewSession({
+        sessionId: "session-1",
+        now,
+        calendar,
+        tasks: [task("first"), task("second")],
+      }),
+      currentIndex: 1,
+      visitedTaskIds: ["first"],
+      answeredTaskIds: ["first"],
+    };
+
+    expect(goToNextTask(session, tasks, now)).toMatchObject({
+      currentIndex: 1,
+    });
   });
 
   it("F-009 skips stale unvisited completed and archived IDs when resuming", () => {

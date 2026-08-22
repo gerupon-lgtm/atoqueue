@@ -7,6 +7,11 @@ export interface PushSubscriptionRecord {
 export interface PushClient {
   send(input: {
     subscription: PushSubscriptionRecord;
-    payload: { type: "review_due"; reminderId: string; url: string };
+    payload: {
+      type: "review_due";
+      reminderId: string;
+      url: string;
+      groupId: string;
+    };
   }): Promise<{ statusCode: number }>;
 }

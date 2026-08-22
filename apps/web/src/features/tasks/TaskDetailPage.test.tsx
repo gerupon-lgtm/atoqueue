@@ -83,6 +83,70 @@ function repositoryWithTask(
 describe("TaskDetailPage", () => {
   afterEach(cleanup);
 
+  it("keeps one stable initial load when it uses the built-in clock", async () => {
+    const { repository } = repositoryWithTask();
+    const load = vi.spyOn(repository, "load");
+    render(<TaskDetailPage repository={repository} taskId="task-1" />);
+
+    await screen.findByRole("heading", { level: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("F-015 returns to the task list from the right-side correction header action", async () => {
+    const { repository } = repositoryWithTask();
+    const onReturn = vi.fn();
+    render(
+      <TaskDetailPage
+        now={() => now}
+        onReturn={onReturn}
+        repository={repository}
+        taskId="task-1"
+      />,
+    );
+
+    await screen.findByDisplayValue("牛乳を買う");
+    const control = screen.getByRole("button", { name: "タスク一覧" });
+    expect(control.textContent).not.toContain("←");
+    fireEvent.click(control);
+
+    expect(onReturn).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives the arrowless in-context task-list action the same 44px touch target as other actions", async () => {
+    const { repository } = repositoryWithTask();
+    render(
+      <TaskDetailPage
+        now={() => now}
+        onReturn={() => undefined}
+        repository={repository}
+        taskId="task-1"
+      />,
+    );
+
+    const control = await screen.findByRole("button", {
+      name: "タスク一覧",
+    });
+    expect(getComputedStyle(control).minHeight).toBe("44px");
+  });
+
+  it("keeps a removed custom category selectable as a historical label", async () => {
+    const { repository } = repositoryWithTask({ category: "旧分類" });
+    render(
+      <TaskDetailPage now={() => now} repository={repository} taskId="task-1" />,
+    );
+
+    const category = await screen.findByLabelText("カテゴリ");
+    expect((category as HTMLSelectElement).value).toBe("旧分類");
+    expect(
+      screen.getByRole("option", { name: "旧分類（過去）" }),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("現在のカテゴリ").textContent).toBe(
+      "カテゴリ: 旧分類（過去）",
+    );
+  });
+
   it("F-015 shows source, current/due/review state, derived neglect reason, and chronological history", async () => {
     const { repository } = repositoryWithTask();
     render(
@@ -99,15 +163,18 @@ describe("TaskDetailPage", () => {
     expect(screen.getByLabelText("現在の状態").textContent).toBe(
       "状態: 対応中",
     );
+    expect(screen.getByLabelText("現在のカテゴリ").textContent).toBe(
+      "カテゴリ: 買い物",
+    );
     expect(screen.getByLabelText("期限の状態").textContent).toBe(
       "期限: 2026/8/2 23:59（期限超過）",
     );
-    expect(screen.getByLabelText("次の確認").textContent).toContain("次の確認");
+    expect(screen.queryByLabelText("次の確認")).toBeNull();
     expect(screen.getByLabelText("放置理由").textContent).toContain("放置理由");
     expect(screen.getByLabelText("登録日時").textContent).toBe(
       "登録日時: 2026/8/1 00:00",
     );
-    expect(screen.getByText("後回し")).toBeTruthy();
+    expect(screen.getByLabelText("放置理由").textContent).toContain("後回し");
   });
 
   it("F-015 shows a local due-today state rather than a generic scheduled state", async () => {
@@ -170,10 +237,10 @@ describe("TaskDetailPage", () => {
     );
 
     await screen.findByDisplayValue("牛乳を買う");
-    fireEvent.change(screen.getByLabelText("新しい期限"), {
-      target: { value: "2026-08-10" },
+    fireEvent.change(screen.getByLabelText("期限日（8桁）"), {
+      target: { value: "20260810" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "期限を変更" }));
+    fireEvent.click(screen.getByRole("button", { name: "期限を保存" }));
 
     await waitFor(() =>
       expect(snapshot().tasks[0]?.dueAt).toBe("2026-08-10T23:59:00.000Z"),
@@ -191,17 +258,73 @@ describe("TaskDetailPage", () => {
     );
 
     await screen.findByDisplayValue("牛乳を買う");
-    fireEvent.change(screen.getByLabelText("新しい期限"), {
-      target: { value: "2026-08-10" },
+    fireEvent.change(screen.getByLabelText("期限日（8桁）"), {
+      target: { value: "20260810" },
     });
-    fireEvent.change(screen.getByLabelText("期限時刻"), {
-      target: { value: "09:30" },
+    fireEvent.change(screen.getByLabelText("期限時刻（4桁）"), {
+      target: { value: "0930" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "期限を変更" }));
+    fireEvent.click(screen.getByRole("button", { name: "期限を保存" }));
 
     await waitFor(() =>
       expect(snapshot().tasks[0]?.dueAt).toBe("2026-08-10T09:30:00.000Z"),
     );
+  });
+
+  it("shows a nearby confirmation after saving task content", async () => {
+    const { repository } = repositoryWithTask();
+    render(
+      <TaskDetailPage
+        now={() => now}
+        repository={repository}
+        taskId="task-1"
+      />,
+    );
+
+    fireEvent.change(await screen.findByDisplayValue("牛乳を買う"), {
+      target: { value: "低脂肪乳を買う" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "内容を保存" }));
+
+    expect(await screen.findByText("内容を保存しました。")).not.toBeNull();
+  });
+
+  it("makes a no-deadline change visible in both the controls and feedback", async () => {
+    const { repository, snapshot } = repositoryWithTask();
+    render(
+      <TaskDetailPage
+        now={() => now}
+        repository={repository}
+        taskId="task-1"
+      />,
+    );
+
+    await screen.findByDisplayValue("牛乳を買う");
+    fireEvent.click(screen.getByRole("button", { name: "期限なしにする" }));
+
+    await waitFor(() => expect(snapshot().tasks[0]?.dueMode).toBe("none"));
+    expect(screen.getByLabelText("期限日（8桁）")).toHaveProperty("value", "");
+    expect(screen.getByLabelText("期限時刻を指定する")).toHaveProperty(
+      "checked",
+      false,
+    );
+    expect(screen.getByText("期限なしに変更しました。")).not.toBeNull();
+  });
+
+  it("confirms that an active task was postponed", async () => {
+    const { repository } = repositoryWithTask();
+    render(
+      <TaskDetailPage
+        now={() => now}
+        repository={repository}
+        taskId="task-1"
+      />,
+    );
+
+    await screen.findByDisplayValue("牛乳を買う");
+    fireEvent.click(screen.getByRole("button", { name: "後回し" }));
+
+    expect(await screen.findByText("後回しにしました。")).not.toBeNull();
   });
 
   it("NF-012 handles a local save failure with a recoverable message", async () => {
@@ -235,9 +358,42 @@ describe("TaskDetailPage", () => {
 
     await screen.findByDisplayValue("牛乳を買う");
     for (const control of document.querySelectorAll<HTMLElement>(
-      "select, input, button",
+      "select, input:not([aria-hidden=true]):not([type=checkbox]), button",
     )) {
       expect(getComputedStyle(control).minHeight).toBe("44px");
     }
+    const timeToggle = screen.getByLabelText("期限時刻を指定する");
+    expect(timeToggle.style.minHeight).toBe("");
+    expect(timeToggle.closest("label")?.classList).toContain(
+      "deadline-input-fields__toggle",
+    );
+  });
+
+  it("keeps content, deadline, and status actions in deliberate button groups", async () => {
+    const { repository } = repositoryWithTask();
+    render(
+      <TaskDetailPage
+        now={() => now}
+        repository={repository}
+        taskId="task-1"
+      />,
+    );
+
+    await screen.findByDisplayValue("牛乳を買う");
+    expect(
+      screen
+        .getByRole("button", { name: "内容を保存" })
+        .closest(".task-detail__content-actions"),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "期限を保存" })
+        .closest(".task-detail__deadline-actions"),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "完了" })
+        .closest(".task-detail__status-actions"),
+    ).not.toBeNull();
   });
 });

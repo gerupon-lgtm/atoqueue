@@ -40,7 +40,7 @@
 
 ```ts
 export interface AppSnapshot {
-  schemaVersion: 4;
+  schemaVersion: 9;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -72,14 +72,28 @@ export interface Settings {
   notificationEnabled: boolean;
   initialReminderDelayMinutes: number;
   deadlineReminderLeadMinutes: number;
+  /** 日付だけで期限を指定したときの端末ローカル時刻。 */
+  defaultDeadlineTime: string;
   /** 初回チュートリアルを閉じた端末内日時。未設定なら新規利用者へ表示する。 */
   onboardingCompletedAt?: string;
   quietHours?: { start: string; end: string };
   weeklyReviewDay: 0;
+  /** 未整理の受信箱全体に対する再通知頻度。 */
+  inboxReminderFrequency: "none" | "gentle" | "prompt";
+  /** 対応中の期限ありタスクごとに持つ期限超過後の再通知頻度。 */
+  overdueTaskReminderFrequency: "none" | "gentle" | "prompt";
+  /** note に分類したメモ一覧全体に対する棚卸し頻度。 */
+  memoReviewFrequency: "none" | "weekly" | "monthly";
+  /** true のとき Enter で記録し、Shift+Enter は改行とする。 */
+  enterSavesCapture: boolean;
+  /** 端末内だけに保持する、利用者が追加したタスクカテゴリ。最大10件。 */
+  customTaskCategories: string[];
 }
 ```
 
 `pushDeviceSecret` は端末内だけに保存し、JSONバックアップには含めない。`weeklyReviewDay: 0` は日曜日を表す。【想定】`quietHours` は初期値なしとし、MVPでは設定画面に公開しない。
+
+`customTaskCategories` は前後空白除去後1〜12文字、最大10件、一意とする。プリセット `仕事 / 家 / 買い物 / その他` と同名の追加は禁止する。削除は設定上の選択肢から外す操作であり、既存Taskに保存済みのカテゴリ文字列は変更しない。同じ名前を再登録した場合は、そのカテゴリを再び有効な選択肢として扱う。
 
 `dueAt` は利用者が選んだ端末ローカルの日付・任意時刻をUTCへ変換して保存する。時刻を選ばなかった場合はその日の23:59を使う。表示と日付境界の判定は `settings.timeZone` を使う。
 
@@ -103,6 +117,12 @@ export interface Capture {
 - `classification="task"` のとき `linkedTaskId` が必須
 - 保存直後は必ず `unclassified`
 - 自動分類結果だけで `task` へ更新しない
+- `unneeded` は自動削除せず、利用者が完全削除するか端末データを全削除するまで保持する
+- `unneeded` から `unclassified` へ戻す場合は `classifiedAt` と `linkedTaskId` を除去し、分類履歴を追加して受信箱通知系列を再構築する
+- 完全削除は `unneeded` だけに許可し、対象CaptureとそのCaptureに属する操作履歴だけを端末内から削除する
+- 受信箱は `unclassified`、`note`、`unneeded` だけを表示し、`task` は件数にも含めない
+- `unneeded` の経路バッジは保存項目を増やさず、直近の分類サイクルにある `capture_classified` 履歴から `未整理から` または `メモから` を導出する
+- 一括復元・一括完全削除は全対象を事前検証し、1件でも不正なら変更しない。通知系列は変更後のSnapshotに対して1回だけ再構築する
 
 ### 3.4 Task
 
@@ -148,13 +168,13 @@ export type NeglectLevel = 0 | 1 | 2 | 3 | 4;
 
 放置レベルは保存せず、以下の順で毎回導出する。境界は初期値であり、7日間試用後に調整する（【想定】）。
 
-| レベル | 条件（いずれか）                                            | 声掛けの意図                     |
-| ------ | ----------------------------------------------------------- | -------------------------------- |
-| 0      | 作成24時間未満、期限前、見送り0回                           | 軽く確認する                     |
-| 1      | 作成24時間以上、期限当日、見送り1回                         | 次の一手を選ばせる               |
-| 2      | 期限超過1〜3日、見送り1回、期限未設定の再確認2回目          | 経過事実と状態更新を促す         |
-| 3      | 期限超過4〜7日、見送り2回以上                               | 残すか判断するよう促す           |
-| 4      | 期限超過8日以上、延期・無反応が継続、期限未設定の再確認3回目以降 | 完了・再設定・不要を明確に決める |
+| レベル | 条件（いずれか）                                                 | 声掛けの意図                           |
+| ------ | ---------------------------------------------------------------- | -------------------------------------- |
+| 0      | 作成24時間未満、期限前、見送り0回                                | 軽く確認する                           |
+| 1      | 作成24時間以上、期限当日、見送り1回                              | 次の一手を選ばせる                     |
+| 2      | 期限超過1〜3日、見送り1回、期限未設定の再確認2回目               | 経過事実と状態更新を促す               |
+| 3      | 期限超過4〜7日、見送り2回以上                                    | 残すか判断するよう促す                 |
+| 4      | 期限超過8日以上、延期・無反応が継続、期限未設定の再確認3回目以降 | 完了・再設定・アーカイブを明確に決める |
 
 複数条件に該当する場合は最大レベルを採用する。OS通知を閉じた回数は取得できないため、`dismissCount` へ加算しない。
 
@@ -176,7 +196,7 @@ export interface ReviewSession {
 }
 ```
 
-セッション開始時に対象順を固定する。回答後に次へ進んでも `currentIndex` を減らして前のタスクへ戻れる。完了後の修正はタスク詳細または当日の結果画面から行い、新しい履歴を追加する。
+セッション開始時に対象順を固定する。回答後に次へ進んでも、`localDate` が端末の現在日付と同じ間は `currentIndex` を減らして前のタスクへ戻れる。日付が変わった場合は前日分の未完了セッションを再開せず、対応中Taskを再計算して新しい当日分を作るため、前日までに完了・アーカイブしたTaskは「今日の確認」へ持ち越さない。完了後の修正はタスク詳細または当日の結果画面から行い、新しい履歴を追加する。
 
 ### 3.7 ActionEvent
 
@@ -216,7 +236,10 @@ export interface NotificationOutboxItem {
   operation: "upsert" | "cancel";
   reminderId: string;
   scheduledAt?: string;
-  notificationType?: "task_review" | "deadline_review" | "unset_due_review";
+  notificationType?:
+    "inbox_review" | "task_review" | "deadline_review" | "unset_due_review";
+  /** 省略時は一回限り。サーバーへ送ってよい繰り返し情報だけを表す。 */
+  repeatCadence?: "daily" | "weekly" | "monthly";
   taskRevision: number;
   attemptCount: number;
   nextAttemptAt: string;
@@ -225,44 +248,69 @@ export interface NotificationOutboxItem {
 
 export interface ReminderMapEntry {
   reminderId: string;
-  taskId: string;
-  kind: "initial" | "deadline_before" | "review";
+  taskId?: string;
+  captureId?: string;
+  /** 受信箱・メモ一覧の全体予約。局所IDはサーバーへ送らない。 */
+  scope?: "inbox" | "memo";
+  kind?:
+    | "capture_initial"
+    | "initial"
+    | "deadline_before"
+    | "review"
+    | "overdue_first"
+    | "overdue_second"
+    | "overdue_third"
+    | "overdue_repeat";
   taskRevision: number;
   createdAt: string;
 }
 ```
 
-`reminderId` は推測困難なUUIDとする。サーバーは `taskId` を受け取らない。Push payloadの `reminderId` を端末側の `ReminderMapEntry` で解決する。解決できない場合は「今日の確認」全体を開く。1タスクは `initial`、`deadline_before`、`review` の最大3件を持ち、完了・不要・保管時は全件を取消す。
+`reminderId` は推測困難なUUIDとする。マッピングは `taskId`、`captureId`、`scope` のいずれか一つだけを所有者として持つ。サーバーはこれらのローカルIDを受け取らない。Push payloadの `reminderId` を端末側の `ReminderMapEntry` で解決し、解決できない場合は「今日の確認」全体を開く。1タスクは期限前、通常確認、期限超過後の節目3件と繰り返し1件の最大6件を持つ。完了・アーカイブでは全件を取消す。期限なしでは期限関連kindを取消して通常の `review` 1件へ置換し、期限変更では同じkindの匿名予約を更新して不要なkindを取消す。旧版で作られたタスク所有の `initial` は移行互換のため読み込めるが、次回のタスク通知再構築時に取消す。
+
+受信箱の分類・復元・削除は端末内snapshotの保存までを画面操作の排他区間とする。保存済みOutboxのHTTP同期は排他区間の外で継続し、各Outbox更新時に最新snapshotを再読込みして利用者の後続操作を上書きしない。匿名予約の冪等キーにより、重複した同期試行も同一操作として扱う。
 
 ## 4. リマインド計算規則
 
 ### 4.1 期限未設定
 
-| 操作                      | 次回確認                                     |
-| ------------------------- | -------------------------------------------- |
-| タスク化時に未回答        | 3日後の23:59（実装済み。再確認時刻は今後の試用で調整可能） |
-| 「まだ決めない」1〜2回目  | 3日後                                        |
-| 「まだ決めない」3回目以降 | 翌週日曜18:00（【想定】）                    |
+| 操作                      | 次回確認                                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| タスク化時に未回答        | 3日後の23:59（実装済み。再確認時刻は今後の試用で調整可能）                         |
+| 「まだ決めない」1〜2回目  | 3日後                                                                              |
+| 「まだ決めない」3回目以降 | 翌週日曜18:00（【想定】）                                                          |
 | 「期限なし」              | 期限設定確認は停止。次の日曜18:00の通常週次見直しだけ対象（日曜18:00以降なら翌週） |
 
 ### 4.2 期限超過または見送り
 
-| 見送り回数 | 次回確認                  |
-| ---------- | ------------------------- |
-| 1回目      | 1日後                     |
-| 2回目      | 3日後                     |
-| 3回目      | 7日後                     |
-| 4回目以降  | 7日後                     |
+| 見送り回数 | 次回確認 |
+| ---------- | -------- |
+| 1回目      | 1日後    |
+| 2回目      | 3日後    |
+| 3回目      | 7日後    |
+| 4回目以降  | 7日後    |
 
-期限を変更した場合は `dismissCount` を0へ戻す。完了・不要では通知予約を取消す。過去日を新期限として保存しようとした場合は確認を表示する。
+期限を変更した場合は `dismissCount` を0へ戻す。完了・アーカイブでは通知予約を取消す。過去日を新期限として保存しようとした場合は確認を表示する。
 
-### 4.3 通知時刻（2026-08-08確定）
+### 4.3 通知時刻と全体再通知（2026-08-09確定）
 
 - 【確定】初回通知は、利用者が設定した作成後の分数で予約する。初期値は60分。
+- 【確定】`initial` は未整理の記録を思い出すための受信箱系列だけで使う。初回通知前にタスク化した場合は受信箱系列を再構築して該当予約を取消し、タスク所有の `initial` は新規作成しない。旧版のタスク所有 `initial` は次回のタスク更新または通知設定保存時に取消Outboxへ積む。
+- 【確定】受信箱の再通知が `none` の場合は初回通知を1回だけ予約する。`gentle` と `prompt` は初回通知に加えて設定された再通知系列を予約する。
+- 【確定】未整理記録が一件以上ある場合、個々の記録ではなく受信箱全体の匿名予約系列を一つだけ持つ。最も古い未整理記録の作成日時と「初回通知まで」から初回を決め、新しい記録の追加では既存時刻を前倒し・リセットしない。
+- 【確定】受信箱の再通知は `none`（初回のみ）、`gentle`（3日後、7日後、以降週1回）、`prompt`（1日後、3日後、7日後、以降週1回）から選ぶ。新規端末の初期値は `gentle`、v6からの移行値は `none` である。未整理が0件になれば系列全件を取消す。
+- 【確定】`note` のメモ棚卸しもメモ一覧全体の匿名予約系列を一つだけ持つ。最も古いメモを基準に、`weekly` は7日後から週ごと、`monthly` は14日後からUTC暦月ごと（各月末へクランプ）に繰り返す。メモが0件になれば取消す。新規端末の初期値は `weekly`、移行値は `none` である。
+- 【確定】利用者が記録をタスク化・メモ化・不要化したときは、全体予約を再計算する。タスク候補は自動確定しない。
+- 【確定】通知予約とPush購読は端末単位で扱う。MVPではタスク本文・タスク状態を端末間同期しないため、ある端末で作ったタスクの通知を別端末へ配送しない。
+- 【確定】端末データ削除では、保存済みの匿名端末識別子と秘密値でサーバー側のPush端末登録を先に無効化する。無効化に失敗した場合はローカルのスナップショットを消さず、再試行できるようにする。無効化後はブラウザのPush購読もベストエフォートで解除する。
 - 【確定】期限ありタスクは、利用者が設定した期限前の分数で予約する。初期値は60分。期限時は通常の `review` 予約を使う。
-- 【確定】設定は個別タスクではなく端末全体に適用し、変更時は有効タスクの匿名予約を再計算する。
-- 【確定】サーバーへ送るのは匿名予約ID、予定時刻、通知種別、端末IDだけであり、タスクID・本文・期限の意味は送らない。
-- 【想定】同一時刻に複数の予約が重なった場合の集約方針は、試用で過剰通知を確認してから調整する。
+- 【確定】期限超過タスクの再通知はタスクごとの匿名予約とし、`none` は追加予約なし、`gentle` は期限の1日後・3日後・7日後と14日後から7日ごと、`prompt` は期限の4時間後と翌日から毎日期限時刻に予約する。過去の節目は復活させず、次に来る節目または繰り返し時刻から予約する。新規端末とv8からの移行値は `gentle` とする。
+- 【確定】期限超過再通知は対応中かつ期限ありの間だけ維持する。完了・アーカイブでは当該タスクの全予約を取消す。期限なしでは期限関連予約を取消して通常の週次見直し1件へ置換し、期限変更では旧時刻の予約を置換して新期限から再構築する。「今回は閉じる」では系列を止めない。
+- 【確定】v9へ更新した既存端末は、起動時に対応中・期限あり・通知有効でありながら期限超過kindを一件も持たないタスクだけを一度補完し、補完後のOutboxを通常の起動時同期で送る。既に期限超過kindがあれば再作成しない。
+- 【確定】設定は端末全体に適用する。頻度変更は明示保存時にのみ、古い全体予約を取消して新頻度で組み直す。通知設定前に保存した未整理記録は、設定完了時に初回通知時刻を過ぎていれば直ちに予約する。
+- 【確定】サーバーへ送るのは匿名予約ID、予定時刻、通知種別、繰り返し間隔、端末IDだけであり、タスクID・キャプチャID・本文・期限の意味は送らない。
+- 【確定】同一通知種別・同一予定時刻の複数予約は、`notification_type` と `scheduled_at` から作る16桁の匿名SHA-256接頭辞をPushの `groupId` として共有し、一つのOS通知へ集約する。通知種別または予定時刻が異なる場合は別の `groupId` とし、以前の通知を静かに上書きしない。`groupId` にタスク本文・局所ID・期限内容を含めない。
+- 【確定】匿名Pushの配送属性は全通知共通で `urgency=high`、`TTL=86400` 秒とする。配送後は短い振動を要求するが、通知予約・端末データへ新たな私的属性を保存しない。
 
 ## 5. サーバーデータモデル
 
@@ -289,6 +337,7 @@ export interface ReminderMapEntry {
 | `device_id`         | TEXT      | `device_subscriptions.device_id` 外部キー               |
 | `scheduled_at`      | TEXT      | UTC、検索索引                                           |
 | `notification_type` | TEXT      | 汎用通知種別                                            |
+| `repeat_cadence`    | TEXT NULL | `daily` / `weekly` / `monthly`。NULLは一回限り          |
 | `status`            | TEXT      | `pending` / `claimed` / `sent` / `cancelled` / `failed` |
 | `idempotency_key`   | TEXT      | 一意                                                    |
 | `attempt_count`     | INTEGER   | 0以上                                                   |
@@ -300,28 +349,28 @@ export interface ReminderMapEntry {
 
 ### 5.3 reminder_idempotency_operations
 
-| 列                    | 型        | 制約・用途                                                        |
-| --------------------- | --------- | ----------------------------------------------------------------- |
-| `device_id`           | TEXT      | `device_subscriptions.device_id`、複合主キーの一部                |
-| `reminder_id`         | TEXT      | 匿名通知予約ID、複合主キーの一部                                 |
-| `idempotency_key`     | TEXT      | クライアント操作キー、複合主キーの一部                           |
-| `request_fingerprint` | TEXT      | 同一キーで異なる要求を409にする要求フィンガープリント            |
-| `response_body`       | TEXT      | 予約ID・予定時刻・通知種別などの最小応答JSON。タスク本文は含めない |
-| `created_at`          | TEXT      | UTC                                                               |
+| 列                    | 型   | 制約・用途                                                         |
+| --------------------- | ---- | ------------------------------------------------------------------ |
+| `device_id`           | TEXT | `device_subscriptions.device_id`、複合主キーの一部                 |
+| `reminder_id`         | TEXT | 匿名通知予約ID、複合主キーの一部                                   |
+| `idempotency_key`     | TEXT | クライアント操作キー、複合主キーの一部                             |
+| `request_fingerprint` | TEXT | 同一キーで異なる要求を409にする要求フィンガープリント              |
+| `response_body`       | TEXT | 予約ID・予定時刻・通知種別などの最小応答JSON。タスク本文は含めない |
+| `created_at`          | TEXT | UTC                                                                |
 
 主キーは `(device_id, reminder_id, idempotency_key)` とする。予約を後から全置換しても、この操作履歴の応答は変更しない。通知DB消失時は他の通知メタデータと同様に失われ、端末側の有効予約から再同期する。
 
 ### 5.4 device_idempotency_operations
 
-| 列                    | 型        | 制約・用途                                                        |
-| --------------------- | --------- | ----------------------------------------------------------------- |
-| `device_id`           | TEXT      | `device_subscriptions.device_id` 外部キー、複合主キーの一部       |
-| `operation`           | TEXT      | `subscription_update` / `device_delete`、複合主キーの一部         |
-| `idempotency_key`     | TEXT      | クライアント操作キー、複合主キーの一部                            |
-| `request_fingerprint` | TEXT      | 同じキーで異なる要求を409にするSHA-256フィンガープリント          |
-| `response_status`     | INTEGER   | 再送時に返すHTTP結果コード                                        |
-| `response_body`       | TEXT NULL | 再送時に返す端末メタデータだけのJSON。タスク本文は保存しない       |
-| `created_at`          | TEXT      | UTC                                                               |
+| 列                    | 型        | 制約・用途                                                   |
+| --------------------- | --------- | ------------------------------------------------------------ |
+| `device_id`           | TEXT      | `device_subscriptions.device_id` 外部キー、複合主キーの一部  |
+| `operation`           | TEXT      | `subscription_update` / `device_delete`、複合主キーの一部    |
+| `idempotency_key`     | TEXT      | クライアント操作キー、複合主キーの一部                       |
+| `request_fingerprint` | TEXT      | 同じキーで異なる要求を409にするSHA-256フィンガープリント     |
+| `response_status`     | INTEGER   | 再送時に返すHTTP結果コード                                   |
+| `response_body`       | TEXT NULL | 再送時に返す端末メタデータだけのJSON。タスク本文は保存しない |
+| `created_at`          | TEXT      | UTC                                                          |
 
 端末購読の更新・無効化を再送安全にするサーバー専用メタデータであり、主キーは `(device_id, operation, idempotency_key)` とする。予約やタスク本文を保持せず、端末購読と同じ通知DBの保持・消失復旧方針に従う。
 
@@ -350,7 +399,9 @@ export interface BackupEnvelopeV1 {
 - Push購読情報、端末シークレット、通知送信待ちは出力しない。
 - 復元前に形式、バージョン、チェックサム、各エンティティの制約を検証する。
 - 復元は既存データを置き換えるため、件数差分を表示して明示確認を取る。
-- 復元後は端末固有情報を維持し、全タスクの通知予約を再計算する。
+- 追加カテゴリを含む設定はバックアップ対象とする。
+- 復元先の端末固有情報を維持し、有効タスク、未整理の受信箱、メモ棚卸しの通知予約を再計算する。
+- 同じバックアップを再度復元しても、Capture・Task・履歴を追加せず同じ内容へ洗い替える。
 
 ## 7. 移行・破損時の扱い
 
@@ -358,6 +409,11 @@ export interface BackupEnvelopeV1 {
    - v1 → v2: 各 `ReviewSession` に空の `actionEventIds` を追加する。既存の操作履歴を推測で再帰属しない。
    - v2: `answeredTaskIds` は `orderedTaskIds` の部分集合、`actionEventIds` は実在する一意なタスク操作履歴であり、当該セッションの処理済みタスクを参照することを検証する。
    - v3 → v4: 既存端末には `onboardingCompletedAt` として保存日時を設定し、既存利用者へ初回チュートリアルを再表示しない。v4の新規端末は未設定のまま開始し、案内を閉じた時だけ設定する。
+   - v4 → v5: 日付だけの期限に使う `defaultDeadlineTime` を `23:59` で補う。
+   - v5 → v6: 受信箱リマインドのローカル対応情報を扱える形式へ移行する。既存の未整理記録は次回の通知設定または時刻設定変更時に匿名予約を作成する。
+   - v6 → v7: 受信箱再通知を `none`、メモ棚卸しを `none`、Enter登録を `true` で補う。新規スナップショットは `gentle`、`weekly`、`true` で開始する。全体予約は `ReminderMapEntry.scope` で表す。
+   - v7 → v8: `customTaskCategories` を空配列で補い、Taskのカテゴリをプリセット限定型から文字列へ拡張する。既存Taskのカテゴリ値は保持する。
+   - v8 → v9: `overdueTaskReminderFrequency` を `gentle` で補う。既存の繰り返しOutboxにある `repeatCadence` は保持する。
 2. 新しい未知バージョンは上書きせず、読み取り停止とJSON退避を案内する。
 3. JSON解析失敗時は破損値を別キー `atoqueue:corrupt:<timestamp>` へ退避して初期化可否を確認する。
 4. 破損復旧や復元では元データを直ちに削除しない。

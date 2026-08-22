@@ -1,6 +1,6 @@
 {
   "name": "@atoqueue/web",
-  "version": "0.1.0",
+  "version": "1.16.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "pnpm --dir ../.. exec vitest --run --workspace vitest.workspace.ts --project web",
     "test:e2e": "playwright test",
+    "generate:ios-splash": "node scripts/generate-ios-splash.mjs",
     "build": "tsc --noEmit && vite build && node ../../deploy/scripts/write-pages-spa-fallback.mjs && node ../../deploy/scripts/verify-pages-spa-fallback.mjs"
   },
   "dependencies": {
