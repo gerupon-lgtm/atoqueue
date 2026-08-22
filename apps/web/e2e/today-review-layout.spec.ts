@@ -30,6 +30,7 @@ test("keeps the today review header, progress, and card inside the desktop conte
           id: "one",
           sourceCaptureId: "capture-one",
           title: "確認タスク one",
+          category: "shopping",
           status: "active",
           dueMode: "scheduled",
           dueAt: "2026-08-02T23:59:00.000Z",
@@ -54,6 +55,9 @@ test("keeps the today review header, progress, and card inside the desktop conte
   await page.goto("/today");
   await expect(page.getByRole("heading", { name: "今日の確認" })).toBeVisible();
   await expect(page.getByRole("button", { name: "前のタスク" })).toHaveCount(0);
+  await expect(page.getByLabel("現在のカテゴリ")).toHaveText(
+    "カテゴリ: 買い物",
+  );
 
   const [header, progress, card] = await Promise.all([
     page.getByTestId("review-header").boundingBox(),

@@ -65,6 +65,18 @@
 .reviewTaskCard > :not(.reviewProgress) {
   margin-block: 0;
 }
+.reviewTaskCategory {
+  display: inline-flex;
+  justify-self: start;
+  width: fit-content;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid #c8d0ca;
+  border-radius: 999px;
+  background: #f4f1e8;
+  color: #4c5f57;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
 .reviewCurrentStatus {
   display: flex;
   align-items: baseline;

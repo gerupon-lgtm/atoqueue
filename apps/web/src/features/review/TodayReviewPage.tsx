@@ -23,6 +23,7 @@ import {
   latestSessionAnswer,
 } from "./review-presentation";
 import { resolveReminderTaskId } from "../../infrastructure/notifications/reminder-navigation";
+import { taskCategoryDisplayLabel } from "../tasks/task-category-options";
 import "./TodayReviewPage.css";
 
 export interface TodayReviewPageProps {
@@ -342,6 +343,11 @@ export function TodayReviewPage({
         </p>
         <p>{stateMessage}</p>
         <h2>{task.title}</h2>
+        {task.category ? (
+          <p aria-label="現在のカテゴリ" className="reviewTaskCategory">
+            カテゴリ: {taskCategoryDisplayLabel(snapshot, task.category)}
+          </p>
+        ) : null}
         <p>{presentation.deadline}</p>
         <p>{presentation.elapsed}</p>
         {priorAnswer ? (

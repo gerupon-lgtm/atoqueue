@@ -124,6 +124,25 @@ describe("TodayReviewPage", () => {
     expect(screen.queryByRole("button", { name: "不要" })).toBeNull();
   });
 
+  it("F-009 shows the current task category inside the review card", async () => {
+    render(
+      <TodayReviewPage
+        calendar={calendar}
+        now={() => now}
+        repository={repositoryWithSession([
+          task("shopping", { category: "shopping" }),
+        ])}
+      />,
+    );
+
+    expect(
+      (await screen.findByLabelText("現在のカテゴリ")).textContent,
+    ).toBe("カテゴリ: 買い物");
+    expect(
+      screen.getByLabelText("現在のカテゴリ").closest(".reviewTaskCard"),
+    ).not.toBeNull();
+  });
+
   it("F-012 advances immediately after an answer, then lets the previous task be answered again", async () => {
     const repository = repositoryWithSession([task("one"), task("two")]);
     render(
