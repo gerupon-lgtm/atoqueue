@@ -47,6 +47,7 @@ function repository(): AppRepository {
     }),
     tasks: [
       task("期限切れ", {
+        category: "shopping",
         dueMode: "scheduled",
         dueAt: "2026-08-02T23:59:00.000Z",
       }),
@@ -105,6 +106,9 @@ describe("TaskListPage", () => {
     expect(screen.getByLabelText("期限切れの登録日時").textContent).toBe(
       "登録: 2026/8/3 09:00",
     );
+    expect(screen.getByLabelText("期限切れのカテゴリ").textContent).toBe(
+      "カテゴリ: 買い物",
+    );
   });
 
   it("NF-006 gives every primary list control a 44px minimum touch target", async () => {
@@ -156,6 +160,9 @@ describe("TaskListPage", () => {
     expect(screen.getByRole("link", { name: "期限切れ" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "完了済み" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "保管済み" })).toBeTruthy();
+    expect(screen.getByLabelText("保管済みのカテゴリ").textContent).toBe(
+      "カテゴリ: 旧分類（過去）",
+    );
   });
 
   it("F-016 does not label a completed task as overdue", async () => {

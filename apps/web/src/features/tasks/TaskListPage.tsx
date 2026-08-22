@@ -10,7 +10,10 @@ import {
   type TaskTab,
 } from "../../../../../packages/domain/src";
 import { formatLocalDateTime } from "../../presentation/format-local-date-time";
-import { taskCategoryOptions } from "./task-category-options";
+import {
+  taskCategoryDisplayLabel,
+  taskCategoryOptions,
+} from "./task-category-options";
 
 export interface TaskListPageProps {
   repository: AppRepository;
@@ -163,6 +166,14 @@ export function TaskListPage({
                 >
                   {dueState(task, display.timestamp, display.calendar)}
                 </span>
+                {task.category ? (
+                  <span
+                    aria-label={`${task.title}のカテゴリ`}
+                    className="task-list__category-badge"
+                  >
+                    カテゴリ: {taskCategoryDisplayLabel(snapshot, task.category)}
+                  </span>
+                ) : null}
                 {task.dueAt ? (
                   <span aria-label={`${task.title}の期限日時`}>
                     期限:{" "}

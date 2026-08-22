@@ -20,7 +20,9 @@ test("adds a local category, suggests it by exact text, and preserves it as hist
   await page.goto("/inbox");
   await page.getByRole("button", { name: "タスクかも" }).click();
   await expect(page.getByText("カテゴリ候補: 冷蔵庫")).toBeVisible();
-  await expect(page.getByLabel("カテゴリ")).toHaveValue("冷蔵庫");
+  await expect(page.getByLabel("カテゴリ", { exact: true })).toHaveValue(
+    "冷蔵庫",
+  );
   await page.getByRole("button", { name: "タスクにする" }).click();
 
   await page.goto("/settings");
@@ -30,9 +32,13 @@ test("adds a local category, suggests it by exact text, and preserves it as hist
   await page.getByRole("button", { name: "カテゴリを保存" }).click();
 
   await page.goto("/tasks");
+  const categoryFilter = page.locator(".task-list__category select");
   await expect(
-    page.getByLabel("カテゴリ").locator('option[value="冷蔵庫"]'),
+    categoryFilter.locator('option[value="冷蔵庫"]'),
   ).toHaveText("冷蔵庫（過去）");
-  await page.getByLabel("カテゴリ").selectOption("冷蔵庫");
+  await categoryFilter.selectOption("冷蔵庫");
   await expect(page.getByRole("link", { name: "冷蔵庫の豆腐" })).toBeVisible();
+  await expect(
+    page.getByText("カテゴリ: 冷蔵庫（過去）", { exact: true }),
+  ).toBeVisible();
 });

@@ -134,13 +134,10 @@ describe("NotificationSettings", () => {
 
     const initial = await screen.findByLabelText("記録の初回通知まで（分）");
     const deadline = screen.getByLabelText("期限前通知（分）");
-    await user.clear(initial);
-    await user.type(initial, "90");
-    await user.clear(deadline);
-    await user.type(deadline, "45");
+    fireEvent.change(initial, { target: { value: "90" } });
+    fireEvent.change(deadline, { target: { value: "45" } });
     const defaultDeadlineTime = screen.getByLabelText("期限の既定時刻");
-    await user.clear(defaultDeadlineTime);
-    await user.type(defaultDeadlineTime, "1830");
+    fireEvent.change(defaultDeadlineTime, { target: { value: "1830" } });
     await user.click(
       screen.getByRole("button", { name: "通知タイミングを保存" }),
     );
@@ -155,6 +152,49 @@ describe("NotificationSettings", () => {
           }),
         }),
       ),
+    );
+    expect(
+      screen.getByRole("status", { name: "通知タイミングの保存結果" })
+        .textContent,
+    ).toBe("通知タイミングを保存しました。");
+  });
+
+  it("re-enables timing controls after the local save while notification sync is pending", async () => {
+    const snapshot = createEmptySnapshot({
+      appVersion: "test",
+      localDeviceId: "local",
+      timeZone: "Asia/Tokyo",
+      now: "2026-08-04T08:00:00.000Z",
+    });
+    const repository = writableMemory(snapshot);
+    const flushNotifications = vi.fn(
+      () => new Promise<never>(() => undefined),
+    );
+    const user = userEvent.setup();
+    render(
+      <NotificationSettings
+        repository={repository}
+        flushNotifications={flushNotifications}
+      />,
+    );
+
+    const initial = await screen.findByLabelText("記録の初回通知まで（分）");
+    fireEvent.change(initial, { target: { value: "90" } });
+    await user.click(
+      screen.getByRole("button", { name: "通知タイミングを保存" }),
+    );
+
+    await waitFor(async () =>
+      expect(
+        (await repository.load()).settings.initialReminderDelayMinutes,
+      ).toBe(90),
+    );
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("button", { name: "通知タイミングを保存" })
+          .hasAttribute("disabled"),
+      ).toBe(false),
     );
     expect(
       screen.getByRole("status", { name: "通知タイミングの保存結果" })

@@ -232,7 +232,7 @@ export function NotificationSettings({
         type: "success",
         message: "通知タイミングを保存しました。",
       });
-      await synchronizeNotifications("timing");
+      void synchronizeNotifications("timing");
     } catch {
       setTimingFeedback({
         type: "error",
@@ -281,7 +281,7 @@ export function NotificationSettings({
         overdue: overdueTaskReminderFrequency,
       });
       setFrequenciesSaved(true);
-      await synchronizeNotifications("frequency");
+      void synchronizeNotifications("frequency");
     } catch {
       setFrequencyError(
         "確認頻度を保存できませんでした。もう一度お試しください。",

@@ -18,7 +18,10 @@ import {
   dateFromDigits,
   timeFromDigits,
 } from "./DeadlineInputFields";
-import { taskCategoryOptions } from "./task-category-options";
+import {
+  taskCategoryDisplayLabel,
+  taskCategoryOptions,
+} from "./task-category-options";
 
 const defaultNow = () => new Date().toISOString();
 
@@ -199,6 +202,10 @@ export function TaskDetailPage({
           <div aria-label="現在の状態">
             <dt>状態: </dt>
             <dd>{statusLabel(task.status)}</dd>
+          </div>
+          <div aria-label="現在のカテゴリ">
+            <dt>カテゴリ: </dt>
+            <dd>{taskCategoryDisplayLabel(snapshot, task.category)}</dd>
           </div>
           <div aria-label="登録日時">
             <dt>登録日時: </dt>

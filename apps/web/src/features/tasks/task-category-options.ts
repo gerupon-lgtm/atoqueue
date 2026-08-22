@@ -41,3 +41,14 @@ export function taskCategoryLabel(category: string): string {
     category
   );
 }
+
+export function taskCategoryDisplayLabel(
+  snapshot: AppSnapshot,
+  category?: string,
+): string {
+  if (!category) return "なし";
+  return (
+    taskCategoryOptions(snapshot).find(({ value }) => value === category)
+      ?.label ?? taskCategoryLabel(category)
+  );
+}

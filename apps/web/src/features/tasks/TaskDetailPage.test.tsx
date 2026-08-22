@@ -142,6 +142,9 @@ describe("TaskDetailPage", () => {
     expect(
       screen.getByRole("option", { name: "旧分類（過去）" }),
     ).toBeTruthy();
+    expect(screen.getByLabelText("現在のカテゴリ").textContent).toBe(
+      "カテゴリ: 旧分類（過去）",
+    );
   });
 
   it("F-015 shows source, current/due/review state, derived neglect reason, and chronological history", async () => {
@@ -159,6 +162,9 @@ describe("TaskDetailPage", () => {
     );
     expect(screen.getByLabelText("現在の状態").textContent).toBe(
       "状態: 対応中",
+    );
+    expect(screen.getByLabelText("現在のカテゴリ").textContent).toBe(
+      "カテゴリ: 買い物",
     );
     expect(screen.getByLabelText("期限の状態").textContent).toBe(
       "期限: 2026/8/2 23:59（期限超過）",
