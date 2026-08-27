@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createCapture, createEmptySnapshot } from "./index";
+import {
+  createCapture,
+  createEmptySnapshot,
+  rebuildGlobalNotificationSchedules,
+} from "./index";
 
 const now = "2026-08-03T00:00:00.000Z";
 
@@ -75,6 +79,97 @@ describe("createCapture", () => {
       scheduledAt: item.scheduledAt,
       operation: item.operation,
     }))).toEqual(before);
+  });
+
+  it("does not replace a synced future inbox series with an immediate reminder when a newer capture is saved", () => {
+    let nextId = 0;
+    const idFactory = () => `opaque-${++nextId}`;
+    const first = createCapture(
+      snapshot(),
+      "first",
+      "2026-08-01T00:00:00.000Z",
+      "capture-1",
+      idFactory,
+    );
+    const synced = { ...first, notificationOutbox: [] };
+    const reminderIds = synced.reminderMap
+      .filter((entry) => entry.scope === "inbox")
+      .map((entry) => entry.reminderId);
+
+    const second = createCapture(
+      synced,
+      "second",
+      "2026-08-10T00:00:00.000Z",
+      "capture-2",
+      idFactory,
+    );
+
+    expect(second.notificationOutbox).toEqual([]);
+    expect(
+      second.reminderMap
+        .filter((entry) => entry.scope === "inbox")
+        .map((entry) => entry.reminderId),
+    ).toEqual(reminderIds);
+  });
+
+  it("does not replace a synced memo series when the first unclassified capture is saved", () => {
+    let nextId = 0;
+    const idFactory = () => `opaque-${++nextId}`;
+    const original = snapshot();
+    original.captures = [
+      {
+        id: "note-1",
+        body: "memo",
+        classification: "note",
+        createdAt: "2026-08-01T00:00:00.000Z",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    ];
+    const scheduled = rebuildGlobalNotificationSchedules({
+      snapshot: original,
+      now: "2026-08-01T00:00:00.000Z",
+      createId: idFactory,
+    });
+    const synced = {
+      ...original,
+      ...scheduled,
+      notificationOutbox: [],
+    };
+    const memoIds = synced.reminderMap
+      .filter((entry) => entry.scope === "memo")
+      .map((entry) => entry.reminderId);
+
+    const next = createCapture(
+      synced,
+      "new inbox item",
+      "2026-08-10T00:00:00.000Z",
+      "capture-1",
+      idFactory,
+    );
+
+    expect(next.notificationOutbox).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operation: "upsert",
+          scheduledAt: "2026-08-10T01:00:00.000Z",
+        }),
+      ]),
+    );
+    const nextMemoIds = new Set(
+      next.reminderMap
+        .filter((entry) => entry.scope === "memo")
+        .map((entry) => entry.reminderId),
+    );
+    expect(
+      next.notificationOutbox.filter((item) =>
+        nextMemoIds.has(item.reminderId),
+      ),
+    ).toEqual([]);
+    expect(
+      next.reminderMap
+        .filter((entry) => entry.scope === "memo")
+        .map((entry) => entry.reminderId),
+    ).toEqual(memoIds);
   });
 
   // Break caught: capture creation bypasses the unified rebuild and leaves existing memo scope absent.

@@ -8,6 +8,7 @@ test("saves a capture that remains in the local snapshot after reload", async ({
   await expect(page.getByRole("status")).toHaveText(
     "保存しました。いまの作業に戻って大丈夫です",
   );
+  await expect(page.getByText("受信箱の未整理: 1件")).toBeVisible();
 
   await page.reload();
 

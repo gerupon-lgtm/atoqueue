@@ -73,6 +73,27 @@ describe("QuickCapturePage", () => {
     ).toBe(true);
   });
 
+  it("updates the unclassified count immediately after saving a new capture", async () => {
+    const repository = createRepository();
+    const user = userEvent.setup();
+    render(
+      <QuickCapturePage
+        createId={() => "capture-1"}
+        now={() => now}
+        repository={repository}
+      />,
+    );
+
+    expect(await screen.findByText("受信箱の未整理: 0件")).toBeTruthy();
+    await user.type(
+      screen.getByRole("textbox", { name: "思いついたこと" }),
+      "牛乳を買う",
+    );
+    await user.click(screen.getByRole("button", { name: "保存して戻る" }));
+
+    expect(await screen.findByText("受信箱の未整理: 1件")).toBeTruthy();
+  });
+
   it("does not autofocus the capture textarea while notification setup is not requested", async () => {
     const setupNotifications = vi.fn().mockResolvedValue({ state: "granted" });
     render(

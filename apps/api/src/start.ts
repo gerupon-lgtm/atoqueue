@@ -7,7 +7,7 @@ import { WebPushClient } from "./push/web-push-client.js";
 import { ReminderDispatcher } from "./scheduler/reminder-dispatcher.js";
 import { buildProductionApp } from "./server.js";
 
-export const API_VERSION = "mvp-1.16.1";
+export const API_VERSION = "mvp-1.17.0";
 
 export interface RunningApi {
   close(): Promise<void>;

@@ -171,6 +171,11 @@ export function QuickCapturePage({
       );
       await repository.save(next);
       setLoadedSnapshot(next);
+      setUnclassifiedCount(
+        next.captures.filter(
+          (capture) => capture.classification === "unclassified",
+        ).length,
+      );
       void onNotificationChanged?.();
       pendingDraftClear.current = body;
       await repository.clearDraft();

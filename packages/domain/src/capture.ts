@@ -1,5 +1,9 @@
 import type { AppSnapshot } from "./model";
-import { rebuildGlobalNotificationSchedules, type NotificationIdFactory } from "./notification-queue";
+import {
+  rebuildInboxReminderNotifications,
+  rebuildMemoReviewNotifications,
+  type NotificationIdFactory,
+} from "./notification-queue";
 
 const MAX_CAPTURE_LENGTH = 280;
 
@@ -23,17 +27,48 @@ export function createCapture(
     createdAt: now,
     updatedAt: now,
   };
-  const notification = rebuildGlobalNotificationSchedules({
-    snapshot: { ...snapshot, captures: [...snapshot.captures, capture] },
-    now,
-    createId: idFactory,
-  });
+  const snapshotWithCapture = {
+    ...snapshot,
+    captures: [...snapshot.captures, capture],
+  };
+  const hasExistingInboxSeries =
+    snapshot.captures.some(
+      (candidate) => candidate.classification === "unclassified",
+    ) &&
+    snapshot.reminderMap.some(
+      (entry) => entry.scope === "inbox" || Boolean(entry.captureId),
+    );
+  const hasMemoCapture = snapshot.captures.some(
+    (candidate) => candidate.classification === "note",
+  );
+  const hasExistingMemoSeries = snapshot.reminderMap.some(
+    (entry) => entry.scope === "memo",
+  );
+  let scheduledSnapshot = snapshotWithCapture;
+
+  if (!hasExistingInboxSeries) {
+    const inbox = rebuildInboxReminderNotifications({
+      snapshot: scheduledSnapshot,
+      now,
+      createId: idFactory,
+    });
+    scheduledSnapshot = { ...scheduledSnapshot, ...inbox };
+  }
+
+  if (hasMemoCapture && !hasExistingMemoSeries) {
+    const memo = rebuildMemoReviewNotifications({
+      snapshot: scheduledSnapshot,
+      now,
+      createId: idFactory,
+    });
+    scheduledSnapshot = { ...scheduledSnapshot, ...memo };
+  }
 
   return {
     ...snapshot,
     captures: [...snapshot.captures, capture],
-    notificationOutbox: notification.notificationOutbox,
-    reminderMap: notification.reminderMap,
+    notificationOutbox: scheduledSnapshot.notificationOutbox,
+    reminderMap: scheduledSnapshot.reminderMap,
     actionHistory: [
       ...snapshot.actionHistory,
       {
