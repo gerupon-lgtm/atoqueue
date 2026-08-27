@@ -15,6 +15,7 @@ import {
   createCapture,
   createEmptySnapshot,
 } from "../../../../../packages/domain/src";
+import { APP_VERSION } from "../../app-version";
 import { QuickCapturePage } from "./QuickCapturePage";
 
 const now = "2026-08-03T00:00:00.000Z";
@@ -417,6 +418,18 @@ describe("QuickCapturePage", () => {
     expect(
       label.closest("label")?.classList.contains("quick-capture__enter-save"),
     ).toBe(true);
+  });
+
+  it("shows the current app version quietly below the Enter registration option", async () => {
+    render(<QuickCapturePage repository={createRepository()} />);
+
+    const label = await screen.findByText("改行で登録");
+    const version = screen.getByText(`バージョン ${APP_VERSION}`);
+    const stack = label.closest(".quick-capture__option-stack");
+
+    expect(stack).not.toBeNull();
+    expect(stack?.contains(version)).toBe(true);
+    expect(version.classList.contains("quick-capture__version")).toBe(true);
   });
 
   it("keeps Meta+Enter as a save shortcut when Enter registration is on", async () => {

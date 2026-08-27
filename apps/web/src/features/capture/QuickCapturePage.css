@@ -40,6 +40,11 @@
   flex: 0 0 auto;
 }
 
+.quick-capture__option-stack {
+  display: grid;
+  justify-items: end;
+}
+
 .app-shell__content .quick-capture__enter-save {
   display: inline-flex;
   flex: 0 0 auto;
@@ -58,6 +63,15 @@
   height: 1rem;
   padding: 0;
   accent-color: #2f8f54;
+}
+
+.app-shell__content .quick-capture__version {
+  margin: -0.25rem 0 0;
+  color: #66756d;
+  font-size: 0.6875rem;
+  line-height: 1.25;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
 }
 
 .quick-capture__onboarding {

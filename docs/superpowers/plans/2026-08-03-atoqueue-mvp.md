@@ -1510,3 +1510,11 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 - 既存の未整理記録に対する匿名受信箱系列が通知APIへ同期済みの場合、新しい記録の追加では既存系列を維持する。初めての未整理記録を追加する場合も同期済みのメモ棚卸し系列を維持し、受信箱の初回予約だけを設定時間後に追加する。同期後に端末Outboxが空でも、旧系列の取消と現在時刻での即時再予約を行わない。
 - `QuickCapturePage` の公開UIと `createCapture` の同期済み系列をそれぞれ回帰テストでREDにしてから実装する。新規入力が初めての未整理記録である場合は、従来どおり設定値（初期60分）後に初回予約を作る。
 - 通知ロジック変更として `mvp-1.17.0` / `1.17.0` へ更新する。schemaVersion、通知API、DB migrationは変更しない。
+
+## Follow-up: クイック入力へのバージョン表示（2026-08-27）
+
+**Requirements:** F-002、F-018、NF-010、NF-012
+
+- クイック入力画面の「改行で登録」を右側の縦積みにし、その直下へ現在のバージョンを小さい緑灰色の文字で表示する。
+- `QuickCapturePage` の公開UIテストを先に失敗させ、E2Eでも表示を確認する。
+- 単一画面の表示変更として `mvp-1.17.1` / `1.17.1` へ更新する。schemaVersion、通知API、DB migrationは変更しない。

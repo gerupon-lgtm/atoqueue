@@ -11,6 +11,7 @@ import {
   type AppRepository,
   type AppSnapshot,
 } from "../../../../../packages/domain/src";
+import { APP_VERSION } from "../../app-version";
 import type { NotificationSetupResult } from "../../infrastructure/notifications/push-subscription";
 import "./QuickCapturePage.css";
 
@@ -343,17 +344,22 @@ export function QuickCapturePage({
           >
             保存して戻る
           </button>
-          <label className="quick-capture__enter-save">
-            <input
-              checked={enterSavesCapture}
-              disabled={isSaving || isSavingEnterPreference || !loadedSnapshot}
-              onChange={(event) => {
-                void saveEnterSavesCapture(event.target.checked);
-              }}
-              type="checkbox"
-            />
-            改行で登録
-          </label>
+          <div className="quick-capture__option-stack">
+            <label className="quick-capture__enter-save">
+              <input
+                checked={enterSavesCapture}
+                disabled={isSaving || isSavingEnterPreference || !loadedSnapshot}
+                onChange={(event) => {
+                  void saveEnterSavesCapture(event.target.checked);
+                }}
+                type="checkbox"
+              />
+              改行で登録
+            </label>
+            <p className="quick-capture__version">
+              バージョン {APP_VERSION}
+            </p>
+          </div>
         </div>
       </form>
       {message ? <p role="status">{message}</p> : null}
