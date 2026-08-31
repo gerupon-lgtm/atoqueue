@@ -85,7 +85,7 @@ for (const viewport of [
         .querySelector(".app-shell__overdue-summary")!
         .getBoundingClientRect();
       const height = document.documentElement.scrollHeight;
-      // Recreate the previous wordmark/count spacing to compare the added reminder's footprint.
+      // Recreate the pre-reminder (mvp-1.17.1) header and count spacing.
       const link = document.querySelector<HTMLElement>(
         ".app-shell__overdue-summary",
       )!;
@@ -96,10 +96,21 @@ for (const viewport of [
       const count = document.querySelector<HTMLElement>(
         ".quick-capture__summary",
       )!;
+      const header = document.querySelector<HTMLElement>(
+        ".app-shell__topline",
+      )!;
       link.style.display = "none";
+      header.style.minHeight = "0";
+      header.style.marginBottom = "6px";
+      wordmark.style.fontSize = "10px";
+      wordmark.style.paddingInlineStart = "0";
       count.style.margin = "1em 0";
       const priorHeight = document.documentElement.scrollHeight;
       link.style.removeProperty("display");
+      header.style.removeProperty("min-height");
+      header.style.removeProperty("margin-bottom");
+      wordmark.style.removeProperty("font-size");
+      wordmark.style.removeProperty("padding-inline-start");
       count.style.removeProperty("margin");
       const actions = document
         .querySelector(".quick-capture__option-stack")!
@@ -133,7 +144,7 @@ for (const viewport of [
       expect(metrics.saveBottom).toBeLessThan(metrics.navTop);
     }
     expect(metrics.actionsRight).toBeLessThan(metrics.formRight);
-    expect(metrics.summaryHeight).toBeGreaterThanOrEqual(44);
+    expect(metrics.summaryHeight).toBe(28);
     expect(metrics.summaryRight).toBeLessThanOrEqual(viewport.width);
     await page.screenshot({
       path: testInfo.outputPath("capture-overdue.png"),
@@ -144,6 +155,69 @@ for (const viewport of [
     await expect(summary).toBeVisible();
   });
 }
+
+for (const width of [320, 360, 412, 1280]) {
+  for (const count of [0, 2]) {
+    test(`keeps the compact header aligned at ${width}px with ${count} overdue tasks`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: width === 360 ? 450 : 760 });
+      await seed(page, count);
+      await page.goto("/");
+      await expect(
+        page.getByRole("heading", { name: "あとで思い出したいことは？" }),
+      ).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      const metrics = await page.evaluate(() => {
+        const header = document.querySelector(".app-shell__topline")!;
+        const wordmark = document.querySelector(".app-shell__wordmark")!;
+        const summary = document.querySelector(".app-shell__overdue-summary");
+        const heading = document.querySelector("h1")!;
+        const text = document.createRange();
+        text.selectNodeContents(wordmark);
+        const headingText = document.createRange();
+        headingText.selectNodeContents(heading);
+        const headerBox = header.getBoundingClientRect();
+        const summaryBox = summary?.getBoundingClientRect();
+        return {
+          height: headerBox.height,
+          bottomGap: heading.getBoundingClientRect().top - headerBox.bottom,
+          wordmarkInset: text.getBoundingClientRect().left - headerBox.left,
+          cardHeight: summaryBox?.height ?? null,
+          cardRightInset: summaryBox
+            ? headerBox.right - summaryBox.right
+            : null,
+          headingLines: headingText.getClientRects().length,
+          horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
+        };
+      });
+      expect(metrics).toMatchObject({
+        height: 28,
+        bottomGap: 4,
+        wordmarkInset: 4,
+        cardHeight: count ? 28 : null,
+        cardRightInset: count ? 4 : null,
+        horizontalOverflow: false,
+      });
+      if (width === 412) expect(metrics.headingLines).toBe(1);
+    });
+  }
+}
+
+test("keeps the compact overdue link clickable in the top padding", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 412, height: 760 });
+  await seed(page);
+  await page.goto("/");
+  const summary = page.getByRole("link", {
+    name: "期限超過のタスク2件を確認する",
+  });
+  await expect(summary).toBeVisible();
+  const box = (await summary.boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y - 15.5);
+  await expect(page).toHaveURL(/\/tasks\?due=overdue$/);
+});
 
 test("opens the overdue list from all primary screens and updates counts immediately after review actions", async ({
   page,
@@ -192,9 +266,15 @@ test("opens the overdue list from all primary screens and updates counts immedia
     page.getByRole("article").locator(".overdue-indicator"),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "次のタスク" }).click();
+  const headerBeforeRemoval = await page
+    .locator(".app-shell__topline")
+    .boundingBox();
   await page.getByRole("button", { name: "アーカイブ", exact: true }).click();
   await expect(page.locator(".app-shell__overdue-summary")).toHaveCount(0);
   await expect(page.locator(".app-shell__nav-badge")).toHaveCount(0);
+  expect(await page.locator(".app-shell__topline").boundingBox()).toEqual(
+    headerBeforeRemoval,
+  );
 });
 
 test("keeps large counts compact and overdue controls accessible", async ({
