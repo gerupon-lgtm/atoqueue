@@ -38,6 +38,8 @@ export function createEmptySnapshot(params: {
 }
 
 export interface AppRepository {
+  /** Observe committed snapshot changes, never draft edits or failed writes. */
+  subscribe?(listener: () => void): () => void;
   load(): Promise<AppSnapshot>;
   save(next: AppSnapshot): Promise<void>;
   loadDraft(): Promise<string>;

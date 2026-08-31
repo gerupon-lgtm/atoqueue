@@ -23,7 +23,7 @@ describe("installOutboxFlush", () => {
 describe("backfillOverdueTaskNotifications", () => {
   it("persists missing overdue reservations before startup outbox delivery", async () => {
     const snapshot = createEmptySnapshot({
-      appVersion: "mvp-1.17.1",
+      appVersion: "mvp-1.18.0",
       localDeviceId: "local",
       timeZone: "Asia/Tokyo",
       now: "2026-08-08T09:00:00.000Z",

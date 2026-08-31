@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { listTasks, type Capture, type Task } from "./index";
+import { isTaskOverdue, listTasks, type Capture, type Task } from "./index";
 
 const now = "2026-08-03T09:00:00.000Z";
 const calendar = { today: (instant: string) => instant.slice(0, 10) };
@@ -23,6 +23,19 @@ function task(id: string, changes: Partial<Task> = {}): Task {
 }
 
 describe("listTasks", () => {
+  it.each([
+    ["past active deadline", { dueMode: "scheduled", dueAt: "2026-08-03T08:59:59.999Z" }, true],
+    ["exact deadline", { dueMode: "scheduled", dueAt: now }, false],
+    ["future deadline", { dueMode: "scheduled", dueAt: "2026-08-03T09:00:00.001Z" }, false],
+    ["completed", { dueMode: "scheduled", dueAt: "2026-08-02T09:00:00.000Z", status: "completed" }, false],
+    ["archived", { dueMode: "scheduled", dueAt: "2026-08-02T09:00:00.000Z", status: "archived" }, false],
+    ["unset", { dueMode: "unset" }, false],
+    ["none", { dueMode: "none" }, false],
+    ["dismissed but overdue", { dueMode: "scheduled", dueAt: "2026-08-02T09:00:00.000Z", dismissCount: 1, nextReviewAt: "2026-09-01T09:00:00.000Z" }, true],
+  ] as const)("F-012 derives overdue emphasis for %s", (_name, changes, expected) => {
+    expect(isTaskOverdue(task("test", changes), now)).toBe(expected);
+  });
+
   it("keeps the selected active, completed, or archived tab separate", () => {
     const tasks = [
       task("active"),

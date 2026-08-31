@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import {
   createLocalCalendar,
   listTasks,
+  isTaskOverdue,
   type AppRepository,
-  type AppSnapshot,
   type DueFilter,
   type Task,
   type TaskTab,
@@ -14,34 +14,46 @@ import {
   taskCategoryDisplayLabel,
   taskCategoryOptions,
 } from "./task-category-options";
+import {
+  currentTime,
+  useTaskSnapshot,
+} from "../../presentation/use-task-snapshot";
+import {
+  OverdueIndicator,
+  OverdueClockIcon,
+} from "../../presentation/OverdueIndicator";
 
 export interface TaskListPageProps {
   repository: AppRepository;
   now?: () => string;
 }
 
-export function TaskListPage({
+export function TaskListPage(props: TaskListPageProps) {
+  const location = useLocation();
+  return (
+    <TaskListView
+      key={location.key}
+      {...props}
+      overdueOnly={
+        new URLSearchParams(location.search).get("due") === "overdue"
+      }
+    />
+  );
+}
+
+function TaskListView({
   repository,
-  now = () => new Date().toISOString(),
-}: TaskListPageProps) {
-  const [snapshot, setSnapshot] = useState<AppSnapshot>();
+  now = currentTime,
+  overdueOnly,
+}: TaskListPageProps & { overdueOnly: boolean }) {
+  const { snapshot, timestamp, error } = useTaskSnapshot(repository, now);
   const [tab, setTab] = useState<TaskTab>("active");
-  const [due, setDue] = useState<DueFilter | "">("");
+  const [due, setDue] = useState<DueFilter | "">(overdueOnly ? "overdue" : "");
   const [category, setCategory] = useState<Task["category"] | "">("");
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    let current = true;
-    void repository.load().then((value) => {
-      if (current) setSnapshot(value);
-    });
-    return () => {
-      current = false;
-    };
-  }, [repository]);
   const display = useMemo(() => {
-    if (!snapshot) return;
-    const timestamp = now();
+    if (!snapshot || !timestamp) return;
     const calendar = createLocalCalendar(snapshot.settings.timeZone);
     const tasks = listTasks(
       snapshot.tasks,
@@ -66,8 +78,14 @@ export function TaskListPage({
       snapshot.captures,
     ).length;
     return { calendar, overdueCount, tasks, timestamp };
-  }, [category, due, now, search, snapshot, tab]);
+  }, [category, due, timestamp, search, snapshot, tab]);
 
+  if (error)
+    return (
+      <p role="alert">
+        タスクを読み込めませんでした。画面を開き直してください。
+      </p>
+    );
   if (!snapshot || !display) return <p>読み込み中です…</p>;
   const categoryOptions = taskCategoryOptions(snapshot);
   return (
@@ -80,10 +98,13 @@ export function TaskListPage({
           onClick={() => {
             setTab("active");
             setDue("overdue");
+            setCategory("");
+            setSearch("");
           }}
           type="button"
         >
-          期限超過のタスクを見る（{display.overdueCount}件）
+          <OverdueClockIcon /> 期限超過のタスクを見る（{display.overdueCount}
+          件）
         </button>
       ) : null}
       <section aria-label="タスクを絞り込む" className="task-list__filters">
@@ -160,18 +181,23 @@ export function TaskListPage({
                 {task.title}
               </Link>
               <div className="task-list__item-meta">
-                <span
-                  aria-label={`${task.title}の期限状態`}
-                  className="task-list__due-state"
-                >
-                  {dueState(task, display.timestamp, display.calendar)}
-                </span>
+                {isTaskOverdue(task, display.timestamp) ? (
+                  <OverdueIndicator ariaLabel={`${task.title}の期限状態`} />
+                ) : (
+                  <span
+                    aria-label={`${task.title}の期限状態`}
+                    className="task-list__due-state"
+                  >
+                    {dueState(task, display.timestamp, display.calendar)}
+                  </span>
+                )}
                 {task.category ? (
                   <span
                     aria-label={`${task.title}のカテゴリ`}
                     className="task-list__category-badge"
                   >
-                    カテゴリ: {taskCategoryDisplayLabel(snapshot, task.category)}
+                    カテゴリ:{" "}
+                    {taskCategoryDisplayLabel(snapshot, task.category)}
                   </span>
                 ) : null}
                 {task.dueAt ? (

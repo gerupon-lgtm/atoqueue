@@ -3,6 +3,7 @@ import {
   calculateNeglectLevel,
   createLocalCalendar,
   modifyTask,
+  isTaskOverdue,
   resolveDueChoice,
   type AppRepository,
   type AppSnapshot,
@@ -22,6 +23,8 @@ import {
   taskCategoryDisplayLabel,
   taskCategoryOptions,
 } from "./task-category-options";
+import { OverdueIndicator } from "../../presentation/OverdueIndicator";
+import { useDisplayTime } from "../../presentation/use-task-snapshot";
 
 const defaultNow = () => new Date().toISOString();
 
@@ -40,6 +43,7 @@ export function TaskDetailPage({
   now = defaultNow,
   sync,
 }: TaskDetailPageProps) {
+  const displayTime = useDisplayTime(now);
   const [snapshot, setSnapshot] = useState<AppSnapshot>();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<Task["category"] | "">("");
@@ -133,7 +137,7 @@ export function TaskDetailPage({
   if (!snapshot) return <p>読み込み中です…</p>;
   const task = snapshot.tasks.find((item) => item.id === taskId);
   if (!task) return <p role="alert">タスクが見つかりません。</p>;
-  const timestamp = now();
+  const timestamp = displayTime;
   const level = calculateNeglectLevel({
     ...task,
     now: timestamp,
@@ -216,11 +220,22 @@ export function TaskDetailPage({
           <div aria-label="期限の状態">
             <dt>期限: </dt>
             <dd>
-              {dueLabel(
-                task,
-                timestamp,
-                createLocalCalendar(snapshot.settings.timeZone),
-                snapshot.settings.timeZone,
+              {isTaskOverdue(task, timestamp) ? (
+                <OverdueIndicator>
+                  {dueLabel(
+                    task,
+                    timestamp,
+                    createLocalCalendar(snapshot.settings.timeZone),
+                    snapshot.settings.timeZone,
+                  )}
+                </OverdueIndicator>
+              ) : (
+                dueLabel(
+                  task,
+                  timestamp,
+                  createLocalCalendar(snapshot.settings.timeZone),
+                  snapshot.settings.timeZone,
+                )
               )}
             </dd>
           </div>
@@ -466,12 +481,11 @@ function dueLabel(
   if (task.dueMode === "unset") return "期限未設定";
   if (task.dueMode === "none") return "期限なし";
   if (!task.dueAt) return "期限あり";
-  const label =
-    task.dueAt < now
-      ? "期限超過"
-      : calendar.today(task.dueAt) === calendar.today(now)
-        ? "今日が期限"
-        : "期限あり";
+  const label = isTaskOverdue(task, now)
+    ? "期限超過"
+    : calendar.today(task.dueAt) === calendar.today(now)
+      ? "今日が期限"
+      : "期限あり";
   return `${formatLocalDateTime(task.dueAt, timeZone)}（${label}）`;
 }
 function neglectReason(level: number): string {

@@ -65,6 +65,18 @@
 .reviewTaskCard > :not(.reviewProgress) {
   margin-block: 0;
 }
+
+.reviewTaskCard--overdue {
+  border-color: var(--overdue-border);
+  box-shadow: inset 3px 0 var(--overdue-border);
+}
+
+.reviewDeadline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
 .reviewTaskCategory {
   display: inline-flex;
   justify-self: start;

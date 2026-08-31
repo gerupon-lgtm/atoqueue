@@ -20,6 +20,7 @@ export interface LocalStorageRepositoryOptions {
 }
 
 export class LocalStorageRepository implements AppRepository {
+  private readonly listeners = new Set<() => void>();
   private readonly appVersion: string;
   private readonly localDeviceId: string;
   private readonly now: () => string;
@@ -66,6 +67,29 @@ export class LocalStorageRepository implements AppRepository {
         cause: error,
       });
     }
+    this.notifyCommittedChange();
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    const onStorage = (event: StorageEvent) => {
+      if (event.storageArea === this.storage && (event.key === DATA_KEY || event.key === null)) listener();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      this.listeners.delete(listener);
+      window.removeEventListener("storage", onStorage);
+    };
+  }
+
+  private notifyCommittedChange(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch {
+        // A display observer cannot turn an already committed write into a save failure.
+      }
+    }
   }
 
   async loadDraft(): Promise<string> {
@@ -98,6 +122,7 @@ export class LocalStorageRepository implements AppRepository {
         cause: error,
       });
     }
+    this.notifyCommittedChange();
   }
 
   private backUpCorruptValue(value: string): void {

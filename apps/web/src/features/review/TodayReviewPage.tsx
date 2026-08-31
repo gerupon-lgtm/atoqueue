@@ -7,6 +7,7 @@ import {
   findNextUnansweredReviewIndex,
   goToNextTask,
   goToPreviousTask,
+  isTaskOverdue,
   refreshReviewSession,
   resolveDueChoice,
   startReviewSession,
@@ -24,6 +25,8 @@ import {
 } from "./review-presentation";
 import { resolveReminderTaskId } from "../../infrastructure/notifications/reminder-navigation";
 import { taskCategoryDisplayLabel } from "../tasks/task-category-options";
+import { OverdueIndicator } from "../../presentation/OverdueIndicator";
+import { useDisplayTime } from "../../presentation/use-task-snapshot";
 import "./TodayReviewPage.css";
 
 export interface TodayReviewPageProps {
@@ -53,6 +56,7 @@ export function TodayReviewPage({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string>();
   const reviewCalendar = calendar;
+  const displayTime = useDisplayTime(now);
 
   useEffect(() => {
     let active = true;
@@ -277,12 +281,12 @@ export function TodayReviewPage({
 
   const level = calculateNeglectLevel({
     ...task,
-    now: now(),
+    now: displayTime,
     calendar: selectedCalendar,
   });
   const presentation = createReviewPresentation({
     task,
-    now: now(),
+    now: displayTime,
     calendar: selectedCalendar,
     timeZone: snapshot.settings.timeZone,
   });
@@ -332,7 +336,10 @@ export function TodayReviewPage({
           </button>
         ) : null}
       </header>
-      <article aria-label="確認するタスク" className="reviewTaskCard">
+      <article
+        aria-label="確認するタスク"
+        className={`reviewTaskCard${isTaskOverdue(task, displayTime) ? " reviewTaskCard--overdue" : ""}`}
+      >
         <p
           className="reviewProgress"
           data-testid="review-progress"
@@ -348,7 +355,10 @@ export function TodayReviewPage({
             カテゴリ: {taskCategoryDisplayLabel(snapshot, task.category)}
           </p>
         ) : null}
-        <p>{presentation.deadline}</p>
+        <p className="reviewDeadline">
+          {isTaskOverdue(task, displayTime) ? <OverdueIndicator /> : null}
+          <span>{presentation.deadline}</span>
+        </p>
         <p>{presentation.elapsed}</p>
         {priorAnswer ? (
           <p className="reviewCurrentStatus">

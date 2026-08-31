@@ -4,6 +4,10 @@
   max-width: 640px;
 }
 
+.quick-capture__summary {
+  margin: 0;
+}
+
 .quick-capture .quick-capture__notification-setup {
   display: grid;
   gap: 0.5rem;
@@ -105,4 +109,15 @@
   justify-self: start;
   min-height: 44px;
   padding: 0.625rem 1rem;
+}
+
+@media (max-width: 359px) {
+  .quick-capture__actions {
+    gap: 0.5rem;
+  }
+
+  .app-shell__content .quick-capture__actions button {
+    padding-inline: 0.5rem;
+    font-size: 0.875rem;
+  }
 }

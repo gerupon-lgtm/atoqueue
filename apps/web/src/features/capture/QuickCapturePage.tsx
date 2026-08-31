@@ -315,7 +315,7 @@ export function QuickCapturePage({
           </button>
         </section>
       ) : null}
-      <p>受信箱の未整理: {unclassifiedCount}件</p>
+      <p className="quick-capture__summary">受信箱の未整理: {unclassifiedCount}件</p>
       <form className="quick-capture__form" onSubmit={handleSubmit}>
         <label htmlFor="quick-capture-body">思いついたこと</label>
         <textarea

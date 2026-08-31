@@ -252,6 +252,49 @@ describe("LocalStorageRepository persistence failures", () => {
   });
 });
 
+describe("F-003 committed snapshot observation", () => {
+  afterEach(() => window.localStorage.clear());
+
+  it("observes only successful snapshot saves and stops after unsubscribe", async () => {
+    const repository = new LocalStorageRepository(window.localStorage);
+    const observed: boolean[] = [];
+    const unsubscribe = repository.subscribe(() => {
+      void repository.load().then((snapshot) => observed.push(snapshot.settings.enterSavesCapture));
+    });
+    await repository.save(sampleSnapshot());
+    await repository.saveDraft("途中の入力");
+    await repository.clearDraft();
+    expect(observed).toEqual([true]);
+    unsubscribe();
+    const next = sampleSnapshot();
+    next.settings.enterSavesCapture = false;
+    await repository.save(next);
+    expect(observed).toEqual([true]);
+  });
+
+  it("does not report a committed save as failed when a display subscriber throws", async () => {
+    const repository = new LocalStorageRepository(window.localStorage);
+    const unsubscribe = repository.subscribe(() => { throw new Error("display failure"); });
+    await expect(repository.save(sampleSnapshot())).resolves.toBeUndefined();
+    expect((await repository.load()).schemaVersion).toBe(9);
+    unsubscribe();
+  });
+
+  it("notifies a mounted display after device data is cleared", async () => {
+    const repository = new LocalStorageRepository(window.localStorage);
+    const stored = sampleSnapshot();
+    stored.captures = [{ id: "capture", body: "記録", classification: "unclassified", createdAt: stored.savedAt, updatedAt: stored.savedAt }];
+    await repository.save(stored);
+    const observed: number[] = [];
+    const unsubscribe = repository.subscribe(() => {
+      void repository.load().then((snapshot) => observed.push(snapshot.captures.length));
+    });
+    await repository.clearAppData();
+    expect(observed).toEqual([0]);
+    unsubscribe();
+  });
+});
+
 function sampleSnapshot(): AppSnapshot {
   return {
     schemaVersion: 9,
