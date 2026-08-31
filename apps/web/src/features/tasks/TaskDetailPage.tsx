@@ -256,6 +256,76 @@ export function TaskDetailPage({
           </div>
         </dl>
       </section>
+      {task.status === "active" ? (
+        <section
+          className="task-detail__section"
+          aria-labelledby="task-detail-status-heading"
+        >
+          <h2 id="task-detail-status-heading">状態</h2>
+          <div className="task-detail__actions task-detail__status-actions">
+            <button
+              className="task-detail__complete"
+              disabled={busy}
+              style={touchTarget}
+              type="button"
+              onClick={() =>
+                void change(
+                  { type: "complete" },
+                  { area: "status", message: "完了にしました。" },
+                )
+              }
+            >
+              {busyAction === "complete" ? "変更中…" : "完了"}
+            </button>
+            <button
+              className="task-detail__dismiss"
+              disabled={busy}
+              style={touchTarget}
+              type="button"
+              onClick={() =>
+                void change(
+                  { type: "dismiss" },
+                  { area: "status", message: "後回しにしました。" },
+                )
+              }
+            >
+              {busyAction === "dismiss" ? "変更中…" : "後回し"}
+            </button>
+            <button
+              className="task-detail__archive"
+              disabled={busy}
+              style={touchTarget}
+              type="button"
+              onClick={() =>
+                void change(
+                  { type: "archive" },
+                  { area: "status", message: "アーカイブしました。" },
+                )
+              }
+            >
+              {busyAction === "archive" ? "変更中…" : "アーカイブ"}
+            </button>
+          </div>
+        </section>
+      ) : (
+        <div className="task-detail__actions task-detail__single-action">
+          <button
+            className="task-detail__reopen"
+            disabled={busy}
+            style={touchTarget}
+            type="button"
+            onClick={() =>
+              void change(
+                { type: "reopen" },
+                { area: "status", message: "対応中に戻しました。" },
+              )
+            }
+          >
+            {busyAction === "reopen" ? "変更中…" : "再開"}
+          </button>
+        </div>
+      )}
+      <OperationFeedback area="status" feedback={feedback} />
       <section
         className="task-detail__section"
         aria-labelledby="task-detail-content-heading"
@@ -357,76 +427,6 @@ export function TaskDetailPage({
         ) : null}
         <OperationFeedback area="deadline" feedback={feedback} />
       </section>
-      {task.status === "active" ? (
-        <section
-          className="task-detail__section"
-          aria-labelledby="task-detail-status-heading"
-        >
-          <h2 id="task-detail-status-heading">状態</h2>
-          <div className="task-detail__actions task-detail__status-actions">
-            <button
-              className="task-detail__complete"
-              disabled={busy}
-              style={touchTarget}
-              type="button"
-              onClick={() =>
-                void change(
-                  { type: "complete" },
-                  { area: "status", message: "完了にしました。" },
-                )
-              }
-            >
-              {busyAction === "complete" ? "変更中…" : "完了"}
-            </button>
-            <button
-              className="task-detail__dismiss"
-              disabled={busy}
-              style={touchTarget}
-              type="button"
-              onClick={() =>
-                void change(
-                  { type: "dismiss" },
-                  { area: "status", message: "後回しにしました。" },
-                )
-              }
-            >
-              {busyAction === "dismiss" ? "変更中…" : "後回し"}
-            </button>
-            <button
-              className="task-detail__archive"
-              disabled={busy}
-              style={touchTarget}
-              type="button"
-              onClick={() =>
-                void change(
-                  { type: "archive" },
-                  { area: "status", message: "アーカイブしました。" },
-                )
-              }
-            >
-              {busyAction === "archive" ? "変更中…" : "アーカイブ"}
-            </button>
-          </div>
-        </section>
-      ) : (
-        <div className="task-detail__actions task-detail__single-action">
-          <button
-            className="task-detail__reopen"
-            disabled={busy}
-            style={touchTarget}
-            type="button"
-            onClick={() =>
-              void change(
-                { type: "reopen" },
-                { area: "status", message: "対応中に戻しました。" },
-              )
-            }
-          >
-            {busyAction === "reopen" ? "変更中…" : "再開"}
-          </button>
-        </div>
-      )}
-      <OperationFeedback area="status" feedback={feedback} />
       <h2>操作履歴</h2>
       <ActionHistoryList
         events={snapshot.actionHistory.filter(

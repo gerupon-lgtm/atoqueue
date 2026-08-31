@@ -83,6 +83,34 @@ function repositoryWithTask(
 describe("TaskDetailPage", () => {
   afterEach(cleanup);
 
+  it.each(["active", "completed", "archived"] as const)(
+    "F-016 places status actions before content editing for %s tasks",
+    async (status) => {
+      const { repository } = repositoryWithTask({ status });
+      render(
+        <TaskDetailPage
+          now={() => now}
+          repository={repository}
+          taskId="task-1"
+        />,
+      );
+
+      const action = await screen.findByRole("button", {
+        name: status === "active" ? "完了" : "再開",
+      });
+      const summary = screen.getByRole("region", { name: "タスクの概要" });
+      const content = screen.getByRole("region", { name: "内容" });
+      expect(
+        summary.compareDocumentPosition(action) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(
+        action.compareDocumentPosition(content) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    },
+  );
+
   it("keeps one stable initial load when it uses the built-in clock", async () => {
     const { repository } = repositoryWithTask();
     const load = vi.spyOn(repository, "load");
@@ -134,14 +162,16 @@ describe("TaskDetailPage", () => {
   it("keeps a removed custom category selectable as a historical label", async () => {
     const { repository } = repositoryWithTask({ category: "旧分類" });
     render(
-      <TaskDetailPage now={() => now} repository={repository} taskId="task-1" />,
+      <TaskDetailPage
+        now={() => now}
+        repository={repository}
+        taskId="task-1"
+      />,
     );
 
     const category = await screen.findByLabelText("カテゴリ");
     expect((category as HTMLSelectElement).value).toBe("旧分類");
-    expect(
-      screen.getByRole("option", { name: "旧分類（過去）" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("option", { name: "旧分類（過去）" })).toBeTruthy();
     expect(screen.getByLabelText("現在のカテゴリ").textContent).toBe(
       "カテゴリ: 旧分類（過去）",
     );
@@ -325,6 +355,12 @@ describe("TaskDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "後回し" }));
 
     expect(await screen.findByText("後回しにしました。")).not.toBeNull();
+    expect(
+      screen
+        .getByRole("status")
+        .compareDocumentPosition(screen.getByRole("region", { name: "内容" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("NF-012 handles a local save failure with a recoverable message", async () => {
