@@ -89,6 +89,10 @@ for (const viewport of [
       const link = document.querySelector<HTMLElement>(
         ".app-shell__overdue-summary",
       )!;
+      const wordmark = document.querySelector<HTMLElement>(
+        ".app-shell__wordmark",
+      )!;
+      const wordmarkBox = wordmark.getBoundingClientRect();
       const count = document.querySelector<HTMLElement>(
         ".quick-capture__summary",
       )!;
@@ -112,11 +116,17 @@ for (const viewport of [
         navTop: nav.top,
         summaryHeight: summary.height,
         summaryRight: summary.right,
+        summaryLeft: summary.left,
+        wordmarkRight: wordmarkBox.right,
+        wordmarkFontSize: getComputedStyle(wordmark).fontSize,
+        summaryFontSize: getComputedStyle(link).fontSize,
         actionsRight: actions.right,
         formRight: form.right,
       };
     });
     expect(metrics).toMatchObject({ scroll: 0, horizontal: false });
+    expect(metrics.wordmarkFontSize).toBe(metrics.summaryFontSize);
+    expect(metrics.wordmarkRight).toBeLessThan(metrics.summaryLeft);
     expect(metrics.height).toBeLessThanOrEqual(metrics.priorHeight);
     if (viewport.height >= 600) {
       expect(metrics.height).toBe(viewport.height);

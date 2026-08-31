@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { API_VERSION, installReminderPoll, startServer } from "./start.js";
 
 it("publishes the release version used by the production entrypoint", () => {
-  expect(API_VERSION).toBe("mvp-1.18.0");
+  expect(API_VERSION).toBe("mvp-1.19.0");
 });
 
 describe("reminder polling", () => {
