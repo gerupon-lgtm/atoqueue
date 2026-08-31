@@ -64,16 +64,10 @@ export function refreshReviewSession(input: RefreshReviewInput): ReviewSession {
   };
 }
 
-/**
- * Finds the current item without reviving stale, unvisited tasks. Answered
- * tasks remain visible when the user explicitly goes back to correct a choice.
- */
+/** Manual history selection must match the persisted page index exactly. */
 export function currentReviewTask(input: CurrentReviewTaskInput): Task | null {
-  for (let index = input.session.currentIndex; index < input.session.orderedTaskIds.length; index += 1) {
-    const task = input.tasks.find((candidate) => candidate.id === input.session.orderedTaskIds[index]);
-    if (task && (task.status === "active" || input.session.answeredTaskIds.includes(task.id))) return task;
-  }
-  return null;
+  const taskId = input.session.orderedTaskIds[input.session.currentIndex];
+  return input.tasks.find((task) => task.id === taskId) ?? null;
 }
 
 export function goToPreviousTask(session: ReviewSession, now: string): ReviewSession {
@@ -96,11 +90,7 @@ export function goToNextTask(
     const task = tasks.find(
       (candidate) => candidate.id === session.orderedTaskIds[index],
     );
-    if (
-      task &&
-      task.status === "active" &&
-      !session.answeredTaskIds.includes(task.id)
-    ) {
+    if (task) {
       return { ...session, currentIndex: index, updatedAt: now };
     }
   }
@@ -122,14 +112,7 @@ export function summarizeReview(session: ReviewSession, events: ActionEvent[]): 
   return { processedTaskIds, actionCounts };
 }
 
-export function findNextReviewIndex(session: ReviewSession, tasks: Task[], from: number): number {
-  for (let index = from; index < session.orderedTaskIds.length; index += 1) {
-    const task = tasks.find((candidate) => candidate.id === session.orderedTaskIds[index]);
-    if (task?.status === "active" || (task && session.answeredTaskIds.includes(task.id))) return index;
-  }
-  return session.orderedTaskIds.length;
-}
-
+/** Automatic progression/resume prioritizes work, independently of manual history navigation. */
 export function findNextUnansweredReviewIndex(
   session: ReviewSession,
   tasks: Task[],

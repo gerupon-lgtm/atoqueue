@@ -9,7 +9,9 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  answerReview,
   createEmptySnapshot,
+  modifyTask,
   startReviewSession,
   type AppRepository,
   type AppSnapshot,
@@ -99,6 +101,64 @@ function repositoryWithSnapshot(initial: AppSnapshot): AppRepository {
 
 describe("TodayReviewPage", () => {
   afterEach(cleanup);
+
+  it.each(["complete", "archive"] as const)("F-010 shows the current active state after a reviewed %s is reopened elsewhere", async (answer) => {
+    const repository = repositoryWithSession([task("one"), task("two")]);
+    const answered = answerReview({ snapshot: await repository.load(), sessionId: "session-1", answer, now, calendar });
+    const reopened = modifyTask({ snapshot: answered, taskId: "one", change: { type: "reopen" }, now, calendar });
+    await repository.save({ ...reopened, reviewSessions: [{ ...reopened.reviewSessions[0]!, currentIndex: 0 }] });
+    render(<TodayReviewPage calendar={calendar} now={() => now} repository={repository} />);
+    await screen.findByText("タスク one");
+    expect(screen.getByText("対応中", { selector: "strong" })).toBeTruthy();
+    expect(screen.queryByText("このタスクは完了マーク済みです。")).toBeNull();
+    expect(screen.queryByText("このタスクはアーカイブマーク済みです。")).toBeNull();
+  });
+
+  it("F-009 keeps four history cards and their progress aligned after three direct status changes", async () => {
+    const repository = repositoryWithSession([task("one"), task("two"), task("three"), task("four")]);
+    let snapshot = await repository.load();
+    for (const [taskId, type] of [["one", "complete"], ["three", "archive"], ["four", "complete"]] as const) {
+      snapshot = modifyTask({ snapshot, taskId, change: { type }, now, calendar, idFactory: (kind) => `${taskId}-${kind}` });
+    }
+    await repository.save(snapshot);
+    const clock = () => now;
+    const renderPage = () => render(<TodayReviewPage calendar={calendar} now={clock} repository={repository} />);
+    let view = renderPage();
+    await screen.findByText("タスク two");
+    expect(screen.getByTestId("review-progress").textContent).toBe("2 / 4");
+    fireEvent.click(screen.getByRole("button", { name: "前のタスク" }));
+    await screen.findByText("タスク one");
+    expect(screen.getByTestId("review-progress").textContent).toBe("1 / 4");
+    expect(screen.getByText("このタスクは完了マーク済みです。")).toBeTruthy();
+    expect(screen.getByText("完了", { selector: "strong" }).className).toContain("--completed");
+    for (const [id, progress] of [["two", "2 / 4"], ["three", "3 / 4"], ["four", "4 / 4"], ["one", "1 / 4"]]) {
+      fireEvent.click(screen.getByRole("button", { name: "次のタスク" }));
+      await screen.findByText(`タスク ${id}`);
+      expect(screen.getByTestId("review-progress").textContent).toBe(progress);
+      if (id === "three") {
+        expect(screen.getByText("このタスクはアーカイブマーク済みです。")).toBeTruthy();
+        expect(screen.getByText("アーカイブ", { selector: "strong" }).className).toContain("--archived");
+      }
+    }
+    const browsed = await repository.load();
+    expect(browsed.actionHistory).toEqual(snapshot.actionHistory);
+    expect(browsed.tasks).toEqual(snapshot.tasks);
+    expect(browsed.notificationOutbox).toEqual(snapshot.notificationOutbox);
+    expect(browsed.reminderMap).toEqual(snapshot.reminderMap);
+    expect(browsed.reviewSessions[0]!.answeredTaskIds).toEqual(snapshot.reviewSessions[0]!.answeredTaskIds);
+    expect(browsed.reviewSessions[0]!.actionEventIds).toEqual(snapshot.reviewSessions[0]!.actionEventIds);
+    view.unmount();
+    view = renderPage();
+    await screen.findByText("タスク two");
+    expect(screen.getByTestId("review-progress").textContent).toBe("2 / 4");
+    fireEvent.click(screen.getByRole("button", { name: "前のタスク" }));
+    await screen.findByText("タスク one");
+    fireEvent.click(screen.getByRole("button", { name: "期限なし" }));
+    await screen.findByText("タスク two");
+    expect((await repository.load()).tasks[0]).toMatchObject({ id: "one", status: "active", dueMode: "none" });
+    expect((await repository.load()).tasks[1]).toEqual(snapshot.tasks[1]);
+    view.unmount();
+  });
 
   it("F-012 omits the previous action until there is a task to return to and keeps progress inside the card", async () => {
     render(

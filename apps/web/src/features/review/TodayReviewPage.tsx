@@ -297,6 +297,14 @@ export function TodayReviewPage({
     now: now(),
     calendar: selectedCalendar,
   });
+  const currentStatus =
+    task.status === "completed"
+      ? "完了"
+      : task.status === "archived"
+        ? "アーカイブ"
+        : priorAnswer === "完了" || priorAnswer === "アーカイブ"
+          ? "対応中"
+          : priorAnswer;
   const stateMessage =
     task.status === "completed"
       ? "このタスクは完了マーク済みです。"
@@ -360,10 +368,10 @@ export function TodayReviewPage({
           <span>{presentation.deadline}</span>
         </p>
         <p>{presentation.elapsed}</p>
-        {priorAnswer ? (
+        {currentStatus ? (
           <p className="reviewCurrentStatus">
             <span>現在：</span>
-            <strong className={statusClassName}>{priorAnswer}</strong>
+            <strong className={statusClassName}>{currentStatus}</strong>
           </p>
         ) : null}
         <ReviewActionSheet
