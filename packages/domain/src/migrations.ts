@@ -1,5 +1,6 @@
 import { CorruptDataError, UnsupportedSchemaVersionError } from "./errors";
 import { validateCustomTaskCategories } from "./task-categories";
+import { globalNotificationSeriesKey } from "./global-notification-series";
 import type { AppSnapshot } from "./model";
 
 type RecordValue = Record<string, unknown>;
@@ -67,13 +68,13 @@ export function migrateSnapshot(input: unknown): AppSnapshot {
     validateSnapshot(snapshot, true, true, true);
     return normalizeSnapshot(upgradeV8ToV9(snapshot));
   }
-  if (version === 9) {
+  if (version === 9 || version === 10) {
     validateSnapshot(snapshot, true, true, true, true);
     return normalizeSnapshot(snapshot);
   }
   if (typeof version === "number")
     throw new UnsupportedSchemaVersionError(version);
-  throw corrupt("schemaVersion must be 1, 2, 3, 4, 5, 6, 7, 8, or 9");
+  throw corrupt("schemaVersion must be 1, 2, 3, 4, 5, 6, 7, 8, 9, or 10");
 }
 
 function validateSnapshot(
@@ -238,12 +239,22 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
     "taskId",
     "captureId",
     "scope",
+    "seriesKey",
     "kind",
     "taskRevision",
     "createdAt",
   ]);
 
-  return normalized as unknown as AppSnapshot;
+  const result = normalized as unknown as AppSnapshot;
+  // Adopt existing v9 global reservations; upgrading must not recreate delivered alerts.
+  if (snapshot.schemaVersion === 9) {
+    result.reminderMap = result.reminderMap.map(entry => {
+      const seriesKey = entry.scope && globalNotificationSeriesKey(result, entry.scope);
+      return seriesKey ? { ...entry, seriesKey } : entry;
+    });
+  }
+  result.schemaVersion = 10;
+  return result;
 }
 
 function normalizedEntities(
@@ -679,6 +690,7 @@ function reminderMapEntry(
 ): void {
   const entity = object(value, `reminderMap[${index}]`);
   strings(entity, ["reminderId", "createdAt"]);
+  if (entity.seriesKey !== undefined) string(entity.seriesKey, `reminderMap[${index}].seriesKey`);
   const hasTask = entity.taskId !== undefined;
   const hasCapture = entity.captureId !== undefined;
   const hasScope = entity.scope !== undefined;

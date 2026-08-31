@@ -27,7 +27,7 @@ export interface DueReminder extends ReminderRecord {
 export type UpsertResult =
   | { kind: "created" | "updated"; record: ReminderRecord }
   | { kind: "replay"; record: ReminderRecord }
-  | { kind: "conflict" | "missing" };
+  | { kind: "conflict" | "missing" | "invalid_schedule" };
 
 export interface ReminderRepository {
   upsert(input: Omit<ReminderRecord, "status" | "attemptCount" | "claimedAt" | "sentAt" | "lastErrorCode" | "createdAt" | "updatedAt"> & { now: string }): Promise<UpsertResult>;
@@ -61,6 +61,7 @@ export class InMemoryReminderRepository implements ReminderRepository {
       if (job.id === input.id && job.scheduledAt === input.scheduledAt && job.notificationType === input.notificationType && job.repeatCadence === input.repeatCadence) return { kind: "replay", record: { ...job } };
       return { kind: "conflict" };
     }
+    if (isExpiredNewSchedule(input)) return { kind: "invalid_schedule" };
     const previous = this.jobs.get(input.id);
     if (previous && previous.deviceId !== input.deviceId) return { kind: "missing" };
     const record: ReminderRecord = {
@@ -132,6 +133,7 @@ export class PgReminderRepository implements ReminderRepository {
         const record = rowToRecord(sameKey);
         return record.id === input.id && record.scheduledAt === input.scheduledAt && record.notificationType === input.notificationType && record.repeatCadence === input.repeatCadence ? { kind: "replay", record } : { kind: "conflict" };
       }
+      if (isExpiredNewSchedule(input)) { await client.query("COMMIT"); return { kind: "invalid_schedule" }; }
       const inserted = await client.query<Row>(
         `INSERT INTO reminder_jobs (id, device_id, scheduled_at, notification_type, repeat_cadence, status, idempotency_key, attempt_count, claimed_at, sent_at, last_error_code, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,'pending',$6,0,NULL,NULL,NULL,$7,$7)
@@ -224,3 +226,5 @@ function fingerprint(input: Parameters<ReminderRepository["upsert"]>[0]): string
 function legacyFingerprint(input: Parameters<ReminderRepository["upsert"]>[0]): string { return JSON.stringify({ id: input.id, scheduledAt: input.scheduledAt, notificationType: input.notificationType }); }
 function matchesFingerprint(stored: string, input: Parameters<ReminderRepository["upsert"]>[0]): boolean { return stored === fingerprint(input) || (input.repeatCadence === null && stored === legacyFingerprint(input)); }
 function operationKey(input: Parameters<ReminderRepository["upsert"]>[0]): string { return `${input.deviceId}:${input.id}:${input.idempotencyKey}`; }
+/** A replay acknowledges an existing operation even after dispatch advanced its time. */
+function isExpiredNewSchedule(input: Parameters<ReminderRepository["upsert"]>[0]): boolean { return Date.parse(input.scheduledAt) < Date.parse(input.now) - 5 * 60_000; }

@@ -243,7 +243,7 @@ describe("flushOutbox", () => {
     expect((await repository.load()).notificationOutbox).toEqual([]);
   });
 
-  it("rebuilds an invalid global schedule without attaching local ownership to the API record", async () => {
+  it("discards an expired unregistered global one-shot without generating a fresh immediate notification", async () => {
     const snapshot = snapshotWithOutbox();
     snapshot.tasks = [];
     snapshot.captures = [{
@@ -281,15 +281,7 @@ describe("flushOutbox", () => {
     });
 
     const saved = await repository.load();
-    expect(saved.notificationOutbox).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          operation: "upsert",
-          notificationType: "inbox_review",
-          scheduledAt: now,
-        }),
-      ]),
-    );
+    expect(saved.notificationOutbox).toEqual([]);
     expect(saved.reminderMap).toEqual(
       expect.arrayContaining([expect.objectContaining({ scope: "inbox" })]),
     );

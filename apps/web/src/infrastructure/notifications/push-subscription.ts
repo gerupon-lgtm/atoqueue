@@ -1,6 +1,6 @@
 import {
   rebuildActiveTaskNotifications,
-  rebuildPendingCaptureNotifications,
+  rebuildGlobalNotificationSchedules,
   type AppRepository,
 } from "../../../../../packages/domain/src";
 import type { PushSubscription } from "../../../../../packages/contracts/src";
@@ -134,9 +134,12 @@ export async function enableNotifications(input: {
       snapshot: updated,
       now: savedAt,
     });
-    const captureDelivery = rebuildPendingCaptureNotifications({
+    const captureDelivery = rebuildGlobalNotificationSchedules({
       snapshot: { ...updated, ...taskDelivery },
       now: savedAt,
+      // Explicit setup repairs reservations on the registered/re-enabled device.
+      // Ordinary startup and unchanged preferences must not force a rebuild.
+      force: true,
     });
     await repository.save({ ...updated, ...captureDelivery });
     return { state: "granted" };

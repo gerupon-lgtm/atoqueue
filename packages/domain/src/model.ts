@@ -1,5 +1,5 @@
 export interface AppSnapshot {
-  schemaVersion: 9;
+  schemaVersion: 10;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -140,6 +140,8 @@ export interface ReminderMapEntry {
   taskId?: string;
   captureId?: string;
   scope?: "inbox" | "memo";
+  /** Local scheduling inputs survive removal of successfully delivered outbox items. */
+  seriesKey?: string;
   kind?:
     | "capture_initial"
     | "initial"

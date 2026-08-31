@@ -1,5 +1,6 @@
 import type { AppSnapshot, Capture, NotificationOutboxItem, ReminderMapEntry, RepeatCadence, Task } from "./model";
 import { planNotificationSchedules, type ReminderScheduleKind } from "./notification-schedule";
+import { globalNotificationSeriesKey } from "./global-notification-series";
 
 export type CaptureReminderScheduleKind = "capture_initial";
 export type NotificationIdFactory = (kind: "outbox" | "reminder", scheduleKind?: ReminderScheduleKind | CaptureReminderScheduleKind) => string;
@@ -150,12 +151,13 @@ export function rebuildInboxReminderNotifications(input: GlobalRebuildInput): Pi
   const frequency = input.snapshot.settings.inboxReminderFrequency;
   const offsets = frequency === "gentle" ? [0, 3, 7] : frequency === "prompt" ? [0, 1, 3, 7] : [0];
   const initial = oldest ? addMinutes(oldest.createdAt, input.snapshot.settings.initialReminderDelayMinutes ?? 60) : undefined;
+  const replacing = input.snapshot.reminderMap.some(entry => entry.scope === "inbox" || entry.captureId);
   const oneShots = initial
-    ? keepUpcomingOneShots(offsets.map((days) => addDays(initial, days)), input.now)
+    ? keepUpcomingOneShots(offsets.map((days) => addDays(initial, days)), input.now, !replacing)
     : [];
   const schedules: GlobalSchedule[] = !initial ? []
     : frequency === "none" ? oneShots.map((scheduledAt) => ({ scheduledAt }))
-      : [...oneShots.map((scheduledAt) => ({ scheduledAt })), { scheduledAt: oneShots.length === 0 ? input.now : addDays(initial, 14), repeatCadence: "weekly" }];
+      : [...oneShots.map((scheduledAt) => ({ scheduledAt })), { scheduledAt: replacing ? nextGlobalRepeatAt(addDays(initial, 14), "weekly", input.now) : oneShots.length === 0 ? input.now : addDays(initial, 14), repeatCadence: "weekly" }];
   return replaceScope(input, "inbox", schedules);
 }
 
@@ -169,7 +171,7 @@ export function rebuildMemoReviewNotifications(input: GlobalRebuildInput): Pick<
     : undefined;
   const schedules: GlobalSchedule[] = !first || !cadence ? []
     : first < input.now
-      ? [{ scheduledAt: input.now, repeatCadence: cadence }]
+      ? [{ scheduledAt: input.snapshot.reminderMap.some(entry => entry.scope === "memo") ? nextGlobalRepeatAt(first, cadence, input.now) : input.now, repeatCadence: cadence }]
       : [{ scheduledAt: first }, { scheduledAt: addMemoInterval(first, cadence), repeatCadence: cadence }];
   return replaceScope(input, "memo", schedules);
 }
@@ -180,31 +182,23 @@ export function rebuildGlobalNotificationSchedules(input: GlobalRebuildInput): P
   return rebuildMemoReviewNotifications({ ...input, snapshot: { ...input.snapshot, ...inbox } });
 }
 
-interface GlobalRebuildInput { snapshot: AppSnapshot; now: string; createId?: NotificationIdFactory }
+interface GlobalRebuildInput { snapshot: AppSnapshot; now: string; createId?: NotificationIdFactory; force?: boolean }
 interface GlobalSchedule { scheduledAt: string; repeatCadence?: RepeatCadence }
 
 function replaceScope(input: GlobalRebuildInput, scope: "inbox" | "memo", schedules: GlobalSchedule[]): Pick<AppSnapshot, "notificationOutbox" | "reminderMap"> {
   const legacy = scope === "inbox" ? (entry: ReminderMapEntry) => entry.scope === "inbox" || Boolean(entry.captureId) : (entry: ReminderMapEntry) => entry.scope === "memo";
   const prior = input.snapshot.reminderMap.filter(legacy);
   const retained = input.snapshot.reminderMap.filter((entry) => !legacy(entry));
-  if (isUnchangedGlobalSeries(input.snapshot, prior, schedules, scope)) {
+  const seriesKey = globalNotificationSeriesKey(input.snapshot, scope);
+  if (!input.force && ((prior.length === 0 && schedules.length === 0) || (seriesKey && prior.length > 0 && prior.every(entry => entry.scope === scope && entry.seriesKey === seriesKey)))) {
     return { notificationOutbox: input.snapshot.notificationOutbox, reminderMap: input.snapshot.reminderMap };
   }
   const priorOutboxIds = new Set(prior.map((entry) => entry.reminderId));
   const retainedOutbox = input.snapshot.notificationOutbox.filter((item) => !priorOutboxIds.has(item.reminderId));
   const cancellations = prior.map((entry) => ({ id: createId(input, "outbox", "capture_initial"), operation: "cancel" as const, reminderId: entry.reminderId, taskRevision: 0, attemptCount: 0, nextAttemptAt: input.now, createdAt: input.now }));
-  const mappings = schedules.map(() => ({ reminderId: createId(input, "reminder", "capture_initial"), scope, kind: "capture_initial" as const, taskRevision: 0, createdAt: input.now }));
+  const mappings = schedules.map(() => ({ reminderId: createId(input, "reminder", "capture_initial"), scope, seriesKey, kind: "capture_initial" as const, taskRevision: 0, createdAt: input.now }));
   const upserts = schedules.map((schedule, index) => ({ id: createId(input, "outbox", "capture_initial"), operation: "upsert" as const, reminderId: mappings[index]!.reminderId, scheduledAt: laterOf(schedule.scheduledAt, input.now), notificationType: "inbox_review" as const, ...(schedule.repeatCadence ? { repeatCadence: schedule.repeatCadence } : {}), taskRevision: 0, attemptCount: 0, nextAttemptAt: input.now, createdAt: input.now }));
   return { notificationOutbox: [...retainedOutbox, ...cancellations, ...upserts], reminderMap: [...retained, ...mappings] };
-}
-
-function isUnchangedGlobalSeries(snapshot: AppSnapshot, prior: ReminderMapEntry[], schedules: GlobalSchedule[], scope: "inbox" | "memo"): boolean {
-  if (prior.length !== schedules.length || prior.some((entry) => entry.scope !== scope)) return false;
-  return prior.every((entry, index) => {
-    const item = snapshot.notificationOutbox.find((candidate) => candidate.reminderId === entry.reminderId && candidate.operation === "upsert");
-    const schedule = schedules[index];
-    return item?.scheduledAt === schedule?.scheduledAt && item.repeatCadence === schedule?.repeatCadence;
-  });
 }
 
 function oldestCapture(captures: Capture[], classification: Capture["classification"]): Capture | undefined {
@@ -226,11 +220,18 @@ function addUtcMonths(iso: string, months: number): string {
   return new Date(Date.UTC(targetYear, normalizedMonth, Math.min(day, finalDay), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(), date.getUTCMilliseconds())).toISOString();
 }
 
-function keepUpcomingOneShots(schedules: string[], now: string): string[] {
+function keepUpcomingOneShots(schedules: string[], now: string, catchUp: boolean): string[] {
   const next = schedules.findIndex((scheduledAt) => scheduledAt >= now);
   if (next === -1) return [];
   if (next === 0) return schedules;
-  return [now, ...schedules.slice(next)];
+  return catchUp ? [now, ...schedules.slice(next)] : schedules.slice(next);
+}
+
+/** Skip elapsed occurrences while preserving the existing cadence, never reset to now. */
+export function nextGlobalRepeatAt(scheduledAt: string, cadence: RepeatCadence, now: string): string {
+  let next = scheduledAt;
+  while (next <= now) next = cadence === "daily" ? addDays(next, 1) : addMemoInterval(next, cadence);
+  return next;
 }
 
 function cancel(entry: ReminderMapEntry, input: Parameters<typeof queueTaskNotifications>[0]): NotificationOutboxItem {

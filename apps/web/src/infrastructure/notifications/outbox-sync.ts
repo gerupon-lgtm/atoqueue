@@ -3,7 +3,7 @@ import {
   createLocalCalendar,
   notificationTypeForTask,
   planNotificationSchedules,
-  rebuildGlobalNotificationSchedules,
+  nextGlobalRepeatAt,
   type AppRepository,
   type AppSnapshot,
   type NotificationOutboxItem,
@@ -136,8 +136,10 @@ function registrationFailed(snapshot: AppSnapshot): AppSnapshot {
 function reschedule(snapshot: AppSnapshot, item: NotificationOutboxItem, now: string): AppSnapshot {
   const mapping = snapshot.reminderMap.find((entry) => entry.reminderId === item.reminderId);
   if (mapping?.scope) {
-    const rebuilt = rebuildGlobalNotificationSchedules({ snapshot, now });
-    return { ...snapshot, ...rebuilt };
+    // The API now replays accepted operations even after their scheduled time.
+    // Only genuinely unregistered, expired slots reach this path.
+    if (!item.repeatCadence || !item.scheduledAt) return discard(snapshot, item);
+    return replaceGlobalOperation(snapshot, item, now, nextGlobalRepeatAt(item.scheduledAt, item.repeatCadence, now));
   }
   if (mapping?.kind === "capture_initial") {
     const capture = snapshot.captures.find(
@@ -197,8 +199,7 @@ function renewIdempotencyKey(snapshot: AppSnapshot, item: NotificationOutboxItem
     (mapping) => mapping.reminderId === item.reminderId,
   );
   if (failedMapping?.scope) {
-    const rebuilt = rebuildGlobalNotificationSchedules({ snapshot, now });
-    return { ...snapshot, ...rebuilt };
+    return replaceGlobalOperation(snapshot, item, now, item.scheduledAt);
   }
   const active = snapshot.reminderMap.flatMap((mapping) => {
     if (mapping.kind === "capture_initial") {
@@ -242,4 +243,10 @@ function hasGlobalOwner(snapshot: AppSnapshot, scope: "inbox" | "memo"): boolean
   return scope === "inbox"
     ? snapshot.captures.some((capture) => capture.classification === "unclassified")
     : snapshot.captures.some((capture) => capture.classification === "note");
+}
+
+function replaceGlobalOperation(snapshot: AppSnapshot, item: NotificationOutboxItem, now: string, scheduledAt: string | undefined): AppSnapshot {
+  return { ...snapshot, notificationOutbox: snapshot.notificationOutbox.map(candidate => candidate.id === item.id
+    ? { ...candidate, id: crypto.randomUUID(), scheduledAt, attemptCount: 0, nextAttemptAt: now, createdAt: now }
+    : candidate) };
 }

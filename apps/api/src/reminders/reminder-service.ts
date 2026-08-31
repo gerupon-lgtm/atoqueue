@@ -18,9 +18,9 @@ export class ReminderService {
     await this.authenticate(input.deviceId, input.bearer);
     this.rateLimiter?.consumeDevice(input.deviceId);
     const now = this.now();
-    if (Date.parse(input.scheduledAt) < Date.parse(now) - 5 * 60_000) throw new ApiError(400, "INVALID_SCHEDULE", "Scheduled time is too far in the past.");
     const result = await this.reminders.upsert({ id: input.reminderId, deviceId: input.deviceId, scheduledAt: input.scheduledAt, notificationType: input.notificationType, repeatCadence: input.repeatCadence ?? null, idempotencyKey: input.idempotencyKey, now });
     if (!("record" in result)) {
+      if (result.kind === "invalid_schedule") throw new ApiError(400, "INVALID_SCHEDULE", "Scheduled time is too far in the past.");
       if (result.kind === "conflict") throw new ApiError(409, "IDEMPOTENCY_CONFLICT", "Idempotency key conflicts with a different request.");
       throw new ApiError(404, "REMINDER_NOT_FOUND", "Reminder not found.");
     }

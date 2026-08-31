@@ -40,7 +40,7 @@
 
 ```ts
 export interface AppSnapshot {
-  schemaVersion: 9;
+  schemaVersion: 10;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -254,6 +254,8 @@ export interface ReminderMapEntry {
   captureId?: string;
   /** 受信箱・メモ一覧の全体予約。局所IDはサーバーへ送らない。 */
   scope?: "inbox" | "memo";
+  /** 系列の起点・関連設定の端末内識別情報。API・バックアップには含めない。 */
+  seriesKey?: string;
   kind?:
     | "capture_initial"
     | "initial"
@@ -303,6 +305,7 @@ export interface ReminderMapEntry {
 - 【確定】受信箱の再通知は `none`（初回のみ）、`gentle`（3日後、7日後、以降週1回）、`prompt`（1日後、3日後、7日後、以降週1回）から選ぶ。新規端末の初期値は `gentle`、v6からの移行値は `none` である。未整理が0件になれば系列全件を取消す。
 - 【確定】`note` のメモ棚卸しもメモ一覧全体の匿名予約系列を一つだけ持つ。最も古いメモを基準に、`weekly` は7日後から週ごと、`monthly` は14日後からUTC暦月ごと（各月末へクランプ）に繰り返す。メモが0件になれば取消す。新規端末の初期値は `weekly`、移行値は `none` である。初めての未整理記録を追加して受信箱系列を作る場合も、通知APIへ同期済みのメモ系列を取消・再作成しない。
 - 【確定】利用者が記録をタスク化・メモ化・不要化したときは、全体予約を再計算する。タスク候補は自動確定しない。
+- 【確定】全体予約の起点と関連設定を端末内 `seriesKey` で識別し、Outbox送信後も保持する。同じ系列の再計算では予約IDと時刻を維持する。既存系列の起点変更では経過済みの節目を現在時刻へ置換せず、未来の節目・間隔に沿って再予約する。明示的な通知再設定のみ両系列を強制再登録する。
 - 【確定】通知予約とPush購読は端末単位で扱う。MVPではタスク本文・タスク状態を端末間同期しないため、ある端末で作ったタスクの通知を別端末へ配送しない。
 - 【確定】端末データ削除では、保存済みの匿名端末識別子と秘密値でサーバー側のPush端末登録を先に無効化する。無効化に失敗した場合はローカルのスナップショットを消さず、再試行できるようにする。無効化後はブラウザのPush購読もベストエフォートで解除する。
 - 【確定】期限ありタスクは、利用者が設定した期限前の分数で予約する。初期値は60分。期限時は通常の `review` 予約を使う。
@@ -416,6 +419,7 @@ export interface BackupEnvelopeV1 {
    - v6 → v7: 受信箱再通知を `none`、メモ棚卸しを `none`、Enter登録を `true` で補う。新規スナップショットは `gentle`、`weekly`、`true` で開始する。全体予約は `ReminderMapEntry.scope` で表す。
    - v7 → v8: `customTaskCategories` を空配列で補い、Taskのカテゴリをプリセット限定型から文字列へ拡張する。既存Taskのカテゴリ値は保持する。
    - v8 → v9: `overdueTaskReminderFrequency` を `gentle` で補う。既存の繰り返しOutboxにある `repeatCadence` は保持する。
+   - v9 → v10: 既存の全体予約に、現在の最古Capture作成日時・関連する通知設定から `seriesKey` を付ける。予約ID・Outbox・利用者データは変更しない。Outbox送信成功後もこの識別情報を保持し、無変更の再計算による予約の再作成を防ぐ。
 2. 新しい未知バージョンは上書きせず、読み取り停止とJSON退避を案内する。
 3. JSON解析失敗時は破損値を別キー `atoqueue:corrupt:<timestamp>` へ退避して初期化可否を確認する。
 4. 破損復旧や復元では元データを直ちに削除しない。

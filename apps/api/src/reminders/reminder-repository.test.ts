@@ -20,6 +20,14 @@ function row(overrides: Record<string, unknown> = {}) {
 }
 
 describe("PgReminderRepository upsert conflict handling", () => {
+  it("rejects an unregistered past schedule before any database mutation", async () => {
+    const queries: string[] = [];
+    const client = { query: async (sql: string) => { queries.push(sql); return { rows: [] }; }, release: () => undefined };
+    const result = await new PgReminderRepository({ connect: async () => client } as never).upsert({ ...input, now: "2026-08-07T09:00:00.000Z" });
+    expect(result).toEqual({ kind: "invalid_schedule" });
+    expect(queries.some(sql => /^(INSERT|UPDATE)/.test(sql))).toBe(false);
+    expect(queries).toContain("COMMIT");
+  });
   it("only requeues a claimed recurring job while its device subscription remains active", async () => {
     const queries: Array<{ sql: string; values: unknown[] | undefined }> = [];
     const client = {
@@ -70,7 +78,7 @@ describe("PgReminderRepository upsert conflict handling", () => {
         : { rows: [] },
       release: () => undefined,
     };
-    const result = await new PgReminderRepository({ connect: async () => client } as never).upsert(input);
+    const result = await new PgReminderRepository({ connect: async () => client } as never).upsert({ ...input, now: "2026-08-07T09:00:00.000Z" });
     expect(result).toMatchObject({ kind: "replay", record: { repeatCadence: null } });
   });
 

@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createEmptySnapshot,
+  rebuildGlobalNotificationSchedules,
   type AppRepository,
 } from "../../../../../packages/domain/src";
 import {
   enableNotifications,
   inspectBrowserPushState,
 } from "./push-subscription";
+import { flushOutbox } from "./outbox-sync";
 
 describe("inspectBrowserPushState", () => {
   it("requires both granted permission and a live Push subscription", async () => {
@@ -35,6 +37,22 @@ describe("inspectBrowserPushState", () => {
 });
 
 describe("enableNotifications", () => {
+  it("re-registers both global series for a new device and keeps them stable after synchronization", async () => {
+    const repository = memory();
+    const snapshot = await repository.load();
+    const now = "2026-08-04T08:00:00.000Z";
+    snapshot.captures = ["unclassified", "note"].map((classification, index) => ({ id: String(index), body: "PRIVATE", classification: classification as "unclassified" | "note", createdAt: "2026-07-01T08:00:00.000Z", updatedAt: now }));
+    const previous = rebuildGlobalNotificationSchedules({ snapshot, now });
+    await repository.save({ ...snapshot, ...previous, notificationOutbox: [] });
+    expect(await enableNotifications({ repository, browser: grantedBrowser(), now: () => now, api: { publicKey: async () => "AQID", register: async () => ({ deviceId: "new-device", deviceSecret: "new-secret", createdAt: now }), updateSubscription: async () => undefined } })).toEqual({ state: "granted" });
+    const registered = await repository.load();
+    expect(registered.reminderMap.map(entry => entry.scope)).toEqual(["inbox", "memo"]);
+    expect(registered.reminderMap.every(entry => !previous.reminderMap.some(old => old.reminderId === entry.reminderId))).toBe(true);
+    const sent: string[] = [];
+    await flushOutbox({ repository, now: () => now, api: { upsert: async (item, credentials) => { expect(credentials.deviceId).toBe("new-device"); sent.push(item.reminderId); }, cancel: async () => {} } });
+    expect(sent).toEqual(registered.reminderMap.map(entry => entry.reminderId));
+    expect(rebuildGlobalNotificationSchedules({ snapshot: await repository.load(), now: "2026-08-05T08:00:00.000Z" }).notificationOutbox).toEqual([]);
+  });
   it("persists a newly registered device only after an explicit granted permission result", async () => {
     const repository = memory();
     const register = vi.fn().mockResolvedValue({
