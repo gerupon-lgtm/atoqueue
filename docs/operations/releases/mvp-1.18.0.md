@@ -40,4 +40,12 @@
 
 ## 公開状況
 
-本番デプロイと公開バージョンの確認後に追記する。
+- リリースコミット: `1514fededbbee1164fee499642f33c34f4fe8888`（`task/atoqueue-mvp`）。
+- [本番デプロイ Run 33344036785](https://github.com/gerupon-lgtm/atoqueue/actions/runs/33344036785) は `success`。品質ゲート、GitHub Pages公開、OCI通知API配置の3ジョブがすべて成功。
+- 2026-08-31 09:18 JST、公開PWAのトップページと `/assets/index-DD1r5CIq.js` がHTTP 200で取得でき、配信JavaScriptに `mvp-1.18.0` が含まれることを確認。アセット名はローカルでE2E検証したビルドと一致。
+- 同時刻、通知API `/healthz` が `status: "ok"`、`version: "mvp-1.18.0"` を返すことを確認。
+- GitHub Actionsには利用ActionのNode.js 20指定に関する非推奨警告があるが、Node.js 24で実行され全ジョブは成功。今回のリリースでCI構成は変更していない。
+
+本番アプリ: https://atoqueue.sikumilab.com/
+
+端末側はアプリを開き直し、記録画面の「改行で登録」下で `mvp-1.18.0` を確認する。端末データの削除や再インストールは不要。
