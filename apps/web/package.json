@@ -9,7 +9,7 @@
     "test": "pnpm --dir ../.. exec vitest --run --workspace vitest.workspace.ts --project web",
     "test:e2e": "playwright test",
     "generate:ios-splash": "node scripts/generate-ios-splash.mjs",
-    "build": "tsc --noEmit && vite build && node ../../deploy/scripts/write-pages-spa-fallback.mjs && node ../../deploy/scripts/verify-pages-spa-fallback.mjs"
+    "build": "pnpm --filter @atoqueue/contracts build && tsc --noEmit && vite build && node ../../deploy/scripts/write-pages-spa-fallback.mjs && node ../../deploy/scripts/verify-pages-spa-fallback.mjs"
   },
   "dependencies": {
     "@fontsource/kosugi": "5.3.0",
