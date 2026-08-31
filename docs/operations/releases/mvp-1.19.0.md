@@ -26,4 +26,10 @@ Pixel実機の表示は未確認。検証にはテスト専用データを使用
 
 ## 公開状況
 
-本番デプロイ後に公開URLと版情報の確認結果を追記する。
+- リリースコミット: `44d5ee1200f5b4dff8aa7add2ec0ef093a3a51e7`（`task/atoqueue-mvp`）。
+- [本番デプロイ Run 33350654682](https://github.com/gerupon-lgtm/atoqueue/actions/runs/33350654682) は `success`。品質ゲート・PWA公開・通知API配置の全ジョブが成功。
+- 2026-08-31 11:29 JST、https://atoqueue.sikumilab.com/ がHTTP 200を返すことを確認。JavaScriptは `/assets/index-DUl_Nb3b.js`、CSSは `/assets/index-DsP02jZt.css` でローカル検証済みビルドと一致。
+- 公開CSSの `.app-shell__wordmark` が `font-size:.8125rem`、`color:#526a60`、`font-weight:400`、`letter-spacing:.18em` であることを確認。
+- 公開JavaScriptに `mvp-1.19.0` が含まれ、通知APIの `/healthz` が `status: "ok"`、`version: "mvp-1.19.0"` を返すことを確認。
+
+端末ではアプリを開き直し、記録画面の「改行で登録」下が `mvp-1.19.0` になったことを確認する。データ削除・再インストールは不要。
