@@ -21,9 +21,11 @@ export interface FlushOutboxResult { settingsError: boolean; registrationStale: 
 /** Delivers only anonymous queue records after local task changes are safely persisted. */
 export async function flushOutbox({ repository, api, now = () => new Date().toISOString() }: FlushOutboxInput): Promise<FlushOutboxResult> {
   const snapshot = await repository.load();
+  const pending = [...snapshot.notificationOutbox];
+  const retriedExpiredReminderIds = new Set<string>();
   let settingsError = false;
   let registrationStale = false;
-  for (const item of snapshot.notificationOutbox) {
+  for (const item of pending) {
     const current = await repository.load();
     const queued = current.notificationOutbox.find((candidate) => candidate.id === item.id);
     const credentials = current.device.pushDeviceId && current.device.pushDeviceSecret
@@ -46,6 +48,15 @@ export async function flushOutbox({ repository, api, now = () => new Date().toIS
       }
       if (error.code === "INVALID_SCHEDULE") {
         await updateQueued(repository, queued.id, (latest, latestItem) => reschedule(latest, latestItem, now()), now());
+        if (!retriedExpiredReminderIds.has(queued.reminderId)) {
+          retriedExpiredReminderIds.add(queued.reminderId);
+          const rescheduled = (await repository.load()).notificationOutbox.find(
+            (candidate) => candidate.operation === "upsert"
+              && candidate.reminderId === queued.reminderId
+              && candidate.id !== queued.id,
+          );
+          if (rescheduled) pending.push(rescheduled);
+        }
         continue;
       }
       if (error.code === "IDEMPOTENCY_CONFLICT") {
@@ -138,8 +149,12 @@ function reschedule(snapshot: AppSnapshot, item: NotificationOutboxItem, now: st
   if (mapping?.scope) {
     // The API now replays accepted operations even after their scheduled time.
     // Only genuinely unregistered, expired slots reach this path.
-    if (!item.repeatCadence || !item.scheduledAt) return discard(snapshot, item);
-    return replaceGlobalOperation(snapshot, item, now, nextGlobalRepeatAt(item.scheduledAt, item.repeatCadence, now));
+    if (item.repeatCadence && item.scheduledAt) {
+      return replaceGlobalOperation(snapshot, item, now, nextGlobalRepeatAt(item.scheduledAt, item.repeatCadence, now));
+    }
+    return mapping.scope === "inbox" && hasGlobalOwner(snapshot, "inbox")
+      ? replaceGlobalOperation(snapshot, item, now, now)
+      : discard(snapshot, item);
   }
   if (mapping?.kind === "capture_initial") {
     const capture = snapshot.captures.find(

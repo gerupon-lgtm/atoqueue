@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { createEmptySnapshot, rebuildInboxReminderNotifications, type AppSnapshot, type NotificationOutboxItem } from "../../../../../packages/domain/src";
-import { backfillOverdueTaskNotifications } from "./outbox-bootstrap";
+import { reconcileMissingNotifications } from "./outbox-bootstrap";
 import { flushOutbox } from "./outbox-sync";
 import { NotificationApi, NotificationApiError } from "./notification-api";
 import { buildApp } from "../../../../api/src/server";
@@ -11,7 +11,7 @@ import { ReminderDispatcher } from "../../../../api/src/scheduler/reminder-dispa
 // F-014: exercise startup, real HTTP handling and dispatch; no external push.
 const initialTime = "2026-08-31T10:00:00.000Z";
 function fixture() {
-  let snapshot: AppSnapshot = createEmptySnapshot({ appVersion: "mvp-1.22.0", localDeviceId: "diagnostic", timeZone: "Asia/Tokyo", now: initialTime });
+  let snapshot: AppSnapshot = createEmptySnapshot({ appVersion: "mvp-1.23.0", localDeviceId: "diagnostic", timeZone: "Asia/Tokyo", now: initialTime });
   snapshot.settings.notificationEnabled = true;
   snapshot.device.pushDeviceId = "diagnostic-device";
   snapshot.device.pushDeviceSecret = "diagnostic-only";
@@ -33,12 +33,17 @@ describe("inbox synchronization with two unclassified captures and no notes", ()
     expect(after.notificationOutbox[0]!.id).not.toBe(before.notificationOutbox[0]!.id);
   });
 
-  it("drops an expired unregistered one-shot without recreating it on the next recalculation", async () => {
+  it("retries an expired offline one-shot once during the same reconnect flush", async () => {
     const repository = fixture();
     const before = await repository.load();
     before.notificationOutbox[0]!.repeatCadence = undefined;
-    await flushOutbox({ repository, now: () => "2026-09-01T10:00:00.000Z", api: { upsert: async () => { throw new NotificationApiError(400, undefined, "INVALID_SCHEDULE"); }, cancel: async () => {} } });
+    let upsertCount = 0;
+    await flushOutbox({ repository, now: () => "2026-09-01T10:00:00.000Z", api: { upsert: async () => {
+      upsertCount += 1;
+      if (upsertCount === 1) throw new NotificationApiError(400, undefined, "INVALID_SCHEDULE");
+    }, cancel: async () => {} } });
     const after = await repository.load();
+    expect(upsertCount).toBe(2);
     expect(after.notificationOutbox).toEqual([]);
     expect(rebuildInboxReminderNotifications({ snapshot: after, now: "2026-09-01T10:00:00.000Z" }).notificationOutbox).toEqual([]);
   });
@@ -79,7 +84,7 @@ describe("inbox synchronization with two unclassified captures and no notes", ()
       const sent: string[] = [];
       const dispatcher = new ReminderDispatcher(reminders, { send: async () => { sent.push(now); return { statusCode: 201 }; } }, () => new Date(now));
       const startup = async () => {
-        await backfillOverdueTaskNotifications({ repository, now: () => now });
+        await reconcileMissingNotifications({ repository, now: () => now });
         await flushOutbox({ repository, api, now: () => now });
         await dispatcher.dispatchDue();
       };
@@ -99,7 +104,7 @@ describe("inbox synchronization with two unclassified captures and no notes", ()
     const api = { upsert: async (item: NotificationOutboxItem) => { sent.push(item); }, cancel: async () => {} };
     await flushOutbox({ repository, api, now: () => initialTime });
     for (const now of ["2026-08-31T10:10:00.000Z", "2026-08-31T10:20:00.000Z", "2026-08-31T10:30:00.000Z"]) {
-      await backfillOverdueTaskNotifications({ repository, now: () => now });
+      await reconcileMissingNotifications({ repository, now: () => now });
       await flushOutbox({ repository, api, now: () => now });
     }
     expect(sent).toHaveLength(1);

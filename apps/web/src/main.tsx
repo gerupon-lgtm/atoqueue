@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import { NotificationApi } from "./infrastructure/notifications/notification-api";
 import {
-  backfillOverdueTaskNotifications,
+  reconcileMissingNotifications,
   installOutboxFlush,
 } from "./infrastructure/notifications/outbox-bootstrap";
 import { flushOutbox } from "./infrastructure/notifications/outbox-sync";
@@ -23,6 +23,6 @@ createRoot(rootElement).render(
 
 const notificationRepository = new LocalStorageRepository(window.localStorage);
 installOutboxFlush(window, async () => {
-  await backfillOverdueTaskNotifications({ repository: notificationRepository });
+  await reconcileMissingNotifications({ repository: notificationRepository });
   await flushOutbox({ repository: notificationRepository, api: new NotificationApi("https://api.atoqueue.sikumilab.com") });
 });

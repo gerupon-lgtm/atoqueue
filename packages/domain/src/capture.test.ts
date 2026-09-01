@@ -61,27 +61,25 @@ describe("createCapture", () => {
     expect(JSON.stringify(next.notificationOutbox)).not.toContain("capture-1");
   });
 
-  // Break caught: a newer capture tears down and recreates an unchanged global inbox series.
-  it("keeps the existing global inbox reminder IDs and times when a newer capture is saved", () => {
+  // Break caught: preserving the previous inbox series suppresses the newer capture's initial reminder.
+  it("moves an unsent inbox initial reminder to the newer capture's configured time", () => {
     let nextId = 0;
     const idFactory = () => `opaque-${++nextId}`;
     const first = createCapture(snapshot(), "first", now, "capture-1", idFactory);
-    const before = first.notificationOutbox.map((item) => ({
-      reminderId: item.reminderId,
-      scheduledAt: item.scheduledAt,
-      operation: item.operation,
-    }));
+    const synced = { ...first, notificationOutbox: [] };
 
-    const second = createCapture(first, "second", "2026-08-03T00:30:00.000Z", "capture-2", idFactory);
+    const second = createCapture(synced, "second", "2026-08-03T00:30:00.000Z", "capture-2", idFactory);
 
-    expect(second.notificationOutbox.map((item) => ({
-      reminderId: item.reminderId,
-      scheduledAt: item.scheduledAt,
-      operation: item.operation,
-    }))).toEqual(before);
+    expect(second.notificationOutbox.filter((item) => item.operation === "upsert").map((item) => item.scheduledAt)).toEqual([
+      "2026-08-03T01:30:00.000Z",
+      "2026-08-06T01:30:00.000Z",
+      "2026-08-10T01:30:00.000Z",
+      "2026-08-17T01:30:00.000Z",
+    ]);
+    expect(second.notificationOutbox.filter((item) => item.operation === "cancel")).toHaveLength(4);
   });
 
-  it("does not replace a synced future inbox series with an immediate reminder when a newer capture is saved", () => {
+  it("queues a new initial reminder when another capture is saved after the previous initial was sent", () => {
     let nextId = 0;
     const idFactory = () => `opaque-${++nextId}`;
     const first = createCapture(
@@ -92,10 +90,6 @@ describe("createCapture", () => {
       idFactory,
     );
     const synced = { ...first, notificationOutbox: [] };
-    const reminderIds = synced.reminderMap
-      .filter((entry) => entry.scope === "inbox")
-      .map((entry) => entry.reminderId);
-
     const second = createCapture(
       synced,
       "second",
@@ -104,12 +98,25 @@ describe("createCapture", () => {
       idFactory,
     );
 
+    expect(second.notificationOutbox).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        operation: "upsert",
+        scheduledAt: "2026-08-10T01:00:00.000Z",
+        notificationType: "inbox_review",
+      }),
+    ]));
+  });
+
+  it("keeps one inbox series when captures share the same configured initial time", () => {
+    let nextId = 0;
+    const idFactory = () => `opaque-${++nextId}`;
+    const first = createCapture(snapshot(), "first", now, "capture-1", idFactory);
+    const synced = { ...first, notificationOutbox: [] };
+
+    const second = createCapture(synced, "second", now, "capture-2", idFactory);
+
     expect(second.notificationOutbox).toEqual([]);
-    expect(
-      second.reminderMap
-        .filter((entry) => entry.scope === "inbox")
-        .map((entry) => entry.reminderId),
-    ).toEqual(reminderIds);
+    expect(second.reminderMap).toEqual(first.reminderMap);
   });
 
   it("does not replace a synced memo series when the first unclassified capture is saved", () => {

@@ -31,13 +31,6 @@ export function createCapture(
     ...snapshot,
     captures: [...snapshot.captures, capture],
   };
-  const hasExistingInboxSeries =
-    snapshot.captures.some(
-      (candidate) => candidate.classification === "unclassified",
-    ) &&
-    snapshot.reminderMap.some(
-      (entry) => entry.scope === "inbox" || Boolean(entry.captureId),
-    );
   const hasMemoCapture = snapshot.captures.some(
     (candidate) => candidate.classification === "note",
   );
@@ -46,14 +39,12 @@ export function createCapture(
   );
   let scheduledSnapshot = snapshotWithCapture;
 
-  if (!hasExistingInboxSeries) {
-    const inbox = rebuildInboxReminderNotifications({
-      snapshot: scheduledSnapshot,
-      now,
-      createId: idFactory,
-    });
-    scheduledSnapshot = { ...scheduledSnapshot, ...inbox };
-  }
+  const inbox = rebuildInboxReminderNotifications({
+    snapshot: scheduledSnapshot,
+    now,
+    createId: idFactory,
+  });
+  scheduledSnapshot = { ...scheduledSnapshot, ...inbox };
 
   if (hasMemoCapture && !hasExistingMemoSeries) {
     const memo = rebuildMemoReviewNotifications({

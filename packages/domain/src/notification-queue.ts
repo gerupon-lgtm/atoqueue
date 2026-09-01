@@ -1,6 +1,6 @@
 import type { AppSnapshot, Capture, NotificationOutboxItem, ReminderMapEntry, RepeatCadence, Task } from "./model";
 import { planNotificationSchedules, type ReminderScheduleKind } from "./notification-schedule";
-import { globalNotificationSeriesKey } from "./global-notification-series";
+import { globalNotificationSeriesAnchor, globalNotificationSeriesKey } from "./global-notification-series";
 
 export type CaptureReminderScheduleKind = "capture_initial";
 export type NotificationIdFactory = (kind: "outbox" | "reminder", scheduleKind?: ReminderScheduleKind | CaptureReminderScheduleKind) => string;
@@ -100,40 +100,86 @@ export function rebuildActiveTaskNotifications(input: {
   return { notificationOutbox, reminderMap };
 }
 
-/** Adds the v9 overdue series once for active tasks whose older mappings lack it. */
-export function backfillMissingOverdueTaskNotifications(input: {
+/** Restores notification mappings that are absent for current local data. */
+export function backfillMissingNotifications(input: {
   snapshot: AppSnapshot;
   now: string;
   createId?: NotificationIdFactory;
 }): Pick<AppSnapshot, "notificationOutbox" | "reminderMap"> | undefined {
-  if (
-    !input.snapshot.settings.notificationEnabled
-    || input.snapshot.settings.overdueTaskReminderFrequency === "none"
-  ) return undefined;
-
-  const missing = input.snapshot.tasks.filter((task) =>
-    task.status === "active"
-    && task.dueMode === "scheduled"
-    && Boolean(task.dueAt)
-    && !input.snapshot.reminderMap.some((entry) =>
-      entry.taskId === task.id && isOverdueScheduleKind(entry.kind),
-    ),
-  );
-  if (missing.length === 0) return undefined;
+  if (!input.snapshot.settings.notificationEnabled) return undefined;
 
   let reminderMap = input.snapshot.reminderMap;
   const notificationOutbox = [...input.snapshot.notificationOutbox];
-  for (const task of missing) {
-    const queued = queueTaskNotifications({
-      snapshot: { ...input.snapshot, reminderMap },
-      task,
+  let changed = false;
+
+  if (globalNotificationSeriesAnchor(input.snapshot.captures, "inbox")
+    && !hasCurrentGlobalSeries(input.snapshot, reminderMap, "inbox")) {
+    const inbox = rebuildInboxReminderNotifications({
+      snapshot: { ...input.snapshot, reminderMap, notificationOutbox },
       now: input.now,
       createId: input.createId,
     });
-    notificationOutbox.push(...queued.notificationOutbox);
-    reminderMap = queued.reminderMap;
+    notificationOutbox.splice(0, notificationOutbox.length, ...inbox.notificationOutbox);
+    reminderMap = inbox.reminderMap;
+    changed = true;
   }
-  return { notificationOutbox, reminderMap };
+
+  if (
+    globalNotificationSeriesAnchor(input.snapshot.captures, "memo")
+    && input.snapshot.settings.memoReviewFrequency !== "none"
+    && !hasCurrentGlobalSeries(input.snapshot, reminderMap, "memo")
+  ) {
+    const memo = rebuildMemoReviewNotifications({
+      snapshot: { ...input.snapshot, reminderMap, notificationOutbox },
+      now: input.now,
+      createId: input.createId,
+    });
+    notificationOutbox.splice(0, notificationOutbox.length, ...memo.notificationOutbox);
+    reminderMap = memo.reminderMap;
+    changed = true;
+  }
+
+  for (const task of input.snapshot.tasks) {
+    if (task.status !== "active") continue;
+    const schedules = planNotificationSchedules({
+      task,
+      settings: input.snapshot.settings,
+      now: input.now,
+    });
+    for (const schedule of schedules) {
+      const previous = reminderMap.find(
+        (entry) => entry.taskId === task.id && scheduleKind(entry) === schedule.kind,
+      );
+      if (previous?.taskRevision === task.revision) continue;
+      const mapping = createMapping(schedule.kind, previous, {
+        snapshot: { ...input.snapshot, reminderMap },
+        task,
+        now: input.now,
+        createId: input.createId,
+      });
+      reminderMap = [
+        ...reminderMap.filter(
+          (entry) => !(entry.taskId === task.id && scheduleKind(entry) === schedule.kind),
+        ),
+        mapping,
+      ];
+      notificationOutbox.push({
+        id: createId(input, "outbox", schedule.kind),
+        operation: "upsert",
+        reminderId: mapping.reminderId,
+        scheduledAt: schedule.scheduledAt,
+        notificationType: schedule.notificationType,
+        ...(schedule.repeatCadence ? { repeatCadence: schedule.repeatCadence } : {}),
+        taskRevision: task.revision,
+        attemptCount: 0,
+        nextAttemptAt: input.now,
+        createdAt: input.now,
+      });
+      changed = true;
+    }
+  }
+
+  return changed ? { notificationOutbox, reminderMap } : undefined;
 }
 
 /** Requeues unresolved captures after notification setup or a timing change. */
@@ -145,12 +191,12 @@ export function rebuildPendingCaptureNotifications(input: {
   return rebuildInboxReminderNotifications(input);
 }
 
-/** Replaces every inbox reservation with one anonymous series anchored to the oldest unresolved capture. */
+/** Replaces every inbox reservation with one anonymous series anchored to the newest unresolved capture. */
 export function rebuildInboxReminderNotifications(input: GlobalRebuildInput): Pick<AppSnapshot, "notificationOutbox" | "reminderMap"> {
-  const oldest = oldestCapture(input.snapshot.captures, "unclassified");
+  const newest = globalNotificationSeriesAnchor(input.snapshot.captures, "inbox");
   const frequency = input.snapshot.settings.inboxReminderFrequency;
   const offsets = frequency === "gentle" ? [0, 3, 7] : frequency === "prompt" ? [0, 1, 3, 7] : [0];
-  const initial = oldest ? addMinutes(oldest.createdAt, input.snapshot.settings.initialReminderDelayMinutes ?? 60) : undefined;
+  const initial = newest ? addMinutes(newest.createdAt, input.snapshot.settings.initialReminderDelayMinutes ?? 60) : undefined;
   const replacing = input.snapshot.reminderMap.some(entry => entry.scope === "inbox" || entry.captureId);
   const oneShots = initial
     ? keepUpcomingOneShots(offsets.map((days) => addDays(initial, days)), input.now, !replacing)
@@ -163,7 +209,7 @@ export function rebuildInboxReminderNotifications(input: GlobalRebuildInput): Pi
 
 /** Replaces every memo reservation with one anonymous series anchored to the oldest memo. */
 export function rebuildMemoReviewNotifications(input: GlobalRebuildInput): Pick<AppSnapshot, "notificationOutbox" | "reminderMap"> {
-  const oldest = oldestCapture(input.snapshot.captures, "note");
+  const oldest = globalNotificationSeriesAnchor(input.snapshot.captures, "memo");
   const cadence = input.snapshot.settings.memoReviewFrequency === "weekly" ? "weekly"
     : input.snapshot.settings.memoReviewFrequency === "monthly" ? "monthly" : undefined;
   const first = oldest && cadence
@@ -201,8 +247,17 @@ function replaceScope(input: GlobalRebuildInput, scope: "inbox" | "memo", schedu
   return { notificationOutbox: [...retainedOutbox, ...cancellations, ...upserts], reminderMap: [...retained, ...mappings] };
 }
 
-function oldestCapture(captures: Capture[], classification: Capture["classification"]): Capture | undefined {
-  return captures.filter((capture) => capture.classification === classification).sort((left, right) => left.createdAt.localeCompare(right.createdAt))[0];
+function hasCurrentGlobalSeries(
+  snapshot: AppSnapshot,
+  reminderMap: ReminderMapEntry[],
+  scope: "inbox" | "memo",
+): boolean {
+  const seriesKey = globalNotificationSeriesKey(snapshot, scope);
+  return Boolean(seriesKey) && reminderMap.some(
+    (entry) => entry.scope === scope
+      && entry.kind === "capture_initial"
+      && entry.seriesKey === seriesKey,
+  );
 }
 
 function addDays(iso: string, days: number): string { return addMinutes(iso, days * 24 * 60); }
@@ -270,13 +325,6 @@ function scheduleKind(entry: ReminderMapEntry): ReminderScheduleKind {
     || entry.kind === "overdue_repeat"
     ? entry.kind
     : "review";
-}
-
-function isOverdueScheduleKind(kind: ReminderMapEntry["kind"]): boolean {
-  return kind === "overdue_first"
-    || kind === "overdue_second"
-    || kind === "overdue_third"
-    || kind === "overdue_repeat";
 }
 
 function addMinutes(iso: string, minutes: number): string {

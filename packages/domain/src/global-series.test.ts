@@ -15,12 +15,13 @@ describe("F-014 persistent global reminder series", () => {
   it("preserves month-end cadence while skipping expired occurrences", () => {
     expect(nextGlobalRepeatAt("2026-01-31T10:00:00.000Z", "monthly", "2026-03-01T10:00:00.000Z")).toBe("2026-03-28T10:00:00.000Z");
   });
-  it("does not catch up past milestones again when the oldest unresolved capture changes", () => {
+  it("keeps the current series when an older unresolved capture is removed", () => {
     const original = fixture();
     original.captures[1]!.createdAt = "2026-08-27T10:00:00.000Z";
     const queued = rebuildGlobalNotificationSchedules({ snapshot: original, now });
     const next = rebuildGlobalNotificationSchedules({ snapshot: { ...original, ...queued, notificationOutbox: [], captures: original.captures.slice(1) }, now });
-    expect(next.notificationOutbox.filter(item => item.operation === "upsert").map(item => item.scheduledAt)).toEqual(["2026-09-03T11:00:00.000Z", "2026-09-10T11:00:00.000Z"]);
+    expect(next.notificationOutbox).toEqual([]);
+    expect(next.reminderMap).toEqual(queued.reminderMap);
   });
   it.each(["unclassified", "note"] as const)("keeps registered %s reservations after successful outbox removal and reload", classification => {
     const original = fixture(classification);

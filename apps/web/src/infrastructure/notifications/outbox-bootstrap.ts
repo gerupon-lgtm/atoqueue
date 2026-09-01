@@ -1,28 +1,37 @@
 import {
-  backfillMissingOverdueTaskNotifications,
+  backfillMissingNotifications,
   type AppRepository,
 } from "../../../../../packages/domain/src";
 
 /** Installs exactly one best-effort retry hook for app startup and reconnection. */
 export function installOutboxFlush(target: Pick<EventTarget, "addEventListener" | "removeEventListener">, flush: () => Promise<unknown>): () => void {
-  const run = () => { void flush(); };
+  let pending = Promise.resolve();
+  const run = () => {
+    pending = pending.then(flush, flush).then(() => undefined, () => undefined);
+  };
   target.addEventListener("online", run);
   run();
   return () => target.removeEventListener("online", run);
 }
 
-/** Persists the new v9 task-owned reminder series before the startup flush. */
-export async function backfillOverdueTaskNotifications(input: {
+/** Persists notification mappings missing from the current local state before startup delivery. */
+export async function reconcileMissingNotifications(input: {
   repository: AppRepository;
   now?: () => string;
 }): Promise<boolean> {
   const snapshot = await input.repository.load();
   const savedAt = input.now?.() ?? new Date().toISOString();
-  const delivery = backfillMissingOverdueTaskNotifications({
+  const delivery = backfillMissingNotifications({
     snapshot,
     now: savedAt,
   });
   if (!delivery) return false;
-  await input.repository.save({ ...snapshot, ...delivery, savedAt });
+  const latest = await input.repository.load();
+  const latestDelivery = backfillMissingNotifications({
+    snapshot: latest,
+    now: savedAt,
+  });
+  if (!latestDelivery) return false;
+  await input.repository.save({ ...latest, ...latestDelivery, savedAt });
   return true;
 }

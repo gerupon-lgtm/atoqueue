@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEmptySnapshot } from "./repository";
-import { backfillMissingOverdueTaskNotifications, rebuildActiveTaskNotifications, rebuildGlobalNotificationSchedules, rebuildInboxReminderNotifications, rebuildMemoReviewNotifications, queueTaskNotifications } from "./notification-queue";
+import { backfillMissingNotifications, rebuildActiveTaskNotifications, rebuildGlobalNotificationSchedules, rebuildInboxReminderNotifications, rebuildMemoReviewNotifications, queueTaskNotifications } from "./notification-queue";
 import type { Task } from "./model";
 
 const now = "2026-08-08T09:00:00.000Z";
@@ -30,12 +30,12 @@ function ids() {
 }
 
 describe("anonymous notification queue", () => {
-  // Break caught: planning reminders per capture instead of one inbox-wide series.
-  it("plans the gentle inbox series from the oldest unresolved capture without exposing its identity", () => {
+  // Break caught: keeping the oldest capture as the anchor suppresses the latest capture's initial reminder.
+  it("plans the gentle inbox series from the newest unresolved capture without exposing its identity", () => {
     const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
     snapshot.settings.inboxReminderFrequency = "gentle";
     snapshot.captures = [
-      { id: "capture-secret", body: "SECRET_CAPTURE_CANARY", classification: "unclassified", createdAt: now, updatedAt: now },
+      { id: "capture-secret", body: "SECRET_CAPTURE_CANARY", classification: "unclassified", createdAt: "2026-08-08T08:00:00.000Z", updatedAt: now },
       { id: "capture-newer", body: "newer", classification: "unclassified", createdAt: now, updatedAt: now },
     ];
 
@@ -227,7 +227,7 @@ describe("anonymous notification queue", () => {
       { reminderId: "review", taskId: "task-private", kind: "review", taskRevision: 1, createdAt: now },
     ];
 
-    const backfilled = backfillMissingOverdueTaskNotifications({ snapshot, now, createId: ids() });
+    const backfilled = backfillMissingNotifications({ snapshot, now, createId: ids() });
 
     expect(backfilled?.reminderMap.map((entry) => entry.kind)).toEqual([
       "deadline_before",
@@ -237,11 +237,84 @@ describe("anonymous notification queue", () => {
       "overdue_third",
       "overdue_repeat",
     ]);
-    expect(backfillMissingOverdueTaskNotifications({
+    expect(backfillMissingNotifications({
       snapshot: { ...snapshot, ...backfilled },
       now,
       createId: ids(),
     })).toBeUndefined();
+  });
+
+  // Break caught: one existing overdue mapping makes startup ignore missing deadline and review mappings.
+  it("backfills missing active-task notification kinds without replacing an existing kind", () => {
+    const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
+    snapshot.settings.notificationEnabled = true;
+    snapshot.settings.overdueTaskReminderFrequency = "gentle";
+    snapshot.tasks = [task()];
+    snapshot.reminderMap = [
+      { reminderId: "existing-overdue-repeat", taskId: "task-private", kind: "overdue_repeat", taskRevision: 1, createdAt: now },
+    ];
+
+    const backfilled = backfillMissingNotifications({ snapshot, now, createId: ids() });
+
+    expect(backfilled?.reminderMap).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reminderId: "existing-overdue-repeat", kind: "overdue_repeat" }),
+      expect.objectContaining({ kind: "deadline_before" }),
+      expect.objectContaining({ kind: "review" }),
+      expect.objectContaining({ kind: "overdue_first" }),
+      expect.objectContaining({ kind: "overdue_second" }),
+      expect.objectContaining({ kind: "overdue_third" }),
+    ]));
+    expect(backfilled?.notificationOutbox.some((item) => item.reminderId === "existing-overdue-repeat")).toBe(false);
+  });
+
+  // Break caught: a stale global mapping suppressed startup repair for the newest inbox item.
+  it("rebuilds an inbox series whose saved key does not match the current captures", () => {
+    const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
+    snapshot.settings.notificationEnabled = true;
+    snapshot.captures = [{
+      id: "new-capture",
+      body: "private",
+      classification: "unclassified",
+      createdAt: now,
+      updatedAt: now,
+    }];
+    snapshot.reminderMap = [{
+      reminderId: "stale-inbox",
+      scope: "inbox",
+      seriesKey: "stale-series",
+      kind: "capture_initial",
+      taskRevision: 0,
+      createdAt: now,
+    }];
+
+    const backfilled = backfillMissingNotifications({ snapshot, now, createId: ids() });
+
+    expect(backfilled?.notificationOutbox).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operation: "cancel", reminderId: "stale-inbox" }),
+      expect.objectContaining({ operation: "upsert", scheduledAt: "2026-08-08T10:00:00.000Z" }),
+    ]));
+  });
+
+  // Break caught: task mappings from an older revision were treated as current reservations.
+  it("repairs a task kind whose mapping belongs to an older revision", () => {
+    const snapshot = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now });
+    snapshot.settings.notificationEnabled = true;
+    snapshot.settings.overdueTaskReminderFrequency = "none";
+    snapshot.tasks = [task({ revision: 2 })];
+    snapshot.reminderMap = [
+      { reminderId: "stale-deadline", taskId: "task-private", kind: "deadline_before", taskRevision: 1, createdAt: now },
+      { reminderId: "current-review", taskId: "task-private", kind: "review", taskRevision: 2, createdAt: now },
+    ];
+
+    const backfilled = backfillMissingNotifications({ snapshot, now, createId: ids() });
+
+    expect(backfilled?.reminderMap).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reminderId: "stale-deadline", kind: "deadline_before", taskRevision: 2 }),
+      expect.objectContaining({ reminderId: "current-review", kind: "review", taskRevision: 2 }),
+    ]));
+    expect(backfilled?.notificationOutbox).toEqual([
+      expect.objectContaining({ operation: "upsert", reminderId: "stale-deadline", taskRevision: 2 }),
+    ]);
   });
 
   it("cancels a legacy task initial reminder during the next task update", () => {
