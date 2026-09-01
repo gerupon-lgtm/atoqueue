@@ -27,4 +27,9 @@
 
 ## 公開状況
 
-- 配置コミット、GitHub Actions Run、公開PWA/APIの確認結果は配置後に追記する。
+- 配置コミット: `d58946a3d699db38a8a36ecfa8e3ac6d528cb00b`。
+- push後の [CI Run 33520067935](https://github.com/gerupon-lgtm/atoqueue/actions/runs/33520067935) とDeploy品質確認 Run `33520067954` は成功。
+- [本番デプロイ Run 33520266123](https://github.com/gerupon-lgtm/atoqueue/actions/runs/33520266123) は、品質確認、PWA公開、OCI通知API配置の全ジョブが成功。
+- 2026-09-01 23:37 JST、公開PWAはHTTP 200。公開JS `/assets/index-CZZ1li1s.js` はHTTP 200で、ローカル検証済みbuildと同じ成果物名、`mvp-1.24.0` と通知系列処理を含む。
+- 通知API `https://api.atoqueue.sikumilab.com/healthz` はHTTP 200、`status: ok`、`version: mvp-1.24.0`。
+- GitHub CLIは `gerupon-lgtm` としてOS keyringへ再認証し、`gh auth setup-git`でGit HTTPS認証へ連携した。token scopeは `repo` / `workflow` を含む。
