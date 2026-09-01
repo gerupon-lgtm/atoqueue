@@ -35,6 +35,11 @@
 
 ## 公開状況
 
-- 未配置。GitHub Actionsの本番配置と公開PWA/APIの確認後に追記する。
+- 配置コミット: `cd20ce4a3725ae2ced645df8f784272f09aaa63d`。
+- 初回Run `33500235457` は短縮SHA `cd20ce4`を入力したため、`actions/checkout`がブランチ・タグ名として解釈して停止した。コードや品質ゲートの失敗ではない。
+- [本番デプロイ Run 33500453379](https://github.com/gerupon-lgtm/atoqueue/actions/runs/33500453379) は完全SHAを指定し、品質ゲート、PWA公開、OCI通知API配置の全ジョブが成功。
+- 2026-09-01 20:05 JST、公開PWAはHTTP 200。公開JS `/assets/index-OoTii1D9.js` はHTTP 200、`mvp-1.23.0` と通知補完処理を含む。
+- 通知API `https://api.atoqueue.sikumilab.com/healthz` はHTTP 200、`status: ok`、`version: mvp-1.23.0`。
+- GitHub CLIは `gerupon-lgtm` をOS keyringへ保存し、`gh auth setup-git`でGit HTTPS認証へ連携した。token scopeは `repo` / `workflow` を含み、以後のpush・workflow実行で利用できる。
 
 利用端末ではデータ削除・再インストールを行わず、アプリを閉じて開き直して版表示と初回通知を確認する。
