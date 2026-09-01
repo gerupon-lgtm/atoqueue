@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { createEmptySnapshot, rebuildInboxReminderNotifications, type AppSnapshot, type NotificationOutboxItem } from "../../../../../packages/domain/src";
+import { createCapture, createEmptySnapshot, rebuildInboxReminderNotifications, type AppSnapshot, type NotificationOutboxItem } from "../../../../../packages/domain/src";
 import { reconcileMissingNotifications } from "./outbox-bootstrap";
 import { flushOutbox } from "./outbox-sync";
 import { NotificationApi, NotificationApiError } from "./notification-api";
@@ -11,7 +11,7 @@ import { ReminderDispatcher } from "../../../../api/src/scheduler/reminder-dispa
 // F-014: exercise startup, real HTTP handling and dispatch; no external push.
 const initialTime = "2026-08-31T10:00:00.000Z";
 function fixture() {
-  let snapshot: AppSnapshot = createEmptySnapshot({ appVersion: "mvp-1.23.0", localDeviceId: "diagnostic", timeZone: "Asia/Tokyo", now: initialTime });
+  let snapshot: AppSnapshot = createEmptySnapshot({ appVersion: "mvp-1.24.0", localDeviceId: "diagnostic", timeZone: "Asia/Tokyo", now: initialTime });
   snapshot.settings.notificationEnabled = true;
   snapshot.device.pushDeviceId = "diagnostic-device";
   snapshot.device.pushDeviceSecret = "diagnostic-only";
@@ -22,6 +22,110 @@ function fixture() {
 }
 
 describe("inbox synchronization with two unclassified captures and no notes", () => {
+  it("registers the latest initial first when one capture sync is interrupted", async () => {
+    const reminders = new InMemoryReminderRepository();
+    let serverNow = "2026-09-01T10:00:00.000Z";
+    let remainingRequests: number | undefined;
+    const app = buildApp({
+      version: "diagnostic",
+      reminderRepository: reminders,
+      now: () => serverNow,
+    });
+    try {
+      const registered = await app.inject({
+        method: "POST",
+        url: "/v1/devices",
+        payload: {
+          subscription: {
+            endpoint: "https://push.example/single-capture",
+            expirationTime: null,
+            keys: { p256dh: "diagnostic", auth: "diagnostic" },
+          },
+        },
+      });
+      expect(registered.statusCode).toBe(201);
+      const device = registered.json<{
+        deviceId: string;
+        deviceSecret: string;
+      }>();
+      let snapshot = createEmptySnapshot({
+        appVersion: "mvp-1.24.0",
+        localDeviceId: "diagnostic",
+        timeZone: "Asia/Tokyo",
+        now: "2026-09-01T10:00:00.000Z",
+      });
+      snapshot.settings.notificationEnabled = true;
+      snapshot.device = {
+        ...snapshot.device,
+        pushDeviceId: device.deviceId,
+        pushDeviceSecret: device.deviceSecret,
+        pushSubscriptionStatus: "granted",
+      };
+      const repository = {
+        load: async () => structuredClone(snapshot),
+        save: async (next: AppSnapshot) => {
+          snapshot = structuredClone(next);
+        },
+        loadDraft: async () => "",
+        saveDraft: async () => undefined,
+        clearDraft: async () => undefined,
+      };
+      const api = new NotificationApi(
+        "https://diagnostic.invalid",
+        async (url, init) => {
+          if (remainingRequests !== undefined) {
+            if (remainingRequests === 0)
+              throw new Error("The app was backgrounded.");
+            remainingRequests -= 1;
+          }
+          const parsed = new URL(String(url));
+          const response = await app.inject({
+            method: init!.method as "PUT" | "DELETE",
+            url: parsed.pathname + parsed.search,
+            headers: Object.fromEntries(new Headers(init?.headers).entries()),
+            ...(init?.body ? { payload: String(init.body) } : {}),
+          });
+          return new Response(
+            response.statusCode === 204 ? null : response.body,
+            {
+              status: response.statusCode,
+              headers: {
+                "content-type": "application/json",
+                ...(response.headers["retry-after"]
+                  ? { "retry-after": response.headers["retry-after"] }
+                  : {}),
+              },
+            },
+          );
+        },
+      );
+
+      snapshot = createCapture(snapshot, "first", serverNow, "capture-first");
+      await repository.save(snapshot);
+      await flushOutbox({ repository, api, now: () => serverNow });
+      expect(snapshot.notificationOutbox).toEqual([]);
+
+      serverNow = "2026-09-01T10:30:00.000Z";
+      snapshot = createCapture(snapshot, "second", serverNow, "capture-second");
+      const latestReminderId = snapshot.notificationOutbox.find(
+        (item) =>
+          item.operation === "upsert" &&
+          item.scheduledAt === "2026-09-01T11:30:00.000Z",
+      )?.reminderId;
+      await repository.save(snapshot);
+      remainingRequests = 1;
+      await flushOutbox({ repository, api, now: () => serverNow });
+
+      expect(latestReminderId).toBeDefined();
+      expect(reminders.get(latestReminderId!)).toMatchObject({
+        scheduledAt: "2026-09-01T11:30:00.000Z",
+        status: "pending",
+      });
+    } finally {
+      await app.close();
+    }
+  }, 10_000);
+
   it("advances only an unregistered expired repeat to its next cadence without an immediate alert", async () => {
     const repository = fixture();
     const before = await repository.load();

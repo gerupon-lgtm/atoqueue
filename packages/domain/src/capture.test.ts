@@ -76,7 +76,10 @@ describe("createCapture", () => {
       "2026-08-10T01:30:00.000Z",
       "2026-08-17T01:30:00.000Z",
     ]);
-    expect(second.notificationOutbox.filter((item) => item.operation === "cancel")).toHaveLength(4);
+    expect(second.notificationOutbox.filter((item) => item.operation === "cancel")).toHaveLength(0);
+    expect(second.reminderMap.map((entry) => entry.reminderId)).toEqual(
+      first.reminderMap.map((entry) => entry.reminderId),
+    );
   });
 
   it("queues a new initial reminder when another capture is saved after the previous initial was sent", () => {

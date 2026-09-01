@@ -241,8 +241,21 @@ function replaceScope(input: GlobalRebuildInput, scope: "inbox" | "memo", schedu
   }
   const priorOutboxIds = new Set(prior.map((entry) => entry.reminderId));
   const retainedOutbox = input.snapshot.notificationOutbox.filter((item) => !priorOutboxIds.has(item.reminderId));
-  const cancellations = prior.map((entry) => ({ id: createId(input, "outbox", "capture_initial"), operation: "cancel" as const, reminderId: entry.reminderId, taskRevision: 0, attemptCount: 0, nextAttemptAt: input.now, createdAt: input.now }));
-  const mappings = schedules.map(() => ({ reminderId: createId(input, "reminder", "capture_initial"), scope, seriesKey, kind: "capture_initial" as const, taskRevision: 0, createdAt: input.now }));
+  // Keep stable reminder identities while a scope still has the same positions.
+  // Updating a PUT is enough to move a reservation and avoids a DELETE + new PUT
+  // burst for every capture. Only positions removed from the desired series need
+  // an explicit cancellation. An explicit notification setup/reset remains a
+  // forced re-registration with fresh identities.
+  const reusablePrior = input.force ? [] : prior;
+  const cancellations = (input.force ? prior : prior.slice(schedules.length)).map((entry) => ({ id: createId(input, "outbox", "capture_initial"), operation: "cancel" as const, reminderId: entry.reminderId, taskRevision: 0, attemptCount: 0, nextAttemptAt: input.now, createdAt: input.now }));
+  const mappings = schedules.map((_, index) => ({
+    reminderId: reusablePrior[index]?.reminderId ?? createId(input, "reminder", "capture_initial"),
+    scope,
+    seriesKey,
+    kind: "capture_initial" as const,
+    taskRevision: 0,
+    createdAt: reusablePrior[index]?.createdAt ?? input.now,
+  }));
   const upserts = schedules.map((schedule, index) => ({ id: createId(input, "outbox", "capture_initial"), operation: "upsert" as const, reminderId: mappings[index]!.reminderId, scheduledAt: laterOf(schedule.scheduledAt, input.now), notificationType: "inbox_review" as const, ...(schedule.repeatCadence ? { repeatCadence: schedule.repeatCadence } : {}), taskRevision: 0, attemptCount: 0, nextAttemptAt: input.now, createdAt: input.now }));
   return { notificationOutbox: [...retainedOutbox, ...cancellations, ...upserts], reminderMap: [...retained, ...mappings] };
 }

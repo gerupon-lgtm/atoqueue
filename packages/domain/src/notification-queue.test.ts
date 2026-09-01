@@ -290,9 +290,13 @@ describe("anonymous notification queue", () => {
     const backfilled = backfillMissingNotifications({ snapshot, now, createId: ids() });
 
     expect(backfilled?.notificationOutbox).toEqual(expect.arrayContaining([
-      expect.objectContaining({ operation: "cancel", reminderId: "stale-inbox" }),
-      expect.objectContaining({ operation: "upsert", scheduledAt: "2026-08-08T10:00:00.000Z" }),
+      expect.objectContaining({
+        operation: "upsert",
+        reminderId: "stale-inbox",
+        scheduledAt: "2026-08-08T10:00:00.000Z",
+      }),
     ]));
+    expect(backfilled?.notificationOutbox.some((item) => item.operation === "cancel")).toBe(false);
   });
 
   // Break caught: task mappings from an older revision were treated as current reservations.

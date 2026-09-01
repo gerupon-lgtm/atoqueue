@@ -42,7 +42,7 @@ describe("reconcileMissingNotifications", () => {
   // Break caught: startup repair saved its stale load and erased a capture committed meanwhile.
   it("recomputes from the latest snapshot before saving notification-only repairs", async () => {
     const stale = createEmptySnapshot({
-      appVersion: "mvp-1.23.0",
+      appVersion: "mvp-1.24.0",
       localDeviceId: "local",
       timeZone: "Asia/Tokyo",
       now: "2026-09-01T09:00:00.000Z",
@@ -91,7 +91,7 @@ describe("reconcileMissingNotifications", () => {
   // Break caught: startup only repairs overdue task mappings and leaves an unresolved inbox without a notification.
   it("persists a missing inbox reservation before startup outbox delivery", async () => {
     const snapshot = createEmptySnapshot({
-      appVersion: "mvp-1.23.0",
+      appVersion: "mvp-1.24.0",
       localDeviceId: "local",
       timeZone: "Asia/Tokyo",
       now: "2026-09-01T09:00:00.000Z",
@@ -136,7 +136,7 @@ describe("reconcileMissingNotifications", () => {
   // Break caught: startup repairs tasks and inbox items but leaves a saved memo without its review notification.
   it("persists a missing memo reservation before startup outbox delivery", async () => {
     const snapshot = createEmptySnapshot({
-      appVersion: "mvp-1.23.0",
+      appVersion: "mvp-1.24.0",
       localDeviceId: "local",
       timeZone: "Asia/Tokyo",
       now: "2026-09-01T09:00:00.000Z",
@@ -180,7 +180,7 @@ describe("reconcileMissingNotifications", () => {
 
   it("persists missing overdue reservations before startup outbox delivery", async () => {
     const snapshot = createEmptySnapshot({
-      appVersion: "mvp-1.23.0",
+      appVersion: "mvp-1.24.0",
       localDeviceId: "local",
       timeZone: "Asia/Tokyo",
       now: "2026-08-08T09:00:00.000Z",

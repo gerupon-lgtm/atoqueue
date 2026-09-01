@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("saves a capture that remains in the local snapshot after reload", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByText("バージョン mvp-1.23.0")).toBeVisible();
+  await expect(page.getByText("バージョン mvp-1.24.0")).toBeVisible();
 
   await page.getByRole("textbox", { name: "思いついたこと" }).fill("牛乳を買う");
   await page.getByRole("button", { name: "保存して戻る" }).click();
