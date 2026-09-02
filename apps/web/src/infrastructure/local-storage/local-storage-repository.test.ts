@@ -273,6 +273,17 @@ describe("LocalStorageRepository startup notification check", () => {
     window.localStorage.setItem(DATA_KEY, JSON.stringify({ schemaVersion: 11 }));
     expect(repository.isNotificationSetupHandledAtStartup()).toBe(false);
   });
+
+  it("does not allow immediate focus when synchronous storage access fails", () => {
+    const storage = {
+      getItem: () => {
+        throw new DOMException("storage access denied", "SecurityError");
+      },
+    } as Storage;
+    const repository = new LocalStorageRepository(storage);
+
+    expect(repository.isNotificationSetupHandledAtStartup()).toBe(false);
+  });
 });
 
 describe("F-003 committed snapshot observation", () => {

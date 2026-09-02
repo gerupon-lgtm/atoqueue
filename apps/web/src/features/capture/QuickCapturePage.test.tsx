@@ -117,6 +117,30 @@ describe("QuickCapturePage", () => {
     expect(showVirtualKeyboard).not.toHaveBeenCalled();
   });
 
+  it("does not focus immediately when the startup notification check is false", () => {
+    const showVirtualKeyboard = vi.fn();
+    Object.defineProperty(window.navigator, "virtualKeyboard", {
+      configurable: true,
+      value: { show: showVirtualKeyboard },
+    });
+    const repository = createRepository({
+      load: vi.fn().mockReturnValue(createDeferred<AppSnapshot>().promise),
+      loadDraft: vi.fn().mockReturnValue(createDeferred<string>().promise),
+    });
+
+    render(
+      <QuickCapturePage
+        repository={repository}
+        shouldAutofocusCapture={() => false}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: "思いついたこと" })).not.toBe(
+      document.activeElement,
+    );
+    expect(showVirtualKeyboard).not.toHaveBeenCalled();
+  });
+
   it("autofocuses the capture textarea after notification setup has already been handled", async () => {
     const showVirtualKeyboard = vi.fn();
     Object.defineProperty(window.navigator, "virtualKeyboard", {

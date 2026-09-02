@@ -51,10 +51,9 @@ export class LocalStorageRepository implements AppRepository {
   }
 
   isNotificationSetupHandledAtStartup(): boolean {
-    const stored = this.storage.getItem(DATA_KEY);
-    if (stored === null) return false;
-
     try {
+      const stored = this.storage.getItem(DATA_KEY);
+      if (stored === null) return false;
       return (
         this.parseStoredSnapshot(stored).device.pushSubscriptionStatus !==
         "not_requested"
