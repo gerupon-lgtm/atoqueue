@@ -31,4 +31,10 @@ OSとブラウザがソフトキーボードの最終表示を制御するため
 
 ## 配置
 
-- 未実施。利用者から本番配置の依頼を受けた時点で、対象コミットをGitHub Actionsから配置し、公開PWA/APIの版とPixel実機挙動を確認する。
+- 対象コミット: `8c850ff11bfe4388fc9f47e2dd231336bb10fd08`
+- GitHub Actions: [Run 33688451672](https://github.com/gerupon-lgtm/atoqueue/actions/runs/33688451672)
+- 2026-09-03 07:06 JST、品質、GitHub Pages、OCI通知APIの3ジョブがすべて成功した。
+- 公開PWA `https://atoqueue.sikumilab.com/` はHTTP 200。配布JS `/assets/index-H8Z4YZUj.js` もHTTP 200で、`mvp-1.25.0`とVirtual Keyboard APIの処理を含むことをキャッシュ回避付きで確認した。
+- 通知API `https://api.atoqueue.sikumilab.com/healthz` はHTTP 200相当、`status: ok`、`version: mvp-1.25.0`を返した。
+- 同一SHAのpush版CI／Deploy品質Run、PR版CI／Deploy品質Runもすべて成功した。
+- Pixelでのソフトキーボード実表示は利用者による実機受入を残す。
