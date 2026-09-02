@@ -78,6 +78,9 @@ export const router = createBrowserRouter([
             onNotificationChanged={() => notificationSync.flush()}
             repository={applicationRepository}
             setupNotifications={setupNotifications}
+            shouldAutofocusCapture={() =>
+              applicationRepository.isNotificationSetupHandledAtStartup()
+            }
           />
         ) : page.path === "inbox" ? (
           <InboxRoute />

@@ -252,6 +252,29 @@ describe("LocalStorageRepository persistence failures", () => {
   });
 });
 
+describe("LocalStorageRepository startup notification check", () => {
+  afterEach(() => window.localStorage.clear());
+
+  it("allows immediate focus only for a valid stored snapshot whose notification setup was handled", async () => {
+    const repository = new LocalStorageRepository(window.localStorage);
+    const snapshot = sampleSnapshot();
+    snapshot.device.pushSubscriptionStatus = "denied";
+    await repository.save(snapshot);
+
+    expect(repository.isNotificationSetupHandledAtStartup()).toBe(true);
+  });
+
+  it("does not allow immediate focus without valid stored data", () => {
+    const repository = new LocalStorageRepository(window.localStorage);
+
+    expect(repository.isNotificationSetupHandledAtStartup()).toBe(false);
+    window.localStorage.setItem(DATA_KEY, "{not-json");
+    expect(repository.isNotificationSetupHandledAtStartup()).toBe(false);
+    window.localStorage.setItem(DATA_KEY, JSON.stringify({ schemaVersion: 11 }));
+    expect(repository.isNotificationSetupHandledAtStartup()).toBe(false);
+  });
+});
+
 describe("F-003 committed snapshot observation", () => {
   afterEach(() => window.localStorage.clear());
 

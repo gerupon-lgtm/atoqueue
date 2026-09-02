@@ -10,7 +10,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AppRepository } from "../../../../../packages/domain/src";
+import type { AppRepository, AppSnapshot } from "../../../../../packages/domain/src";
 import {
   createCapture,
   createEmptySnapshot,
@@ -139,6 +139,30 @@ describe("QuickCapturePage", () => {
     );
 
     expect(await screen.findByRole("textbox", { name: "思いついたこと" })).toBe(
+      document.activeElement,
+    );
+    expect(showVirtualKeyboard).toHaveBeenCalledTimes(1);
+  });
+
+  it("focuses immediately when the startup notification check has already been handled", () => {
+    const showVirtualKeyboard = vi.fn();
+    Object.defineProperty(window.navigator, "virtualKeyboard", {
+      configurable: true,
+      value: { show: showVirtualKeyboard },
+    });
+    const repository = createRepository({
+      load: vi.fn().mockReturnValue(createDeferred<AppSnapshot>().promise),
+      loadDraft: vi.fn().mockReturnValue(createDeferred<string>().promise),
+    });
+
+    render(
+      <QuickCapturePage
+        repository={repository}
+        shouldAutofocusCapture={() => true}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: "思いついたこと" })).toBe(
       document.activeElement,
     );
     expect(showVirtualKeyboard).toHaveBeenCalledTimes(1);

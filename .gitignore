@@ -1,6 +1,7 @@
 node_modules/
 .pnpm-store/
 .superpowers/brainstorm/
+.superpowers/sdd/
 dist/
 coverage/
 playwright-report/

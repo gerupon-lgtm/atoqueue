@@ -1591,12 +1591,13 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 - 既存の無変更系列保持、初回通知済み後の新規追加、過去枠復旧、余剰枠取消、明示的な通知再設定、タスク完了・アーカイブ取消を回帰確認する。
 - `mvp-1.24.0`へ更新し、単体・結合、E2E、lint、型検査、全build、成果物検査後にGitHub Actionsで本番配置する。schemaVersion、通知API、DB migration、通知文面は変更しない。
 
-## Follow-up: 記録画面表示時のソフトキーボード要求（2026-09-03）
+## Follow-up: 記録画面の起動直後フォーカス復元（2026-09-03）
 
 **Requirements:** F-001、F-002、NF-001、NF-009
 
-- `QuickCapturePage` が通知設定を処理済みのSnapshotを読み込んだら、起動時か画面遷移時かを区別せず本文入力欄へフォーカスする。React Routerで他画面から戻った場合は同画面が再マウントされるため、同じ公開動作を再利用する。
-- 入力欄のフォーカス成立後、機能検出した `navigator.virtualKeyboard.show()` を呼ぶ。非対応・例外時はフォーカスだけを維持し、保存や画面遷移を妨げない。
+- `LocalStorageRepository` が保存済みSnapshotを既存の検証済み読込経路で同期参照し、通知設定が処理済みかだけを安全に返す。保存なし・破損・未知版は自動フォーカスを許可しない。
+- `QuickCapturePage` は同期判定をルーターから受け、起動時か画面遷移時かを区別せず、非同期読込を待たず本文入力欄へ一度だけフォーカスする。React Routerで他画面から戻った場合は同画面が再マウントされるため、同じ公開動作を再利用する。
+- 入力欄のフォーカス成立後、機能検出した `navigator.virtualKeyboard.show()` を一度だけ呼ぶ。非対応・例外時はフォーカスだけを維持し、保存や画面遷移を妨げない。
 - 通知設定未処理の既存ガードを維持し、初回案内中にはキーボードを自動表示しない。
-- 既存の `QuickCapturePage` 公開UIテストへVirtual Keyboard APIの呼出しを追加し、実装前のREDと実装後のGREENを確認する。型検査、単体・結合、E2E、lint、全buildを実行する。
-- ロジック変更として `mvp-1.25.0` / `1.25.0` へ更新する。schemaVersion、通知API、DB migration、通知内容は変更しない。
+- 未解決の `repository.load()` と `repository.loadDraft()` を使う `QuickCapturePage` 公開UIテストで、同期判定が処理済みならマウント直後にフォーカスとVirtual Keyboard APIの一回の表示要求が行われるREDを確認してから実装する。型検査、単体・結合、E2E、lint、全buildを実行する。
+- ロジック変更として `mvp-1.26.0` / `1.26.0` へ更新する。schemaVersion、通知API、DB migration、通知内容は変更しない。PixelでのOSキーボード表示は公開後の実機確認に残す。

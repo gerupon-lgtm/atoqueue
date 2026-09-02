@@ -26,6 +26,7 @@ export interface QuickCapturePageProps {
   createId?: () => string;
   onNotificationChanged?: () => Promise<unknown>;
   setupNotifications?: () => Promise<NotificationSetupResult>;
+  shouldAutofocusCapture?: () => boolean;
 }
 
 export function QuickCapturePage({
@@ -34,8 +35,10 @@ export function QuickCapturePage({
   createId = defaultCreateId,
   onNotificationChanged,
   setupNotifications,
+  shouldAutofocusCapture,
 }: QuickCapturePageProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const hasRequestedInitialFocus = useRef(false);
   const lastPersistedDraft = useRef<string | undefined>(undefined);
   const draftGeneration = useRef(0);
   const draftWriteQueue = useRef<Promise<void>>(Promise.resolve());
@@ -55,6 +58,16 @@ export function QuickCapturePage({
   const [isConfiguringNotifications, setIsConfiguringNotifications] =
     useState(false);
 
+  function focusCaptureInputOnce(): void {
+    if (hasRequestedInitialFocus.current) return;
+    hasRequestedInitialFocus.current = true;
+    focusCaptureInput(inputRef.current);
+  }
+
+  useEffect(() => {
+    if (shouldAutofocusCapture?.()) focusCaptureInputOnce();
+  }, [shouldAutofocusCapture]);
+
   useEffect(() => {
     let isCurrent = true;
 
@@ -64,7 +77,7 @@ export function QuickCapturePage({
         setLoadedSnapshot(snapshot);
         setEnterSavesCapture(snapshot.settings.enterSavesCapture);
         if (snapshot.device.pushSubscriptionStatus !== "not_requested") {
-          focusCaptureInput(inputRef.current);
+          focusCaptureInputOnce();
         }
         setUnclassifiedCount(
           snapshot.captures.filter(
