@@ -1,5 +1,6 @@
 import {
   rebuildActiveTaskNotifications,
+  rebuildGlobalNotificationSchedules,
   type AppRepository,
 } from "../../../../../packages/domain/src";
 import type { PushSubscription } from "../../../../../packages/contracts/src";
@@ -9,6 +10,19 @@ export interface PushBrowser {
   isAvailable(): boolean;
   requestPermission(): Promise<NotificationPermission>;
   subscribe(applicationServerKey: string): Promise<PushSubscription>;
+}
+
+export type BrowserPushState =
+  | "ready"
+  | "denied"
+  | "permission_missing"
+  | "subscription_missing"
+  | "unavailable";
+
+export interface BrowserPushStateProbe {
+  isAvailable(): boolean;
+  permission(): NotificationPermission;
+  hasSubscription(): Promise<boolean>;
 }
 export interface PushRegistrationApi {
   publicKey(): Promise<string>;
@@ -116,8 +130,18 @@ export async function enableNotifications(input: {
       settings: { ...snapshot.settings, notificationEnabled: true },
       savedAt,
     };
-    const delivery = rebuildActiveTaskNotifications({ snapshot: updated, now: savedAt });
-    await repository.save({ ...updated, ...delivery });
+    const taskDelivery = rebuildActiveTaskNotifications({
+      snapshot: updated,
+      now: savedAt,
+    });
+    const captureDelivery = rebuildGlobalNotificationSchedules({
+      snapshot: { ...updated, ...taskDelivery },
+      now: savedAt,
+      // Explicit setup repairs reservations on the registered/re-enabled device.
+      // Ordinary startup and unchanged preferences must not force a rebuild.
+      force: true,
+    });
+    await repository.save({ ...updated, ...captureDelivery });
     return { state: "granted" };
   } catch {
     return { state: "error", reason: "storage" };
@@ -191,6 +215,42 @@ export function createBrowserPushAdapter(): PushBrowser {
       };
     },
   };
+}
+
+export async function inspectBrowserPushState(
+  browser: BrowserPushStateProbe,
+): Promise<BrowserPushState> {
+  if (!browser.isAvailable()) return "unavailable";
+  const permission = browser.permission();
+  if (permission === "denied") return "denied";
+  if (permission !== "granted") return "permission_missing";
+  return (await browser.hasSubscription()) ? "ready" : "subscription_missing";
+}
+
+export function createBrowserPushStateProbe(): BrowserPushStateProbe {
+  return {
+    isAvailable: () =>
+      "Notification" in window &&
+      "serviceWorker" in navigator &&
+      "PushManager" in window,
+    permission: () => Notification.permission,
+    async hasSubscription() {
+      const registration = await navigator.serviceWorker.ready;
+      return Boolean(await registration.pushManager.getSubscription());
+    },
+  };
+}
+
+/**
+ * Removes a browser Push subscription after the server-side device has been
+ * deactivated. The remote deactivation is the required boundary; this is
+ * best-effort cleanup for a partially saved local state.
+ */
+export async function unsubscribeBrowserPush(): Promise<void> {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+  await subscription?.unsubscribe();
 }
 
 function fromBase64Url(value: string): Uint8Array {

@@ -7,6 +7,7 @@ import {
   type AppRepository,
   type AppSnapshot,
 } from "../../../../../packages/domain/src/index";
+import { APP_VERSION } from "../../app-version";
 
 const DATA_KEY = "atoqueue:data:v1";
 const DRAFT_KEY = "atoqueue:draft:v1";
@@ -19,6 +20,7 @@ export interface LocalStorageRepositoryOptions {
 }
 
 export class LocalStorageRepository implements AppRepository {
+  private readonly listeners = new Set<() => void>();
   private readonly appVersion: string;
   private readonly localDeviceId: string;
   private readonly now: () => string;
@@ -28,7 +30,7 @@ export class LocalStorageRepository implements AppRepository {
     private readonly storage: Storage,
     options: LocalStorageRepositoryOptions = {},
   ) {
-    this.appVersion = options.appVersion ?? "0.1.0";
+    this.appVersion = options.appVersion ?? APP_VERSION;
     this.localDeviceId = options.localDeviceId ?? createDeviceId();
     this.now = options.now ?? (() => new Date().toISOString());
     this.timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -48,6 +50,19 @@ export class LocalStorageRepository implements AppRepository {
     return this.parseStoredSnapshot(stored);
   }
 
+  isNotificationSetupHandledAtStartup(): boolean {
+    try {
+      const stored = this.storage.getItem(DATA_KEY);
+      if (stored === null) return false;
+      return (
+        this.parseStoredSnapshot(stored).device.pushSubscriptionStatus !==
+        "not_requested"
+      );
+    } catch {
+      return false;
+    }
+  }
+
   async save(next: AppSnapshot): Promise<void> {
     try {
       const existing = this.storage.getItem(DATA_KEY);
@@ -64,6 +79,29 @@ export class LocalStorageRepository implements AppRepository {
       throw new PersistenceError("Unable to persist application data.", {
         cause: error,
       });
+    }
+    this.notifyCommittedChange();
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    const onStorage = (event: StorageEvent) => {
+      if (event.storageArea === this.storage && (event.key === DATA_KEY || event.key === null)) listener();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      this.listeners.delete(listener);
+      window.removeEventListener("storage", onStorage);
+    };
+  }
+
+  private notifyCommittedChange(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch {
+        // A display observer cannot turn an already committed write into a save failure.
+      }
     }
   }
 
@@ -85,6 +123,19 @@ export class LocalStorageRepository implements AppRepository {
     } catch (error) {
       throw new PersistenceError("Unable to clear draft data.", { cause: error });
     }
+  }
+
+  /** Removes every key owned by this application; unrelated site storage survives. */
+  async clearAppData(): Promise<void> {
+    try {
+      this.storage.removeItem(DATA_KEY);
+      this.storage.removeItem(DRAFT_KEY);
+    } catch (error) {
+      throw new PersistenceError("Unable to clear application data.", {
+        cause: error,
+      });
+    }
+    this.notifyCommittedChange();
   }
 
   private backUpCorruptValue(value: string): void {

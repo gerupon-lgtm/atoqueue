@@ -58,7 +58,137 @@ function snapshotWithReviewActionOwnership(): Record<string, unknown> {
 }
 
 describe("domain repository model", () => {
-  it("creates a version 4 empty snapshot from the supplied device context", () => {
+  it("creates new snapshots with gentle inbox reminders, weekly memo reviews, and Enter save enabled", () => {
+    const params = {
+      appVersion: "0.1.0",
+      localDeviceId: "device-1",
+      timeZone: "Asia/Tokyo",
+      now: "2026-08-09T00:00:00.000Z",
+    };
+
+    expect(createEmptySnapshot(params).settings).toMatchObject({
+      inboxReminderFrequency: "gentle",
+      memoReviewFrequency: "weekly",
+      enterSavesCapture: true,
+    });
+  });
+
+  it("migrates a v6 snapshot without adding surprise recurring notifications", () => {
+    const v6: unknown = {
+      ...createEmptySnapshot({
+        appVersion: "0.1.0",
+        localDeviceId: "device-1",
+        timeZone: "Asia/Tokyo",
+        now: "2026-08-09T00:00:00.000Z",
+      }),
+      schemaVersion: 6,
+      settings: {
+        locale: "ja-JP",
+        timeZone: "Asia/Tokyo",
+        notificationEnabled: false,
+        initialReminderDelayMinutes: 60,
+        deadlineReminderLeadMinutes: 60,
+        defaultDeadlineTime: "23:59",
+        weeklyReviewDay: 0,
+      },
+    };
+
+    expect(migrateSnapshot(v6)).toMatchObject({
+      schemaVersion: 10,
+      settings: {
+        inboxReminderFrequency: "none",
+        memoReviewFrequency: "none",
+        enterSavesCapture: true,
+      },
+    });
+  });
+
+  it("accepts a global reminder scope only when it is the sole reminder-map owner", () => {
+    const v7: unknown = {
+      ...createEmptySnapshot({
+        appVersion: "0.1.0",
+        localDeviceId: "device-1",
+        timeZone: "Asia/Tokyo",
+        now: "2026-08-09T00:00:00.000Z",
+      }),
+      schemaVersion: 7,
+      settings: {
+        locale: "ja-JP",
+        timeZone: "Asia/Tokyo",
+        notificationEnabled: false,
+        initialReminderDelayMinutes: 60,
+        deadlineReminderLeadMinutes: 60,
+        defaultDeadlineTime: "23:59",
+        weeklyReviewDay: 0,
+        inboxReminderFrequency: "none",
+        memoReviewFrequency: "none",
+        enterSavesCapture: true,
+      },
+      reminderMap: [
+        {
+          reminderId: "reminder-1",
+          scope: "inbox",
+          taskRevision: 0,
+          createdAt: "2026-08-09T00:00:00.000Z",
+        },
+      ],
+    };
+
+    expect(migrateSnapshot(v7).reminderMap).toMatchObject([
+      { scope: "inbox" },
+    ]);
+  });
+
+  it.each([
+    [{}, "no owner"],
+    [{ taskId: "task-1", captureId: "capture-1" }, "two local owners"],
+    [{ scope: "memo", taskId: "task-1" }, "a scope and task owner"],
+    [{ scope: "memo", captureId: "capture-1" }, "a scope and capture owner"],
+    [{ scope: 1, taskId: "task-1" }, "an invalid scope and task owner"],
+    [{ scope: "inbox", taskId: 1 }, "a scope and non-string task owner"],
+    [
+      { scope: "memo", captureId: 1 },
+      "a scope and non-string capture owner",
+    ],
+  ] as const)(
+    "rejects a reminder-map entry with %j (%s)",
+    (...args) => {
+      const [owner] = args;
+      const v7: unknown = {
+        ...createEmptySnapshot({
+          appVersion: "0.1.0",
+          localDeviceId: "device-1",
+          timeZone: "Asia/Tokyo",
+          now: "2026-08-09T00:00:00.000Z",
+        }),
+        schemaVersion: 7,
+        settings: {
+          locale: "ja-JP",
+          timeZone: "Asia/Tokyo",
+          notificationEnabled: false,
+          initialReminderDelayMinutes: 60,
+          deadlineReminderLeadMinutes: 60,
+          defaultDeadlineTime: "23:59",
+          weeklyReviewDay: 0,
+          inboxReminderFrequency: "none",
+          memoReviewFrequency: "none",
+          enterSavesCapture: true,
+        },
+        reminderMap: [
+          {
+            reminderId: "reminder-1",
+            taskRevision: 0,
+            createdAt: "2026-08-09T00:00:00.000Z",
+            ...owner,
+          },
+        ],
+      };
+
+      expect(() => migrateSnapshot(v7)).toThrow(CorruptDataError);
+    },
+  );
+
+  it("creates a version 10 empty snapshot from the supplied device context", () => {
     expect(
       createEmptySnapshot({
         appVersion: "0.1.0",
@@ -67,7 +197,7 @@ describe("domain repository model", () => {
         now: "2026-08-03T00:00:00.000Z",
       }),
     ).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 10,
       appVersion: "0.1.0",
       device: {
         localDeviceId: "device-1",
@@ -77,6 +207,7 @@ describe("domain repository model", () => {
         locale: "ja-JP",
         timeZone: "Asia/Tokyo",
         notificationEnabled: false,
+        defaultDeadlineTime: "23:59",
         weeklyReviewDay: 0,
       },
       captures: [],
@@ -86,6 +217,32 @@ describe("domain repository model", () => {
       notificationOutbox: [],
       reminderMap: [],
       savedAt: "2026-08-03T00:00:00.000Z",
+    });
+  });
+
+  it("migrates version 4 installations to the configurable date-only deadline time", () => {
+    const v4: unknown = {
+      ...createEmptySnapshot({
+        appVersion: "0.1.0",
+        localDeviceId: "device-1",
+        timeZone: "Asia/Tokyo",
+        now: "2026-08-03T00:00:00.000Z",
+      }),
+      schemaVersion: 4,
+      settings: {
+        locale: "ja-JP",
+        timeZone: "Asia/Tokyo",
+        notificationEnabled: false,
+        initialReminderDelayMinutes: 60,
+        deadlineReminderLeadMinutes: 60,
+        onboardingCompletedAt: "2026-08-03T00:00:00.000Z",
+        weeklyReviewDay: 0,
+      },
+    };
+
+    expect(migrateSnapshot(v4)).toMatchObject({
+      schemaVersion: 10,
+      settings: { defaultDeadlineTime: "23:59" },
     });
   });
 
@@ -109,7 +266,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v2)).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 10,
       settings: {
         initialReminderDelayMinutes: 60,
         deadlineReminderLeadMinutes: 60,
@@ -138,13 +295,60 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v3)).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 10,
       settings: { onboardingCompletedAt: "2026-08-03T00:00:00.000Z" },
     });
   });
 
+  it("migrates version 7 settings with no custom task categories to version 10", () => {
+    const v7: unknown = createEmptySnapshot({
+      appVersion: "mvp-1.4.0",
+      localDeviceId: "device-1",
+      timeZone: "Asia/Tokyo",
+      now: "2026-08-10T00:00:00.000Z",
+    });
+
+    expect(migrateSnapshot(v7)).toMatchObject({
+      schemaVersion: 10,
+      settings: {
+        customTaskCategories: [],
+        overdueTaskReminderFrequency: "gentle",
+      },
+    });
+  });
+
+  it("migrates version 8 settings to gentle overdue task reminders and preserves recurring outbox cadence", () => {
+    const v8 = createEmptySnapshot({
+      appVersion: "mvp-1.13.0",
+      localDeviceId: "device-1",
+      timeZone: "Asia/Tokyo",
+      now: "2026-08-15T00:00:00.000Z",
+    }) as unknown as Record<string, unknown>;
+    v8.schemaVersion = 8;
+    const settings = v8.settings as Record<string, unknown>;
+    delete settings.overdueTaskReminderFrequency;
+    v8.notificationOutbox = [{
+      id: "outbox-1",
+      operation: "upsert",
+      reminderId: "reminder-1",
+      scheduledAt: "2026-08-16T00:00:00.000Z",
+      notificationType: "deadline_review",
+      repeatCadence: "weekly",
+      taskRevision: 1,
+      attemptCount: 0,
+      nextAttemptAt: "2026-08-15T00:00:00.000Z",
+      createdAt: "2026-08-15T00:00:00.000Z",
+    }];
+
+    expect(migrateSnapshot(v8)).toMatchObject({
+      schemaVersion: 10,
+      settings: { overdueTaskReminderFrequency: "gentle" },
+      notificationOutbox: [{ repeatCadence: "weekly" }],
+    });
+  });
+
   it("rejects a stored future schema version", () => {
-    expect(() => migrateSnapshot({ schemaVersion: 5 })).toThrow(
+    expect(() => migrateSnapshot({ schemaVersion: 11 })).toThrow(
       UnsupportedSchemaVersionError,
     );
   });
@@ -173,7 +377,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v1)).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 10,
       reviewSessions: [{ id: "session-1", actionEventIds: [] }],
     });
   });
@@ -272,7 +476,7 @@ describe("domain repository model", () => {
     };
 
     expect(migrateSnapshot(v1)).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 10,
       reviewSessions: [
         {
           orderedTaskIds: ["task-1", "task-2"],

@@ -3,6 +3,7 @@ import {
   createLocalCalendar,
   notificationTypeForTask,
   planNotificationSchedules,
+  nextGlobalRepeatAt,
   type AppRepository,
   type AppSnapshot,
   type NotificationOutboxItem,
@@ -20,9 +21,11 @@ export interface FlushOutboxResult { settingsError: boolean; registrationStale: 
 /** Delivers only anonymous queue records after local task changes are safely persisted. */
 export async function flushOutbox({ repository, api, now = () => new Date().toISOString() }: FlushOutboxInput): Promise<FlushOutboxResult> {
   const snapshot = await repository.load();
+  const pending = [...snapshot.notificationOutbox];
+  const retriedExpiredReminderIds = new Set<string>();
   let settingsError = false;
   let registrationStale = false;
-  for (const item of snapshot.notificationOutbox) {
+  for (const item of pending) {
     const current = await repository.load();
     const queued = current.notificationOutbox.find((candidate) => candidate.id === item.id);
     const credentials = current.device.pushDeviceId && current.device.pushDeviceSecret
@@ -45,6 +48,15 @@ export async function flushOutbox({ repository, api, now = () => new Date().toIS
       }
       if (error.code === "INVALID_SCHEDULE") {
         await updateQueued(repository, queued.id, (latest, latestItem) => reschedule(latest, latestItem, now()), now());
+        if (!retriedExpiredReminderIds.has(queued.reminderId)) {
+          retriedExpiredReminderIds.add(queued.reminderId);
+          const rescheduled = (await repository.load()).notificationOutbox.find(
+            (candidate) => candidate.operation === "upsert"
+              && candidate.reminderId === queued.reminderId
+              && candidate.id !== queued.id,
+          );
+          if (rescheduled) pending.push(rescheduled);
+        }
         continue;
       }
       if (error.code === "IDEMPOTENCY_CONFLICT") {
@@ -86,6 +98,18 @@ function isStale(item: NotificationOutboxItem, snapshot: AppSnapshot): boolean {
   if (item.operation === "cancel") return false;
   const mapping = snapshot.reminderMap.find((entry) => entry.reminderId === item.reminderId);
   if (!mapping) return true;
+  if (mapping.kind === "capture_initial") {
+    if (mapping.scope) {
+      return hasGlobalOwner(snapshot, mapping.scope)
+        ? false
+        : true;
+    }
+    return !snapshot.captures.some(
+      (capture) =>
+        capture.id === mapping.captureId &&
+        capture.classification === "unclassified",
+    );
+  }
   const task = snapshot.tasks.find((candidate) => candidate.id === mapping.taskId);
   return !task || task.revision !== item.taskRevision;
 }
@@ -122,6 +146,37 @@ function registrationFailed(snapshot: AppSnapshot): AppSnapshot {
 
 function reschedule(snapshot: AppSnapshot, item: NotificationOutboxItem, now: string): AppSnapshot {
   const mapping = snapshot.reminderMap.find((entry) => entry.reminderId === item.reminderId);
+  if (mapping?.scope) {
+    // The API now replays accepted operations even after their scheduled time.
+    // Only genuinely unregistered, expired slots reach this path.
+    if (item.repeatCadence && item.scheduledAt) {
+      return replaceGlobalOperation(snapshot, item, now, nextGlobalRepeatAt(item.scheduledAt, item.repeatCadence, now));
+    }
+    return mapping.scope === "inbox" && hasGlobalOwner(snapshot, "inbox")
+      ? replaceGlobalOperation(snapshot, item, now, now)
+      : discard(snapshot, item);
+  }
+  if (mapping?.kind === "capture_initial") {
+    const capture = snapshot.captures.find(
+      (candidate) =>
+        candidate.id === mapping.captureId &&
+        candidate.classification === "unclassified",
+    );
+    if (!capture) return discard(snapshot, item);
+    return {
+      ...snapshot,
+      notificationOutbox: snapshot.notificationOutbox.map((candidate) => candidate.id === item.id ? {
+        ...candidate,
+        id: crypto.randomUUID(),
+        scheduledAt: now,
+        notificationType: "inbox_review",
+        taskRevision: 0,
+        attemptCount: 0,
+        nextAttemptAt: now,
+        createdAt: now,
+      } : candidate),
+    };
+  }
   const task = mapping && snapshot.tasks.find((candidate) => candidate.id === mapping.taskId);
   if (!task || task.status !== "active") return discard(snapshot, item);
   // An elapsed initial/deadline-before slot must not be repurposed as a
@@ -154,8 +209,24 @@ function reschedule(snapshot: AppSnapshot, item: NotificationOutboxItem, now: st
   };
 }
 
-function renewIdempotencyKey(snapshot: AppSnapshot, _item: NotificationOutboxItem, now: string): AppSnapshot {
+function renewIdempotencyKey(snapshot: AppSnapshot, item: NotificationOutboxItem, now: string): AppSnapshot {
+  const failedMapping = snapshot.reminderMap.find(
+    (mapping) => mapping.reminderId === item.reminderId,
+  );
+  if (failedMapping?.scope) {
+    return replaceGlobalOperation(snapshot, item, now, item.scheduledAt);
+  }
   const active = snapshot.reminderMap.flatMap((mapping) => {
+    if (mapping.kind === "capture_initial") {
+      const capture = snapshot.captures.find(
+        (candidate) => candidate.id === mapping.captureId && candidate.classification === "unclassified",
+      );
+      return capture ? [{
+        id: crypto.randomUUID(), operation: "upsert" as const, reminderId: mapping.reminderId,
+        scheduledAt: now, notificationType: "inbox_review" as const, taskRevision: 0,
+        attemptCount: 0, nextAttemptAt: now, createdAt: now,
+      }] : [];
+    }
     const task = snapshot.tasks.find((candidate) => candidate.id === mapping.taskId);
     if (!task || task.status !== "active" || task.revision !== mapping.taskRevision) return [];
     const schedule = planNotificationSchedules({
@@ -181,4 +252,16 @@ function renewIdempotencyKey(snapshot: AppSnapshot, _item: NotificationOutboxIte
     ...snapshot,
     notificationOutbox: [...snapshot.notificationOutbox.filter((candidate) => candidate.operation === "cancel" || !activeReminderIds.has(candidate.reminderId)), ...active],
   };
+}
+
+function hasGlobalOwner(snapshot: AppSnapshot, scope: "inbox" | "memo"): boolean {
+  return scope === "inbox"
+    ? snapshot.captures.some((capture) => capture.classification === "unclassified")
+    : snapshot.captures.some((capture) => capture.classification === "note");
+}
+
+function replaceGlobalOperation(snapshot: AppSnapshot, item: NotificationOutboxItem, now: string, scheduledAt: string | undefined): AppSnapshot {
+  return { ...snapshot, notificationOutbox: snapshot.notificationOutbox.map(candidate => candidate.id === item.id
+    ? { ...candidate, id: crypto.randomUUID(), scheduledAt, attemptCount: 0, nextAttemptAt: now, createdAt: now }
+    : candidate) };
 }

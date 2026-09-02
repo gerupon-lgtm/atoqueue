@@ -2,12 +2,22 @@ import { CorruptDataError } from "./errors";
 import { createLocalCalendar } from "./due-date";
 import { migrateSnapshot } from "./migrations";
 import { calculateNextReview } from "./reminder-policy";
-import { queueTaskNotifications } from "./notification-queue";
-import type { ActionEvent, AppSnapshot, NotificationOutboxItem, ReminderMapEntry, Task } from "./model";
+import {
+  rebuildGlobalNotificationSchedules,
+  queueTaskNotifications,
+} from "./notification-queue";
+import type {
+  ActionEvent,
+  AppSnapshot,
+  NotificationOutboxItem,
+  ReminderMapEntry,
+  Task,
+} from "./model";
 
 export const BACKUP_FORMAT = "atoqueue-backup";
 export const BACKUP_VERSION = 1;
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface BackupData {
   schemaVersion: AppSnapshot["schemaVersion"];
@@ -50,7 +60,10 @@ export interface RestoreBackupInput {
 }
 
 /** Produces a portable, checksum-protected document without device or Push state. */
-export async function createBackup(snapshot: AppSnapshot, exportedAt = new Date().toISOString()): Promise<string> {
+export async function createBackup(
+  snapshot: AppSnapshot,
+  exportedAt = new Date().toISOString(),
+): Promise<string> {
   const payload: BackupData = {
     schemaVersion: snapshot.schemaVersion,
     appVersion: snapshot.appVersion,
@@ -62,13 +75,21 @@ export async function createBackup(snapshot: AppSnapshot, exportedAt = new Date(
     actionHistory: snapshot.actionHistory,
     savedAt: snapshot.savedAt,
   };
-  const unsigned = { format: BACKUP_FORMAT, version: BACKUP_VERSION, exportedAt, appVersion: snapshot.appVersion, payload };
+  const unsigned = {
+    format: BACKUP_FORMAT,
+    version: BACKUP_VERSION,
+    exportedAt,
+    appVersion: snapshot.appVersion,
+    payload,
+  };
   const checksum = await checksumFor(unsigned);
   return canonicalJson({ ...unsigned, checksum });
 }
 
 /** Validates every untrusted field before the UI can show replacement counts. */
-export async function inspectBackup(serialized: string): Promise<BackupInspection> {
+export async function inspectBackup(
+  serialized: string,
+): Promise<BackupInspection> {
   let raw: unknown;
   try {
     raw = JSON.parse(serialized);
@@ -83,10 +104,13 @@ export async function inspectBackup(serialized: string): Promise<BackupInspectio
     appVersion: document.appVersion,
     payload: document.payload,
   });
-  if (document.checksum !== expected) throw new CorruptDataError("Backup checksum does not match.");
+  if (document.checksum !== expected)
+    throw new CorruptDataError("Backup checksum does not match.");
 
   if (document.appVersion !== document.payload.appVersion) {
-    throw new CorruptDataError("Backup app version does not match its payload.");
+    throw new CorruptDataError(
+      "Backup app version does not match its payload.",
+    );
   }
   validateUtcTimestamp(document.exportedAt, "Backup export time");
   validateData(document.payload);
@@ -100,11 +124,25 @@ export async function inspectBackup(serialized: string): Promise<BackupInspectio
  * Builds an entirely new snapshot. It never mutates `current`, so callers can
  * persist exactly once only after the user has confirmed replacement.
  */
-export async function restoreBackup(input: RestoreBackupInput): Promise<AppSnapshot> {
+export async function restoreBackup(
+  input: RestoreBackupInput,
+): Promise<AppSnapshot> {
   const inspection = await inspectBackup(input.serialized);
   const snapshot = snapshotFromData(inspection.data, input.current.device);
-  const restored = { ...snapshot, tasks: recalculateRestoredTasks(snapshot.tasks, input.now, snapshot.settings.timeZone) };
-  const delivery = rebuildReminderDelivery(input.current.reminderMap, restored, input.now, input.idFactory);
+  const restored = {
+    ...snapshot,
+    tasks: recalculateRestoredTasks(
+      snapshot.tasks,
+      input.now,
+      snapshot.settings.timeZone,
+    ),
+  };
+  const delivery = rebuildReminderDelivery(
+    input.current.reminderMap,
+    restored,
+    input.now,
+    input.idFactory,
+  );
   const actionId = idFor(input, "action");
   const event: ActionEvent = {
     id: actionId,
@@ -116,7 +154,10 @@ export async function restoreBackup(input: RestoreBackupInput): Promise<AppSnaps
   };
   return {
     ...restored,
-    device: { ...input.current.device, localDeviceId: input.current.device.localDeviceId },
+    device: {
+      ...input.current.device,
+      localDeviceId: input.current.device.localDeviceId,
+    },
     actionHistory: [...restored.actionHistory, event],
     notificationOutbox: delivery.notificationOutbox,
     reminderMap: delivery.reminderMap,
@@ -129,26 +170,42 @@ export function backupFilename(date = new Date()): string {
 }
 
 function documentFrom(value: unknown): BackupDocument {
-  if (!isRecord(value)) throw new CorruptDataError("Backup document must be an object.");
-  if (value.format !== BACKUP_FORMAT) throw new CorruptDataError("Backup format is not supported.");
-  if (value.version !== BACKUP_VERSION) throw new CorruptDataError("Backup version is not supported.");
-  if (typeof value.exportedAt !== "string") throw new CorruptDataError("Backup export time is missing.");
-  if (typeof value.appVersion !== "string") throw new CorruptDataError("Backup app version is missing.");
-  if (!isRecord(value.payload)) throw new CorruptDataError("Backup payload must be an object.");
-  if (typeof value.checksum !== "string") throw new CorruptDataError("Backup checksum is missing.");
+  if (!isRecord(value))
+    throw new CorruptDataError("Backup document must be an object.");
+  if (value.format !== BACKUP_FORMAT)
+    throw new CorruptDataError("Backup format is not supported.");
+  if (value.version !== BACKUP_VERSION)
+    throw new CorruptDataError("Backup version is not supported.");
+  if (typeof value.exportedAt !== "string")
+    throw new CorruptDataError("Backup export time is missing.");
+  if (typeof value.appVersion !== "string")
+    throw new CorruptDataError("Backup app version is missing.");
+  if (!isRecord(value.payload))
+    throw new CorruptDataError("Backup payload must be an object.");
+  if (typeof value.checksum !== "string")
+    throw new CorruptDataError("Backup checksum is missing.");
   return value as unknown as BackupDocument;
 }
 
 function validateData(data: BackupData): void {
-  if (!isRecord(data.device) || typeof data.device.localDeviceId !== "string" || Object.keys(data.device).length !== 1) {
-    throw new CorruptDataError("Backup device must contain only localDeviceId.");
+  if (
+    !isRecord(data.device) ||
+    typeof data.device.localDeviceId !== "string" ||
+    Object.keys(data.device).length !== 1
+  ) {
+    throw new CorruptDataError(
+      "Backup device must contain only localDeviceId.",
+    );
   }
   assertUuid(data.device.localDeviceId, "Backup local device ID");
   validateBackupEntityIds(data);
   // Reuse the storage schema validator, with intentionally blank non-portable state.
   const snapshot = migrateSnapshot({
     ...data,
-    device: { localDeviceId: "backup-validation", pushSubscriptionStatus: "not_requested" },
+    device: {
+      localDeviceId: "backup-validation",
+      pushSubscriptionStatus: "not_requested",
+    },
     notificationOutbox: [],
     reminderMap: [],
   });
@@ -158,11 +215,16 @@ function validateData(data: BackupData): void {
 function validateBackupEntityIds(data: BackupData): void {
   if (Array.isArray(data.captures)) assertUniqueIds(data.captures, "capture");
   if (Array.isArray(data.tasks)) assertUniqueIds(data.tasks, "task");
-  if (Array.isArray(data.reviewSessions)) assertUniqueIds(data.reviewSessions, "review session");
-  if (Array.isArray(data.actionHistory)) assertUniqueIds(data.actionHistory, "action event");
+  if (Array.isArray(data.reviewSessions))
+    assertUniqueIds(data.reviewSessions, "review session");
+  if (Array.isArray(data.actionHistory))
+    assertUniqueIds(data.actionHistory, "action event");
 }
 
-function snapshotFromData(data: BackupData, device: AppSnapshot["device"]): AppSnapshot {
+function snapshotFromData(
+  data: BackupData,
+  device: AppSnapshot["device"],
+): AppSnapshot {
   return migrateSnapshot({
     ...data,
     device,
@@ -182,8 +244,12 @@ function validateReferences(snapshot: AppSnapshot): void {
   const actionIds = new Set(snapshot.actionHistory.map((event) => event.id));
   snapshot.captures.forEach((capture) => assertUuid(capture.id, "Capture ID"));
   snapshot.tasks.forEach((task) => assertUuid(task.id, "Task ID"));
-  snapshot.reviewSessions.forEach((session) => assertUuid(session.id, "Review session ID"));
-  snapshot.actionHistory.forEach((event) => assertUuid(event.id, "Action event ID"));
+  snapshot.reviewSessions.forEach((session) =>
+    assertUuid(session.id, "Review session ID"),
+  );
+  snapshot.actionHistory.forEach((event) =>
+    assertUuid(event.id, "Action event ID"),
+  );
   const taskSourceCaptureIds = new Set<string>();
   for (const task of snapshot.tasks) {
     assertUuid(task.id, "Task ID");
@@ -192,10 +258,14 @@ function validateReferences(snapshot: AppSnapshot): void {
     validateUtcTimestamp(task.updatedAt, "Task update time");
     validateUtcTimestamp(task.nextReviewAt, "Task next review time");
     if (task.dueAt) validateUtcTimestamp(task.dueAt, "Task due time");
-    if (task.lastPromptedAt) validateUtcTimestamp(task.lastPromptedAt, "Task last prompt time");
-    if (task.completedAt) validateUtcTimestamp(task.completedAt, "Task completion time");
-    if (task.archivedAt) validateUtcTimestamp(task.archivedAt, "Task archive time");
-    if (!captureIds.has(task.sourceCaptureId)) throw new CorruptDataError("Task references an unknown capture.");
+    if (task.lastPromptedAt)
+      validateUtcTimestamp(task.lastPromptedAt, "Task last prompt time");
+    if (task.completedAt)
+      validateUtcTimestamp(task.completedAt, "Task completion time");
+    if (task.archivedAt)
+      validateUtcTimestamp(task.archivedAt, "Task archive time");
+    if (!captureIds.has(task.sourceCaptureId))
+      throw new CorruptDataError("Task references an unknown capture.");
     if (taskSourceCaptureIds.has(task.sourceCaptureId)) {
       throw new CorruptDataError("Task source capture ID must be unique.");
     }
@@ -205,20 +275,31 @@ function validateReferences(snapshot: AppSnapshot): void {
     assertUuid(capture.id, "Capture ID");
     validateUtcTimestamp(capture.createdAt, "Capture creation time");
     validateUtcTimestamp(capture.updatedAt, "Capture update time");
-    if (capture.classifiedAt) validateUtcTimestamp(capture.classifiedAt, "Capture classification time");
+    if (capture.classifiedAt)
+      validateUtcTimestamp(capture.classifiedAt, "Capture classification time");
     const bodyLength = capture.body.trim().length;
     if (bodyLength < 1 || bodyLength > 280) {
-      throw new CorruptDataError("Capture body must contain 1 to 280 characters.");
+      throw new CorruptDataError(
+        "Capture body must contain 1 to 280 characters.",
+      );
     }
     if (capture.classification === "task" && !capture.linkedTaskId) {
-      throw new CorruptDataError("Task-classified capture must link to a task.");
+      throw new CorruptDataError(
+        "Task-classified capture must link to a task.",
+      );
     }
-    if (capture.linkedTaskId) assertUuid(capture.linkedTaskId, "Capture linked task ID");
-    if (capture.linkedTaskId && !taskIds.has(capture.linkedTaskId)) throw new CorruptDataError("Capture references an unknown task.");
+    if (capture.linkedTaskId)
+      assertUuid(capture.linkedTaskId, "Capture linked task ID");
+    if (capture.linkedTaskId && !taskIds.has(capture.linkedTaskId))
+      throw new CorruptDataError("Capture references an unknown task.");
     if (capture.linkedTaskId) {
-      const task = snapshot.tasks.find((candidate) => candidate.id === capture.linkedTaskId);
+      const task = snapshot.tasks.find(
+        (candidate) => candidate.id === capture.linkedTaskId,
+      );
       if (task?.sourceCaptureId !== capture.id) {
-        throw new CorruptDataError("Capture linked task must originate from that capture.");
+        throw new CorruptDataError(
+          "Capture linked task must originate from that capture.",
+        );
       }
     }
   }
@@ -231,28 +312,48 @@ function validateReferences(snapshot: AppSnapshot): void {
     validateLocalDate(session.localDate, "Review date");
     validateUtcTimestamp(session.startedAt, "Review start time");
     validateUtcTimestamp(session.updatedAt, "Review update time");
-    if (session.completedAt) validateUtcTimestamp(session.completedAt, "Review completion time");
-    if (session.orderedTaskIds.some((id) => !taskIds.has(id)) || session.visitedTaskIds.some((id) => !taskIds.has(id))) {
+    if (session.completedAt)
+      validateUtcTimestamp(session.completedAt, "Review completion time");
+    if (
+      session.orderedTaskIds.some((id) => !taskIds.has(id)) ||
+      session.visitedTaskIds.some((id) => !taskIds.has(id))
+    ) {
       throw new CorruptDataError("Review session references an unknown task.");
     }
-    if (session.actionEventIds.some((id) => !actionIds.has(id))) throw new CorruptDataError("Review session references an unknown action.");
+    if (session.actionEventIds.some((id) => !actionIds.has(id)))
+      throw new CorruptDataError(
+        "Review session references an unknown action.",
+      );
   }
   for (const event of snapshot.actionHistory) {
     assertUuid(event.id, "Action event ID");
     assertUuid(event.entityId, "Action entity ID");
     validateUtcTimestamp(event.occurredAt, "Action time");
-    if (event.entityType === "capture" && !captureIds.has(event.entityId)) throw new CorruptDataError("Action references an unknown capture.");
-    if (event.entityType === "task" && !taskIds.has(event.entityId)) throw new CorruptDataError("Action references an unknown task.");
+    if (event.entityType === "capture" && !captureIds.has(event.entityId))
+      throw new CorruptDataError("Action references an unknown capture.");
+    if (event.entityType === "task" && !taskIds.has(event.entityId))
+      throw new CorruptDataError("Action references an unknown task.");
   }
 }
 
-function recalculateRestoredTasks(tasks: Task[], now: string, timeZone: string): Task[] {
+function recalculateRestoredTasks(
+  tasks: Task[],
+  now: string,
+  timeZone: string,
+): Task[] {
   const calendar = createLocalCalendar(timeZone);
   return tasks.map((task) => {
     if (task.status !== "active") return task;
-    const nextReviewAt = task.dueMode === "scheduled" && task.dueAt && task.dueAt > now
-      ? task.dueAt
-      : calculateNextReview({ now, dueMode: task.dueMode, undecidedCount: task.undecidedCount, dismissCount: task.dismissCount, calendar });
+    const nextReviewAt =
+      task.dueMode === "scheduled" && task.dueAt && task.dueAt > now
+        ? task.dueAt
+        : calculateNextReview({
+            now,
+            dueMode: task.dueMode,
+            undecidedCount: task.undecidedCount,
+            dismissCount: task.dismissCount,
+            calendar,
+          });
     return { ...task, nextReviewAt };
   });
 }
@@ -266,7 +367,8 @@ function assertUniqueIds(items: Array<{ id: string }>, label: string): void {
 }
 
 function assertUuid(value: string, label: string): void {
-  if (!UUID_PATTERN.test(value)) throw new CorruptDataError(`${label} must be a UUID.`);
+  if (!UUID_PATTERN.test(value))
+    throw new CorruptDataError(`${label} must be a UUID.`);
 }
 
 function assertUuidList(values: string[], label: string): void {
@@ -281,60 +383,97 @@ function validateUtcTimestamp(value: string, label: string): void {
 }
 
 function validateLocalDate(value: string, label: string): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) !== value) {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) !== value
+  ) {
     throw new CorruptDataError(`${label} must be an ISO 8601 date.`);
   }
 }
 
-function rebuildReminderDelivery(previousMappings: AppSnapshot["reminderMap"], snapshot: AppSnapshot, now: string, idFactory?: RestoreBackupInput["idFactory"]): {
+function rebuildReminderDelivery(
+  previousMappings: AppSnapshot["reminderMap"],
+  snapshot: AppSnapshot,
+  now: string,
+  idFactory?: RestoreBackupInput["idFactory"],
+): {
   notificationOutbox: NotificationOutboxItem[];
   reminderMap: ReminderMapEntry[];
 } {
-  const notificationOutbox: NotificationOutboxItem[] = previousMappings.map((mapping) => ({
-    id: idFactory?.("outbox") ?? randomId(),
-    operation: "cancel",
-    reminderId: mapping.reminderId,
-    taskRevision: mapping.taskRevision,
-    attemptCount: 0,
-    nextAttemptAt: now,
-    createdAt: now,
-  }));
-  return snapshot.tasks
+  const notificationOutbox: NotificationOutboxItem[] = previousMappings.map(
+    (mapping) => ({
+      id: idFactory?.("outbox") ?? randomId(),
+      operation: "cancel",
+      reminderId: mapping.reminderId,
+      taskRevision: mapping.taskRevision,
+      attemptCount: 0,
+      nextAttemptAt: now,
+      createdAt: now,
+    }),
+  );
+  const taskDelivery = snapshot.tasks
     .filter((task) => task.status === "active")
-    .reduce<{ notificationOutbox: NotificationOutboxItem[]; reminderMap: ReminderMapEntry[] }>((result, task) => {
-      const queued = queueTaskNotifications({
-        snapshot: { ...snapshot, reminderMap: result.reminderMap },
-        task,
-        now,
-        createId: idFactory,
-      });
-      result.notificationOutbox.push(...queued.notificationOutbox);
-      result.reminderMap = queued.reminderMap;
-      return result;
-    }, { notificationOutbox, reminderMap: [] });
+    .reduce<{
+      notificationOutbox: NotificationOutboxItem[];
+      reminderMap: ReminderMapEntry[];
+    }>(
+      (result, task) => {
+        const queued = queueTaskNotifications({
+          snapshot: { ...snapshot, reminderMap: result.reminderMap },
+          task,
+          now,
+          createId: idFactory,
+        });
+        result.notificationOutbox.push(...queued.notificationOutbox);
+        result.reminderMap = queued.reminderMap;
+        return result;
+      },
+      { notificationOutbox, reminderMap: [] },
+    );
+  return rebuildGlobalNotificationSchedules({
+    snapshot: { ...snapshot, ...taskDelivery },
+    now,
+    createId: idFactory,
+  });
 }
 
 function countsFor(data: BackupData): BackupCounts {
-  return { captures: data.captures.length, tasks: data.tasks.length, reviewSessions: data.reviewSessions.length, actionHistory: data.actionHistory.length };
+  return {
+    captures: data.captures.length,
+    tasks: data.tasks.length,
+    reviewSessions: data.reviewSessions.length,
+    actionHistory: data.actionHistory.length,
+  };
 }
 
-function idFor(input: RestoreBackupInput, kind: "action" | "outbox" | "reminder"): string {
+function idFor(
+  input: RestoreBackupInput,
+  kind: "action" | "outbox" | "reminder",
+): string {
   return input.idFactory?.(kind) ?? randomId();
 }
 
 function randomId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `backup-${Date.now()}-${Math.random()}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ?? `backup-${Date.now()}-${Math.random()}`
+  );
 }
 
 async function checksumFor(value: unknown): Promise<string> {
   const bytes = new TextEncoder().encode(canonicalJson(value));
   const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (isRecord(value)) return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  if (isRecord(value))
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
   return JSON.stringify(value);
 }
 

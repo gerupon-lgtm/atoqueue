@@ -1,7 +1,18 @@
-import { createBrowserRouter, useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  createBrowserRouter,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import { LocalStorageRepository } from "../infrastructure/local-storage/local-storage-repository";
 import { createNotificationSyncService } from "../application/notification-sync-service";
+import { resetDeviceData } from "../application/device-data-reset-service";
 import { NotificationApi } from "../infrastructure/notifications/notification-api";
+import {
+  createBrowserPushAdapter,
+  enableNotifications,
+  unsubscribeBrowserPush,
+} from "../infrastructure/notifications/push-subscription";
 import { QuickCapturePage } from "../features/capture/QuickCapturePage";
 import { InboxPage } from "../features/inbox/InboxPage";
 import { TaskCandidatePage } from "../features/inbox/TaskCandidatePage";
@@ -11,6 +22,10 @@ import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
 import { TaskListPage } from "../features/tasks/TaskListPage";
 import { AppShell } from "./AppShell";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import {
+  createBrowserInstallExperience,
+  createInstallPromptPreference,
+} from "../infrastructure/install/browser-install-experience";
 
 type PageDefinition = {
   index?: true;
@@ -27,20 +42,46 @@ const pages: PageDefinition[] = [
 ];
 
 const applicationRepository = new LocalStorageRepository(window.localStorage);
+const installExperience = createBrowserInstallExperience(window);
+const installPromptPreference = createInstallPromptPreference(
+  window.localStorage,
+);
+const notificationApi = new NotificationApi(
+  "https://api.atoqueue.sikumilab.com",
+);
 const notificationSync = createNotificationSyncService({
   repository: applicationRepository,
-  api: new NotificationApi("https://api.atoqueue.sikumilab.com"),
+  api: notificationApi,
 });
+const setupNotifications = () =>
+  enableNotifications({
+    repository: applicationRepository,
+    api: notificationApi,
+    browser: createBrowserPushAdapter(),
+  });
 
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <AppShell />,
+    element: (
+      <AppShell
+        installExperience={installExperience}
+        installPromptPreference={installPromptPreference}
+        repository={applicationRepository}
+      />
+    ),
     children: [
       ...pages.map((page) => ({
         ...(page.index ? { index: true } : { path: page.path }),
         element: page.index ? (
-          <QuickCapturePage repository={applicationRepository} />
+          <QuickCapturePage
+            onNotificationChanged={() => notificationSync.flush()}
+            repository={applicationRepository}
+            setupNotifications={setupNotifications}
+            shouldAutofocusCapture={() =>
+              applicationRepository.isNotificationSetupHandledAtStartup()
+            }
+          />
         ) : page.path === "inbox" ? (
           <InboxRoute />
         ) : page.path === "today" ? (
@@ -48,13 +89,28 @@ export const router = createBrowserRouter([
         ) : page.path === "tasks" ? (
           <TaskListPage repository={applicationRepository} />
         ) : page.path === "settings" ? (
-          <SettingsPage flushNotifications={() => notificationSync.flush()} repository={applicationRepository} />
+          <SettingsPage
+            deleteDeviceData={async () => {
+              await resetDeviceData({
+                repository: applicationRepository,
+                api: notificationApi,
+                unsubscribeBrowserPush,
+              });
+              window.location.assign("/");
+            }}
+            flushNotifications={() => notificationSync.flush()}
+            repository={applicationRepository}
+            setupNotifications={setupNotifications}
+          />
         ) : (
           <Page title={page.label} />
         ),
       })),
       { path: "inbox/:captureId", element: <TaskCandidateRoute /> },
-      { path: "today/result", element: <ReviewResultPage repository={applicationRepository} /> },
+      {
+        path: "today/result",
+        element: <ReviewResultPage repository={applicationRepository} />,
+      },
       { path: "tasks/:taskId", element: <TaskCorrectionRoute /> },
     ],
   },
@@ -74,6 +130,7 @@ function InboxRoute() {
     <InboxPage
       onTaskCandidate={(captureId) => navigate(`/inbox/${captureId}`)}
       repository={applicationRepository}
+      sync={() => notificationSync.flush()}
     />
   );
 }
@@ -96,11 +153,28 @@ function TaskCandidateRoute() {
 function TodayReviewRoute() {
   const navigate = useNavigate();
   const location = useLocation();
-  return <TodayReviewPage onFinished={() => navigate("/today/result")} preferredReminderId={new URLSearchParams(location.search).get("reminder") ?? undefined} repository={applicationRepository} sync={() => notificationSync.flush()} />;
+  return (
+    <TodayReviewPage
+      onFinished={() => navigate("/today/result")}
+      preferredReminderId={
+        new URLSearchParams(location.search).get("reminder") ?? undefined
+      }
+      repository={applicationRepository}
+      sync={() => notificationSync.flush()}
+    />
+  );
 }
 
 function TaskCorrectionRoute() {
+  const navigate = useNavigate();
   const { taskId } = useParams();
   if (!taskId) return <Page title="タスク" />;
-  return <TaskDetailPage repository={applicationRepository} sync={() => notificationSync.flush()} taskId={taskId} />;
+  return (
+    <TaskDetailPage
+      onReturn={() => navigate("/tasks")}
+      repository={applicationRepository}
+      sync={() => notificationSync.flush()}
+      taskId={taskId}
+    />
+  );
 }

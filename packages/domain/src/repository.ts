@@ -7,7 +7,7 @@ export function createEmptySnapshot(params: {
   now: string;
 }): AppSnapshot {
   return {
-    schemaVersion: 4,
+    schemaVersion: 10,
     appVersion: params.appVersion,
     device: {
       localDeviceId: params.localDeviceId,
@@ -19,7 +19,13 @@ export function createEmptySnapshot(params: {
       notificationEnabled: false,
       initialReminderDelayMinutes: 60,
       deadlineReminderLeadMinutes: 60,
+      defaultDeadlineTime: "23:59",
       weeklyReviewDay: 0,
+      inboxReminderFrequency: "gentle",
+      overdueTaskReminderFrequency: "gentle",
+      memoReviewFrequency: "weekly",
+      enterSavesCapture: true,
+      customTaskCategories: [],
     },
     captures: [],
     tasks: [],
@@ -32,6 +38,8 @@ export function createEmptySnapshot(params: {
 }
 
 export interface AppRepository {
+  /** Observe committed snapshot changes, never draft edits or failed writes. */
+  subscribe?(listener: () => void): () => void;
   load(): Promise<AppSnapshot>;
   save(next: AppSnapshot): Promise<void>;
   loadDraft(): Promise<string>;

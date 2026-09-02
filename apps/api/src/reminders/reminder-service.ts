@@ -4,6 +4,7 @@ import { ApiError } from "../errors/api-error.js";
 import type { DeviceRateLimiter } from "../plugins/security.js";
 import type { DeviceRepository } from "../devices/device-repository.js";
 import type { ReminderRepository } from "./reminder-repository.js";
+import type { RepeatCadence } from "@atoqueue/contracts";
 
 export class ReminderService {
   constructor(
@@ -13,18 +14,18 @@ export class ReminderService {
     private readonly rateLimiter?: DeviceRateLimiter,
   ) {}
 
-  async upsert(input: { deviceId: string; bearer: string | undefined; reminderId: string; scheduledAt: string; notificationType: "task_review" | "deadline_review" | "unset_due_review"; idempotencyKey: string }) {
+  async upsert(input: { deviceId: string; bearer: string | undefined; reminderId: string; scheduledAt: string; notificationType: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review"; repeatCadence?: RepeatCadence; idempotencyKey: string }) {
     await this.authenticate(input.deviceId, input.bearer);
     this.rateLimiter?.consumeDevice(input.deviceId);
     const now = this.now();
-    if (Date.parse(input.scheduledAt) < Date.parse(now) - 5 * 60_000) throw new ApiError(400, "INVALID_SCHEDULE", "Scheduled time is too far in the past.");
-    const result = await this.reminders.upsert({ id: input.reminderId, deviceId: input.deviceId, scheduledAt: input.scheduledAt, notificationType: input.notificationType, idempotencyKey: input.idempotencyKey, now });
+    const result = await this.reminders.upsert({ id: input.reminderId, deviceId: input.deviceId, scheduledAt: input.scheduledAt, notificationType: input.notificationType, repeatCadence: input.repeatCadence ?? null, idempotencyKey: input.idempotencyKey, now });
     if (!("record" in result)) {
+      if (result.kind === "invalid_schedule") throw new ApiError(400, "INVALID_SCHEDULE", "Scheduled time is too far in the past.");
       if (result.kind === "conflict") throw new ApiError(409, "IDEMPOTENCY_CONFLICT", "Idempotency key conflicts with a different request.");
       throw new ApiError(404, "REMINDER_NOT_FOUND", "Reminder not found.");
     }
     const record = result.record;
-    return { created: result.kind === "created" || (result.kind === "replay" && record.createdAt === record.updatedAt), response: { reminderId: record.id, status: "pending" as const, scheduledAt: record.scheduledAt, updatedAt: record.updatedAt } };
+    return { created: result.kind === "created" || (result.kind === "replay" && record.createdAt === record.updatedAt), response: { reminderId: record.id, status: "pending" as const, scheduledAt: record.scheduledAt, repeatCadence: record.repeatCadence, updatedAt: record.updatedAt } };
   }
 
   async cancel(input: { deviceId: string; bearer: string | undefined; reminderId: string }): Promise<void> {
@@ -41,6 +42,6 @@ export class ReminderService {
   }
 }
 
-export function reminderFingerprint(input: Pick<{ reminderId: string; scheduledAt: string; notificationType: "task_review" | "deadline_review" | "unset_due_review" }, "reminderId" | "scheduledAt" | "notificationType">): string {
+export function reminderFingerprint(input: Pick<{ reminderId: string; scheduledAt: string; notificationType: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review"; repeatCadence: RepeatCadence | null }, "reminderId" | "scheduledAt" | "notificationType" | "repeatCadence">): string {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }

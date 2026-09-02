@@ -1,0 +1,72 @@
+.install-prompt {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgb(12 42 35 / 54%);
+}
+
+.install-prompt__card {
+  width: min(100%, 24rem);
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid #b9c9bf;
+  border-radius: 0.875rem;
+  background: #fffdf8;
+  box-shadow: 0 1.25rem 3rem rgb(13 45 37 / 24%);
+}
+
+.install-prompt__card h2,
+.install-prompt__card p {
+  margin: 0;
+}
+
+.install-prompt__card h2 {
+  color: #123d34;
+  font-size: 1.35rem;
+  line-height: 1.4;
+}
+
+.install-prompt__eyebrow {
+  color: #526a60;
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+}
+
+.install-prompt__note {
+  color: #526a60;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.install-prompt__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  padding-top: 0.25rem;
+}
+
+.install-prompt__actions button {
+  min-height: 44px;
+  padding: 0.625rem 1rem;
+  border: 1px solid #176552;
+  border-radius: 0.55rem;
+  background: #176552;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+}
+
+.install-prompt__actions button:focus-visible {
+  outline: 3px solid #e8b15b;
+  outline-offset: 3px;
+}
+
+.install-prompt__actions .install-prompt__secondary {
+  border-color: #b8c8bc;
+  background: #fffdf8;
+  color: #285c50;
+}

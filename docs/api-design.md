@@ -67,7 +67,7 @@ MVPでは利用者アカウントを持たないため、端末シークレッ�
 ```json
 {
   "status": "ok",
-  "version": "0.1.0",
+  "version": "mvp-1.26.0",
   "time": "2026-08-03T09:00:00.000Z"
 }
 ```
@@ -139,15 +139,21 @@ Request:
 {
   "deviceId": "a1f0f85e-8da5-4bfb-8fc4-938067ca9984",
   "scheduledAt": "2026-08-06T09:00:00.000Z",
-  "notificationType": "unset_due_review"
+  "notificationType": "inbox_review",
+  "repeatCadence": "weekly"
 }
 ```
 
 許可値:
 
+- `inbox_review`（未整理記録の受信箱リマインド。Pushタップ先は受信箱）
 - `task_review`
 - `deadline_review`
 - `unset_due_review`
+
+Requestの `repeatCadence` は省略時だけ一回限りとし、`null` は受け付けない。指定時は `daily`、`weekly`、`monthly` だけを許可する。Responseの `repeatCadence` は一回限りなら `null` を返す。これは匿名系列の配送後に次回予約へ進めるための値であり、タスク・キャプチャ・メモのローカルIDは受け取らない。`daily` は期限超過タスクの「こまめ」系列、`weekly` は受信箱・メモ・期限超過タスクの週次系列に使える。
+
+端末側は受信箱・メモの全体系列で対応する予約枠が存続する場合、同じ `reminderId` に新しい予定時刻を `PUT` して全置換する。新規未整理の追加で予約数が変わらない場合は、旧予約を `DELETE` してから別IDを作る手順を使わない。系列からなくなった余剰枠だけを `DELETE` する。APIの項目とDB形式は変更しない。
 
 Response `200` または `201`:
 
@@ -156,13 +162,18 @@ Response `200` または `201`:
   "reminderId": "34f55ed6-ddf9-481d-8b49-5b520683a8d8",
   "status": "pending",
   "scheduledAt": "2026-08-06T09:00:00.000Z",
+  "repeatCadence": "weekly",
   "updatedAt": "2026-08-03T09:00:00.000Z"
 }
 ```
 
-禁止フィールド `title`、`body`、`taskId`、`category` を受け取った場合は無視せず `INVALID_REQUEST` とする。これにより誤って本文を送る実装を契約テストで検出する。
+禁止フィールド `title`、`body`、`taskId`、`captureId`、`category` を受け取った場合は無視せず `INVALID_REQUEST` とする。これにより誤って本文・局所IDを送る実装を契約テストで検出する。
 
 予約PUTの冪等性記録は端末ID・予約ID・`Idempotency-Key`・要求フィンガープリント・予約応答だけを不変に保存する。後続の予約更新は過去の冪等性応答を変更しない。
+
+認証後、過去時刻の検証より先に既存の冪等性記録を照合する。同一要求の再送は予定時刻から5分以上経過していても初回の応答を返し、送信済み・取消済み・次回へ進んだ予約を再び有効にしない。同じキーで異なる内容は `IDEMPOTENCY_CONFLICT`、未登録の過去時刻だけを `INVALID_SCHEDULE` とする。DB形式・送信項目は変更しない。
+
+端末側では、全体系列の `INVALID_SCHEDULE` はその未登録枠だけを修復する。一回限りの過去枠は破棄し、繰り返し枠は元の間隔に沿う次の未来時刻へ進める。全系列を現在時刻で作り直さない。全体系列の `IDEMPOTENCY_CONFLICT` では失敗した操作キーだけを更新し、他の予約を維持する。
 
 ### 5.7 DELETE /v1/reminders/:reminderId
 
@@ -174,7 +185,8 @@ Response `200` または `201`:
 {
   "type": "review_due",
   "reminderId": "34f55ed6-ddf9-481d-8b49-5b520683a8d8",
-  "url": "/today?reminder=34f55ed6-ddf9-481d-8b49-5b520683a8d8"
+  "url": "/today?reminder=34f55ed6-ddf9-481d-8b49-5b520683a8d8",
+  "groupId": "0240ed4ae646d5c0"
 }
 ```
 
@@ -184,13 +196,15 @@ Response `200` または `201`:
 {
   title: "あとキュー",
   body: "確認したい項目があります",
-  tag: "atoqueue-review",
+  tag: `atoqueue-review-${groupId}`,
   renotify: false,
   data: { url, reminderId }
 }
 ```
 
-タスク本文や期限日はpayloadへ入れない。Service Workerは通知タップ時に同一オリジンの既存ウィンドウをフォーカスし、なければ新規に開く。
+`groupId` は `notification_type`、NUL区切り、`scheduled_at` のSHA-256先頭16桁とする。同じ通知種別・予定時刻の予約は同じタグへ集約し、異なる種別・時刻は別タグで新しく通知する。移行中は `groupId` のない従来payloadも受理し、固定タグへフォールバックする。タスク本文、メモ本文、期限、カテゴリ、タスクID、キャプチャIDはpayloadへ入れない。Service Workerは通知タップ時に同一オリジンの既存ウィンドウをフォーカスし、なければ新規に開く。
+
+Pushサービスへの送信オプションは `urgency="high"`、`TTL=86400` 秒とする。Service Workerは `vibrate=[200,100,200]` を要求する。これらは配送・注意喚起の要望であり、OSのサイレント／おやすみモード、ブラウザの通知許可、電池制御を回避せず、正確な配送時刻を保証しない。`silent` と `requireInteraction` は指定しない。
 
 ## 7. 配送処理
 
@@ -199,9 +213,9 @@ Response `200` または `201`:
 1. 5分ごとに `status=pending AND scheduled_at<=now` を最大100件取得する。
 2. トランザクション内で `claimed` にし、`claimed_at` を記録する。
 3. Web Pushへ送信する。
-4. 成功時は `sent`、一時失敗時は `pending` に戻して予定を5分、15分、60分後へ移す。
+4. 一回限りの成功時は `sent`。`repeatCadence` を持つ成功時は同じ匿名予約を `pending` に戻し、実際の配送時刻ではなく直前の予定時刻を基準に、`daily` は24時間後、`weekly` は7日後、`monthly` はUTC暦月を一つ進めた同日（存在しない日は月末）へ移す。一時失敗時は `pending` に戻して予定を5分、15分、60分後へ移す。
 5. 3回失敗で `failed` とする。
-6. Push endpointが404/410なら端末購読を `disabled` にし、対象端末の未配送予約を `failed` にする。
+6. Push endpointが404/410なら端末購読を `disabled` にし、対象端末の未配送予約を `failed` にする。この場合、繰り返し予約も次回へ進めない。
 7. 15分以上 `claimed` のままのジョブは起動時に `pending` へ戻す。
 
 配送成功はOS表示を保証しない。アプリは起動時に端末内ルールを再計算し、未処理対象を「今日の確認」に表示する。
@@ -221,15 +235,15 @@ Response `200` または `201`:
 
 ## 9. 環境変数
 
-| 変数                | 必須 | 内容                |
-| ------------------- | ---- | ------------------- |
-| `PORT`              | 任意 | 既定3030            |
-| `DATABASE_URL`      | 必須 | PostgreSQL接続URL   |
+| 変数                | 必須 | 内容                             |
+| ------------------- | ---- | -------------------------------- |
+| `PORT`              | 任意 | 既定3030                         |
+| `DATABASE_URL`      | 必須 | PostgreSQL接続URL                |
 | `ALLOWED_ORIGIN`    | 必須 | `https://atoqueue.sikumilab.com` |
-| `VAPID_PUBLIC_KEY`  | 必須 | 公開鍵              |
-| `VAPID_PRIVATE_KEY` | 必須 | 秘密鍵              |
-| `VAPID_SUBJECT`     | 必須 | `mailto:gerupon@gmail.com` |
-| `LOG_LEVEL`         | 任意 | 既定info            |
+| `VAPID_PUBLIC_KEY`  | 必須 | 公開鍵                           |
+| `VAPID_PRIVATE_KEY` | 必須 | 秘密鍵                           |
+| `VAPID_SUBJECT`     | 必須 | `mailto:gerupon@gmail.com`       |
+| `LOG_LEVEL`         | 任意 | 既定info                         |
 
 ## 10. 契約テスト
 

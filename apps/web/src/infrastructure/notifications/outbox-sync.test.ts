@@ -83,6 +83,30 @@ describe("flushOutbox", () => {
     expect(queued.every((item) => item.id !== "outbox" && item.operation === "upsert" && item.attemptCount === 0)).toBe(true);
   });
 
+  it("renews a conflicted task operation without replacing a concurrent global series", async () => {
+    const initial = snapshotWithOutbox();
+    initial.captures = [{ id: "private-inbox-capture", body: "private", classification: "unclassified", createdAt: now, updatedAt: now }];
+    initial.settings.inboxReminderFrequency = "gentle";
+    initial.reminderMap.push({ reminderId: "33333333-3333-4333-8333-333333333333", scope: "inbox", kind: "capture_initial", taskRevision: 0, createdAt: now });
+    initial.notificationOutbox.push({ id: "global-outbox", operation: "upsert", reminderId: "33333333-3333-4333-8333-333333333333", scheduledAt: "2026-08-04T09:00:00.000Z", notificationType: "inbox_review", taskRevision: 0, attemptCount: 0, nextAttemptAt: now, createdAt: now });
+    const repository = memory(initial);
+
+    await flushOutbox({ repository, now: () => now, api: {
+      upsert: async (item) => {
+        if (item.reminderId === "22222222-2222-4222-8222-222222222222") throw new NotificationApiError(409, undefined, "IDEMPOTENCY_CONFLICT");
+      },
+      cancel: async () => undefined,
+    } });
+
+    const queued = await repository.load();
+    expect(queued.notificationOutbox).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reminderId: "22222222-2222-4222-8222-222222222222", operation: "upsert", id: expect.not.stringMatching(/^outbox$/) }),
+    ]));
+    expect(queued.reminderMap).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reminderId: "33333333-3333-4333-8333-333333333333", scope: "inbox" }),
+    ]));
+  });
+
   it("keeps each anonymous schedule kind when an idempotency conflict rebuilds a scheduled task", async () => {
     const initial = snapshotWithOutbox();
     initial.settings = {
@@ -145,7 +169,6 @@ describe("flushOutbox", () => {
     const snapshot = snapshotWithOutbox();
     snapshot.reminderMap[0] = { ...snapshot.reminderMap[0]!, kind: "initial" };
     const repository = memory(snapshot);
-
     await flushOutbox({
       repository,
       now: () => now,
@@ -185,6 +208,138 @@ describe("flushOutbox", () => {
 
     await flushOutbox({ repository, now: () => now, api: { upsert: async () => { throw new Error("must not call"); }, cancel: async () => undefined } });
     expect((await repository.load()).notificationOutbox).toEqual([]);
+  });
+
+  it("drops an inbox-wide reservation when no unresolved inbox entry remains", async () => {
+    const snapshot = snapshotWithOutbox();
+    snapshot.tasks = [];
+    snapshot.captures = [];
+    snapshot.reminderMap = [{
+      reminderId: "22222222-2222-4222-8222-222222222222",
+      scope: "inbox",
+      kind: "capture_initial",
+      taskRevision: 0,
+      createdAt: now,
+    }];
+    snapshot.notificationOutbox[0] = {
+      ...snapshot.notificationOutbox[0]!,
+      taskRevision: 0,
+      notificationType: "inbox_review",
+    };
+
+    const repository = memory(snapshot);
+    await flushOutbox({
+      repository,
+      now: () => now,
+      api: {
+        upsert: async () => {
+          throw new Error("a stale global reservation must not be sent");
+        },
+        cancel: async () => undefined,
+      },
+    });
+
+    expect((await repository.load()).notificationOutbox).toEqual([]);
+  });
+
+  // Break caught: an offline capture whose first slot elapsed was discarded on reconnect.
+  it("requeues an expired unregistered inbox one-shot for immediate delivery", async () => {
+    const snapshot = snapshotWithOutbox();
+    snapshot.tasks = [];
+    snapshot.captures = [{
+      id: "local-capture-id",
+      body: "private inbox text",
+      classification: "unclassified",
+      createdAt: "2026-08-04T07:00:00.000Z",
+      updatedAt: now,
+    }];
+    snapshot.settings.inboxReminderFrequency = "gentle";
+    snapshot.reminderMap = [{
+      reminderId: "22222222-2222-4222-8222-222222222222",
+      scope: "inbox",
+      kind: "capture_initial",
+      taskRevision: 0,
+      createdAt: now,
+    }];
+    snapshot.notificationOutbox[0] = {
+      ...snapshot.notificationOutbox[0]!,
+      taskRevision: 0,
+      notificationType: "inbox_review",
+      scheduledAt: "2026-08-03T08:00:00.000Z",
+    };
+    const repository = memory(snapshot);
+    let upsertCount = 0;
+
+    await flushOutbox({
+      repository,
+      now: () => now,
+      api: {
+        upsert: async () => {
+          upsertCount += 1;
+          if (upsertCount === 1) {
+            throw new NotificationApiError(400, undefined, "INVALID_SCHEDULE");
+          }
+        },
+        cancel: async () => undefined,
+      },
+    });
+
+    const saved = await repository.load();
+    expect(upsertCount).toBe(2);
+    expect(saved.notificationOutbox).toEqual([]);
+    expect(saved.reminderMap).toEqual(
+      expect.arrayContaining([expect.objectContaining({ scope: "inbox" })]),
+    );
+    expect(JSON.stringify(saved.notificationOutbox)).not.toContain("local-capture-id");
+  });
+
+  it("stops after one immediate retry and retains the outbox when the recovered slot is rejected again", async () => {
+    const snapshot = snapshotWithOutbox();
+    snapshot.tasks = [];
+    snapshot.captures = [{
+      id: "offline-capture",
+      body: "private",
+      classification: "unclassified",
+      createdAt: "2026-08-04T07:00:00.000Z",
+      updatedAt: now,
+    }];
+    snapshot.reminderMap = [{
+      reminderId: "22222222-2222-4222-8222-222222222222",
+      scope: "inbox",
+      kind: "capture_initial",
+      taskRevision: 0,
+      createdAt: now,
+    }];
+    snapshot.notificationOutbox[0] = {
+      ...snapshot.notificationOutbox[0]!,
+      taskRevision: 0,
+      notificationType: "inbox_review",
+      scheduledAt: "2026-08-03T08:00:00.000Z",
+    };
+    const repository = memory(snapshot);
+    let upsertCount = 0;
+
+    await flushOutbox({
+      repository,
+      now: () => now,
+      api: {
+        upsert: async () => {
+          upsertCount += 1;
+          throw new NotificationApiError(400, undefined, "INVALID_SCHEDULE");
+        },
+        cancel: async () => undefined,
+      },
+    });
+
+    const saved = await repository.load();
+    expect(upsertCount).toBe(2);
+    expect(saved.notificationOutbox).toEqual([
+      expect.objectContaining({
+        operation: "upsert",
+        scheduledAt: now,
+        notificationType: "inbox_review",
+      }),
+    ]);
   });
 });
 
