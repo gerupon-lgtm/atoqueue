@@ -279,7 +279,7 @@ describe("LocalStorageRepository startup notification check", () => {
       getItem: () => {
         throw new DOMException("storage access denied", "SecurityError");
       },
-    } as Storage;
+    } as unknown as Storage;
     const repository = new LocalStorageRepository(storage);
 
     expect(repository.isNotificationSetupHandledAtStartup()).toBe(false);
