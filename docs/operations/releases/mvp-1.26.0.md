@@ -16,11 +16,14 @@
 ## 検証
 
 - RED: `QuickCapturePage` の未解決ロード中テストとローカル保存同期判定テストが、実装前に期待どおり失敗することを確認した。
-- GREEN: 対象のQuickCapturePage・LocalStorageRepositoryテストを実行し、最終Fix round 1時点では43件が成功した。テスト件数は回帰ケース追加で変動するため、最終HEADでは記録したコマンドの成功を正とする。
-- 全ワークスペース単体・結合テスト、lint、Web/API/contracts/domainの型検査、全build、GitHub Pages SPA成果物検査が成功した。
+- GREEN: 対象のQuickCapturePage・LocalStorageRepositoryテストを実行し、追加した回帰ケースを含めて成功した。
+- 全ワークスペース単体・結合テスト574件、lint、Web/API/contracts/domainの型検査、全build、GitHub Pages SPA成果物検査が成功した。
 - Chromium E2Eは記録画面の保存・再読込と、起動時および画面復帰時のフォーカスを2件とも成功した。通常サンドボックスではChromium起動がEPERMとなるため、ローカル許可環境で同一テストを実行した。
 
 ## 受入・配置
 
-- 本番配置はレビュー後にコントローラが実施する。
+- 2026-09-03 08:11 JST、コミット `ba7201eb3920739f27342edb9e11528b20f52bdb` を本番へ配置した。
+- GitHub Actions `Deploy` run: https://github.com/gerupon-lgtm/atoqueue/actions/runs/33693653036
+- `https://atoqueue.sikumilab.com/` の公開HTMLが新しい `index-3TumLa0g.js` を参照し、同JavaScriptに `mvp-1.26.0` とVirtual Keyboard処理が含まれることを確認した。
+- `https://api.atoqueue.sikumilab.com/healthz` が `status: ok`、`version: mvp-1.26.0` を返すことを確認した。
 - Pixel実機で、通知設定を処理済みの端末の起動時および他画面から記録画面へ戻った時にOSキーボードが表示されることを公開後に確認する。自動テストは公開UIのフォーカスとVirtual Keyboard API呼出しまでを検証対象とする。
