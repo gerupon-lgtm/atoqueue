@@ -51,6 +51,7 @@ function createDeferred<T>() {
 describe("QuickCapturePage", () => {
   afterEach(() => {
     cleanup();
+    Reflect.deleteProperty(window.navigator, "virtualKeyboard");
     vi.useRealTimers();
   });
 
@@ -96,6 +97,11 @@ describe("QuickCapturePage", () => {
   });
 
   it("does not autofocus the capture textarea while notification setup is not requested", async () => {
+    const showVirtualKeyboard = vi.fn();
+    Object.defineProperty(window.navigator, "virtualKeyboard", {
+      configurable: true,
+      value: { show: showVirtualKeyboard },
+    });
     const setupNotifications = vi.fn().mockResolvedValue({ state: "granted" });
     render(
       <QuickCapturePage
@@ -108,9 +114,15 @@ describe("QuickCapturePage", () => {
     expect(screen.getByLabelText("思いついたこと")).not.toBe(
       document.activeElement,
     );
+    expect(showVirtualKeyboard).not.toHaveBeenCalled();
   });
 
   it("autofocuses the capture textarea after notification setup has already been handled", async () => {
+    const showVirtualKeyboard = vi.fn();
+    Object.defineProperty(window.navigator, "virtualKeyboard", {
+      configurable: true,
+      value: { show: showVirtualKeyboard },
+    });
     const snapshot = createEmptySnapshot({
       appVersion: "0.1.0",
       localDeviceId: "device-1",
@@ -129,6 +141,7 @@ describe("QuickCapturePage", () => {
     expect(await screen.findByRole("textbox", { name: "思いついたこと" })).toBe(
       document.activeElement,
     );
+    expect(showVirtualKeyboard).toHaveBeenCalledTimes(1);
   });
 
   it("shows a first-use guide and stores its dismissal locally", async () => {

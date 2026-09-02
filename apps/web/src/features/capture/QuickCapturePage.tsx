@@ -64,7 +64,7 @@ export function QuickCapturePage({
         setLoadedSnapshot(snapshot);
         setEnterSavesCapture(snapshot.settings.enterSavesCapture);
         if (snapshot.device.pushSubscriptionStatus !== "not_requested") {
-          inputRef.current?.focus();
+          focusCaptureInput(inputRef.current);
         }
         setUnclassifiedCount(
           snapshot.captures.filter(
@@ -371,6 +371,25 @@ export function QuickCapturePage({
 
 function defaultCreateId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `capture-${Date.now()}`;
+}
+
+type NavigatorWithVirtualKeyboard = Navigator & {
+  virtualKeyboard?: {
+    show: () => void;
+  };
+};
+
+function focusCaptureInput(input: HTMLTextAreaElement | null) {
+  if (!input) return;
+
+  input.focus();
+  if (document.activeElement !== input) return;
+
+  try {
+    (navigator as NavigatorWithVirtualKeyboard).virtualKeyboard?.show();
+  } catch {
+    // The browser and OS retain final control over the software keyboard.
+  }
 }
 
 function isResolvedDraft(
