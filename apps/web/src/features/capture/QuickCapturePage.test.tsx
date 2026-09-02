@@ -8,6 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppRepository, AppSnapshot } from "../../../../../packages/domain/src";
@@ -168,27 +169,46 @@ describe("QuickCapturePage", () => {
     expect(showVirtualKeyboard).toHaveBeenCalledTimes(1);
   });
 
-  it("focuses immediately when the startup notification check has already been handled", () => {
+  it("requests the virtual keyboard once after deferred loading and StrictMode effect replay", async () => {
     const showVirtualKeyboard = vi.fn();
     Object.defineProperty(window.navigator, "virtualKeyboard", {
       configurable: true,
       value: { show: showVirtualKeyboard },
     });
+    const snapshot = createEmptySnapshot({
+      appVersion: "0.1.0",
+      localDeviceId: "device-1",
+      timeZone: "Asia/Tokyo",
+      now,
+    });
+    snapshot.device.pushSubscriptionStatus = "granted";
+    const load = createDeferred<AppSnapshot>();
+    const loadDraft = createDeferred<string>();
     const repository = createRepository({
-      load: vi.fn().mockReturnValue(createDeferred<AppSnapshot>().promise),
-      loadDraft: vi.fn().mockReturnValue(createDeferred<string>().promise),
+      load: vi.fn().mockReturnValue(load.promise),
+      loadDraft: vi.fn().mockReturnValue(loadDraft.promise),
     });
 
     render(
-      <QuickCapturePage
-        repository={repository}
-        shouldAutofocusCapture={() => true}
-      />,
+      <StrictMode>
+        <QuickCapturePage
+          repository={repository}
+          shouldAutofocusCapture={() => true}
+        />
+      </StrictMode>,
     );
 
     expect(screen.getByRole("textbox", { name: "思いついたこと" })).toBe(
       document.activeElement,
     );
+    expect(showVirtualKeyboard).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      load.resolve(snapshot);
+      loadDraft.resolve("");
+      await Promise.resolve();
+    });
+
     expect(showVirtualKeyboard).toHaveBeenCalledTimes(1);
   });
 
