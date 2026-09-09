@@ -3,7 +3,7 @@
 - 対象: 管理者が管理する別ブラウザアプリのフロントエンド・バックエンド開発担当
 - API version: `v2`
 - 基準日: 2026-09-09
-- 状態: 実装前の承認済み通信仕様
+- 状態: v2 API・共通クライアント実装済み、ローカル品質ゲート通過・最終レビュー中。本番未配置
 
 ## 1. この資料の使い方
 
@@ -72,7 +72,7 @@ VAPID公開鍵はAPIから取得する。VAPID private key、あとキューま�
 - 日時: ISO 8601 UTC。必ず`Z`で終える
 - Request body上限: 16 KiB
 - Schema: 記載フィールド以外を拒否するstrict schema
-- 認証: 登録以外は`Authorization: Bearer <deviceSecret>`
+- 認証: 公開鍵取得・端末登録以外は`Authorization: Bearer <deviceSecret>`
 - 冪等性: 指定endpointでは`Idempotency-Key: <UUID>`
 - CORS: 登録済みOriginとpathの`appId`が一致する場合だけ許可。`v1`はあとキューOriginだけを許可
 
@@ -409,7 +409,9 @@ interface NotificationOutboxItem {
 | Dispatcher | 期限到来配送、payload version選択、再試行、失効処理 |
 | Push Client Registry | app別VAPID資格情報でWeb Pushを送信 |
 
-`device_subscriptions`へ`app_id`と`protocol_version`、`reminder_jobs`へ`route_key`を追加する。既存行は`atoqueue/protocolVersion=1`として移行し、あとキューのpayloadを変えない。
+`device_subscriptions`へ`app_id`と`protocol_version`、`reminder_jobs`へ`route_key`とnullableな`repeat_anchor_at`を追加する。後者は一時失敗の再試行で繰り返し予定時刻がずれないための内部値であり、通信項目には追加しない。既存行は`atoqueue/protocolVersion=1`として移行し、あとキューのpayloadを変えない。
+
+設定・migration・API先行配置・ロールバックの具体手順は[運用手順](../operations/notification-platform-v2.md)を参照する。
 
 ## 14. アプリ追加手順
 
@@ -460,9 +462,11 @@ interface NotificationOutboxItem {
 ### 16.1 必須
 
 1. 本書 `docs/integration/notification-platform-v2.md`
-2. 実装完了後の`packages/notification-client/README.md`
-3. 利用する`@atoqueue/notification-client`の配布物または固定commit
+2. [共通クライアントREADME](../../packages/notification-client/README.md)
+3. 同じ固定版の`@atoqueue/notification-client`と依存`@atoqueue/contracts`の両tarball、または同一workspaceの固定commit
 4. API Origin、`appId`、許可済みOrigin、`notificationKey`、`routeKey`
+
+1.27.0のローカル配布物は`dist/notification-platform-v2/`へ作成する。両パッケージはnpm未公開であり、クライアントだけのレジストリインストールはできない。READMEのローカルtarball手順を使う。
 
 ### 16.2 共通基盤も変更する担当へ追加
 

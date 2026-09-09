@@ -322,6 +322,8 @@ export interface ReminderMapEntry {
 
 ### 5.1 device_subscriptions
 
+通知共通基盤v2（migration 004）で`app_id TEXT NOT NULL DEFAULT 'atoqueue'`と`protocol_version INTEGER NOT NULL DEFAULT 1`を追加する。既存行はあとキューv1として残し、新しいv2端末はRegistryのappIdとprotocolVersion=2を保存する。device_idとendpointのDB全体での一意性は維持する。app_idとdevice_idに索引を追加する。
+
 | 列                | 型        | 制約・用途                            |
 | ----------------- | --------- | ------------------------------------- |
 | `id`              | TEXT      | UUID、主キー                          |
@@ -336,6 +338,10 @@ export interface ReminderMapEntry {
 | `last_error_code` | TEXT NULL | 直近の配送エラー                      |
 
 ### 5.2 reminder_jobs
+
+v2では既存`notification_type`へ許可済みnotificationKeyを格納し、追加列`route_key TEXT NULL`へ許可済み遷移キーを保存する。既存v1行のroute_keyはNULLである。アプリ所属はdevice_idの参照先から導出し、予約に重複したapp_idは保存しない。routeKeyはv2の冪等性フィンガープリントにも含める。旧v1のフィンガープリントと応答は互換受理する。
+
+追加列`repeat_anchor_at TEXT NULL`は再試行前の予定時刻を保持する。retryによるscheduled_at更新後も、次回のdaily/weekly/monthly計算と通知groupIdの基準はanchorを使う。初回retryで設定し、全置換・次回進行でNULLへ戻す。既存行のNULLではscheduled_atを基準とする。これは匿名配送時刻の内部メタデータであり、v1/v2の通信項目や端末保存schemaVersionは増やさない。
 
 | 列                  | 型        | 制約・用途                                              |
 | ------------------- | --------- | ------------------------------------------------------- |

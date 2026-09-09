@@ -7,7 +7,7 @@ import { ApplicationPushClient } from "./push/application-push-client.js";
 import { ReminderDispatcher } from "./scheduler/reminder-dispatcher.js";
 import { buildProductionApp } from "./server.js";
 
-export const API_VERSION = "mvp-1.26.0";
+export const API_VERSION = "mvp-1.27.0";
 
 export interface RunningApi {
   close(): Promise<void>;
@@ -72,14 +72,22 @@ export async function start(
   });
   const dispatcher = new ReminderDispatcher(
     new PgReminderRepository(pool),
-    new ApplicationPushClient({
-      publicKey: config.vapidPublicKey,
-      privateKey: config.vapidPrivateKey,
-      subject: config.vapidSubject,
-    }, config.applications),
+    new ApplicationPushClient(
+      {
+        publicKey: config.vapidPublicKey,
+        privateKey: config.vapidPrivateKey,
+        subject: config.vapidSubject,
+      },
+      config.applications,
+    ),
     () => new Date(),
     config.deadlineDeliveryLeadSeconds,
     config.applications,
+    (event) => {
+      process.stdout.write(
+        `${JSON.stringify({ event: "notification_delivery", ...event })}\n`,
+      );
+    },
   );
   return startServer({
     app,

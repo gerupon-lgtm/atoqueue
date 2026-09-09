@@ -12,6 +12,8 @@
 
 ## Plan conventions
 
+2026-09-09の通知共通基盤v2追補は[専用実装計画](2026-09-09-notification-platform-v2.md)で管理する。対象はF-013〜F-015、F-019、NF-004〜NF-007、NF-012〜NF-014。あとキューWebのv1契約と端末schemaVersion=10は維持し、追加的DB移行とapp別のv2を実装する。リリース対象版はmvp-1.27.0。検証と本番未配置/配置済みの状態は`docs/operations/releases/mvp-1.27.0.md`を参照。
+
 - Working directory: repository root.
 - Every task starts with a failing test and ends with a focused commit.
 - Requirement IDs are copied into test names or comments when behavior is not obvious.

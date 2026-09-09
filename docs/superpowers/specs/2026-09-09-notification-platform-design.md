@@ -190,6 +190,7 @@ interface NotificationApplicationConfig {
 
 - `notification_type`は物理列名を維持し、`v2`では`notificationKey`を保存する。
 - `route_key TEXT NULL`を追加する。既存`v1`行は`NULL`でよい。
+- `repeat_anchor_at TEXT NULL`を追加する。再試行の初回に元の予定時刻を保存し、再試行待ちの`scheduled_at`とは分離する。成功後の次回計算と通知groupIdには元の予定時刻を使い、予約の全置換・次回への進行ではanchorを解除する。既存行はNULLのまま現在の予定時刻を使う。
 - `v2`予約ではService層が`route_key`必須を保証する。
 - 予約のアプリ所属は`device_id`から一意に決まるため、重複する`app_id`列は持たない。
 
@@ -269,6 +270,7 @@ TDDでは次の公開境界をテストする。
 - v2を無効化してもv1 routeと既存Dispatcher配送は継続する。
 - DB追加列は残し、破壊的down migrationを行わない。
 - VAPID鍵はアプリ単位で切り替え、あとキューの既存鍵を変更しない。
+- 旧バイナリへの復帰はv2受付の無効化とは異なる。旧Dispatcherはアプリ所属を解釈しないため、v2利用開始後はサービス停止とv2端末・未配送予約の退避/無効化を管理者が確認してから行う。通常の停止は新コードとRegistryを維持したままv2受付だけを止める。[運用手順](../../operations/notification-platform-v2.md)を参照。
 
 ## 16. 別アプリへ渡す成果物
 

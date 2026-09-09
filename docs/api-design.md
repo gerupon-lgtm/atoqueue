@@ -10,6 +10,10 @@
 
 ## 2. 共通仕様
 
+以下の既存仕様はあとキュー専用v1として維持する。別アプリ向けv2の全6エンドポイント・request/response・Push payloadの正典は[通知共通基盤v2連携仕様](integration/notification-platform-v2.md)。同じ匿名端末・予約サービスを使い、pathのappIdとOrigin・端末所属を検証する。app不一致は404、Origin不一致は403、通知文・任意URL・未知フィールドは400で拒否する。
+
+本リリースでは`NOTIFICATION_APPLICATIONS_JSON`にアプリ別設定配列を与え、`NOTIFICATION_V2_ENABLED=true`でv2 routeを有効化する。初期値は空配列・false。あとキューv1は既存環境値を使用し、v2の停止中もv1 APIとprotocol別配送を継続する。[配置・停止・鍵設定](operations/notification-platform-v2.md)にAPI先行リリースの手順を示す。
+
 | 項目         | 仕様                                   |
 | ------------ | -------------------------------------- |
 | Base path    | `/v1`                                  |
@@ -67,7 +71,7 @@ MVPでは利用者アカウントを持たないため、端末シークレッ�
 ```json
 {
   "status": "ok",
-  "version": "mvp-1.26.0",
+  "version": "mvp-1.27.0",
   "time": "2026-08-03T09:00:00.000Z"
 }
 ```
