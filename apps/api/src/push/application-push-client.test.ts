@@ -7,8 +7,17 @@ it("F-019 selects independent VAPID credentials on each concurrent send", async 
   const { ApplicationPushClient } =
     await import("./application-push-client.js");
   const legacy = {
-    publicKey: "legacy-public",
-    privateKey: "legacy-private",
+    ...(() => {
+      const ec = createECDH("prime256v1");
+      ec.generateKeys();
+      return {
+        publicKey: ec.getPublicKey().toString("base64url"),
+        privateKey: Buffer.from(
+          ec.getPrivateKey().toString("hex").padStart(64, "0"),
+          "hex",
+        ).toString("base64url"),
+      };
+    })(),
     subject: "mailto:legacy@example.com",
   };
   const config = {
@@ -19,7 +28,10 @@ it("F-019 selects independent VAPID credentials on each concurrent send", async 
       ec.generateKeys();
       return {
         vapidPublicKey: ec.getPublicKey().toString("base64url"),
-        vapidPrivateKey: ec.getPrivateKey().toString("base64url"),
+        vapidPrivateKey: Buffer.from(
+          ec.getPrivateKey().toString("hex").padStart(64, "0"),
+          "hex",
+        ).toString("base64url"),
       };
     })(),
     vapidSubject: "mailto:test@example.com",

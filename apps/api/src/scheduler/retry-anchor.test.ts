@@ -13,7 +13,10 @@ const registry = new ApplicationRegistry([
     appId: "sample",
     origins: ["https://sample.example"],
     vapidPublicKey: ec.getPublicKey().toString("base64url"),
-    vapidPrivateKey: ec.getPrivateKey().toString("base64url"),
+    vapidPrivateKey: Buffer.from(
+      ec.getPrivateKey().toString("hex").padStart(64, "0"),
+      "hex",
+    ).toString("base64url"),
     vapidSubject: "mailto:test@example.com",
     notificationKeys: ["review_due"],
     routeKeys: ["review"],

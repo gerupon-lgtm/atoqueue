@@ -1,6 +1,7 @@
 import webpush from "web-push";
 import type { ApplicationRegistry } from "../applications/registry.js";
 import type { PushClient } from "./push-client.js";
+import { validateVapidDetails } from "./vapid-validation.js";
 /** Pass credentials per send: web-push's process-global VAPID defaults cannot isolate apps. */
 export class ApplicationPushClient implements PushClient {
   constructor(
@@ -10,7 +11,9 @@ export class ApplicationPushClient implements PushClient {
       subject: string;
     },
     private readonly applications: ApplicationRegistry,
-  ) {}
+  ) {
+    validateVapidDetails(legacy);
+  }
   async send(
     input: Parameters<PushClient["send"]>[0],
   ): Promise<{ statusCode: number }> {
