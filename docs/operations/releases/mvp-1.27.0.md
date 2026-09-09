@@ -1,6 +1,6 @@
 # mvp-1.27.0 検証記録
 
-状態: ローカル実装・検証・独立レビュー完了。push・本番配置は承認待ち。
+状態: ローカル検証・独立レビュー完了、APIのみ本番配置済み。v2受付は無効、PWAはmvp-1.26.0のまま。OS上の実通知表示は未確認。
 
 ## 対象
 
@@ -71,6 +71,24 @@ Node.js 24.18.0 / pnpm 10.20.0、同一ホストで検証を直列実行。
 - retry前の予定時刻保持にはnullableな`repeat_anchor_at`列を追加した。端末schemaと通信項目は維持。見直し時は移行と繰り返し試験を再検証する。
 - 既存Vitest workspace形式とPWA build内部の`inlineDynamicImports`の非推奨警告は現行ゲートの失敗ではない。前者はレビュー指摘としてVitest更新時へ持ち越す。誤判断時はテスト設定移行と再検証が必要。
 
-## 公開前に必要な確認
+## 本番配置と公開後検証（2026-09-09）
 
-全品質ゲート通過後、API先行配置と本番DB migrationの実行について利用者へ確認する。既存v1の実機通知と新アプリの実Push配送は本番または専用検証Originでの確認対象であり、ローカルの偽Pushテストでは完了扱いにしない。
+- 利用者の承認を受け、検証済み`ee3992432a2cf5ac83d2a5c850cd17006d0415b8`を`task/atoqueue-mvp`へ通常pushした。
+- [CI run 34353354394](https://github.com/gerupon-lgtm/atoqueue/actions/runs/34353354394)成功。GitHub上でもfrozen install、lint、型検査、全テスト、build、実PostgreSQL検証が成功。
+- 配置前のAPIは`mvp-1.26.0`、旧リリースは`ba7201eb3920739f27342edb9e11528b20f52bdb`。既存DBは5端末・641予約。
+- 21:50:39 JSTにVPS内`/var/backups/atoqueue/atoqueue_notify-pre-v2-20260909T125039Z.dump`へ手動バックアップを作成。125,954 bytes、root所有・0600、`pg_restore --list`成功。内容をGit/Actions/チャットへ取り出していない。root専用ディレクトリへの出力方法をDB復旧手順へ反映。
+- [Deploy run 34353512525](https://github.com/gerupon-lgtm/atoqueue/actions/runs/34353512525)を、上記SHA・`target=api`で実行。品質ゲートとAPI配置が成功し、**21:54:17 JSTにAPI配置完了**。PWA公開ジョブはskipped。
+- 配置時点のGitHub `production` environmentに保護ルールは設定されていなかった。今回の利用者承認に従って既存workflowを使用し、環境保護設定自体は変更していない。
+- 公開HTTPSの`/healthz`は`status: ok`、`version: mvp-1.27.0`。systemdはactive、`current`は上記SHAを指す。
+- migration後、元の5端末・641予約を確認。全既存端末が`atoqueue/protocolVersion=1`で、追加4列とapp用indexが存在する。
+- v2関連環境設定は未追加、service unitはリポジトリのものとSHA-256一致（drop-inなし）。既定の`NOTIFICATION_V2_ENABLED=false` / Registry `[]`を維持し、v2公開鍵endpointは404。
+- v1公開鍵のSHA-256は配置前後で`40B5C80C24EFF003892084F1115EABCF1BA8BB322C309B8FE8370476A9B43E27`のまま。鍵や既存端末資格情報を再生成・置換していない。
+- 公開PWAは配置前後とも`/assets/index-3TumLa0g.js`を参照し、mvp-1.26.0のまま。
+- 専用の匿名テスト端末だけでv1登録→48時間後の予約作成→同一操作再送→49時間後へ更新→購読更新→取消2回→端末無効化を確認。全操作が期待status/strict responseで成功。資格情報は実行中メモリだけで扱い、実機へのPushは送っていない。テスト端末と取消済み予約の匿名履歴が各1行残るが、既存利用者の行は操作していない。
+- 配置後の起動・Dispatcherの固定エラーログは0件。
+- 後始末のDB集計で専用テスト端末は`disabled`が1件、専用テスト端末のpending/claimed予約は0件と確認した。
+
+## 残る確認
+
+- 実機での既存v1通知到着・OS表示・タップ遷移は利用者による確認が必要。API成功や偽Push試験では完了扱いにしない。
+- 新アプリのv2有効化は今回の承認範囲外。appId・Origin・専用VAPID・許可キーを決定してから、別途有効化と実Push検証を行う。
