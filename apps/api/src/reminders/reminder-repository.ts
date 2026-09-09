@@ -10,6 +10,7 @@ export interface ReminderRecord {
   scheduledAt: string;
   notificationType: string;
   routeKey?: string | null;
+  repeatAnchorAt?: string | null;
   repeatCadence: RepeatCadence | null;
   status: ReminderStatus;
   idempotencyKey: string;
@@ -101,12 +102,12 @@ export class InMemoryReminderRepository implements ReminderRepository {
   async rescheduleAfterSend(reminderId: string, claimedAt: string, nextScheduledAt: string, now: string): Promise<void> {
     const job = this.jobs.get(reminderId);
     if (!job || this.devices.get(job.deviceId)?.status !== "active") return;
-    this.updateClaim(reminderId, claimedAt, { status: "pending", scheduledAt: nextScheduledAt, claimedAt: null, sentAt: now, updatedAt: now, lastErrorCode: null });
+    this.updateClaim(reminderId, claimedAt, { status: "pending", scheduledAt: nextScheduledAt, repeatAnchorAt: null, claimedAt: null, sentAt: now, updatedAt: now, lastErrorCode: null });
   }
   async retry(reminderId: string, claimedAt: string, scheduledAt: string, attemptCount: number, now: string, errorCode: string): Promise<void> {
     const job = this.jobs.get(reminderId);
     if (!job || this.devices.get(job.deviceId)?.status !== "active") return;
-    this.updateClaim(reminderId, claimedAt, { status: "pending", scheduledAt, attemptCount, claimedAt: null, updatedAt: now, lastErrorCode: errorCode });
+    this.updateClaim(reminderId, claimedAt, { status: "pending", scheduledAt, repeatAnchorAt: job.repeatAnchorAt ?? job.scheduledAt, attemptCount, claimedAt: null, updatedAt: now, lastErrorCode: errorCode });
   }
   async fail(reminderId: string, claimedAt: string, attemptCount: number, now: string, errorCode: string): Promise<void> { this.updateClaim(reminderId, claimedAt, { status: "failed", attemptCount, claimedAt: null, updatedAt: now, lastErrorCode: errorCode }); }
   async disableDeviceAndFailPending(deviceId: string, reminderId: string, claimedAt: string, now: string, errorCode: string): Promise<void> {
@@ -151,7 +152,7 @@ export class PgReminderRepository implements ReminderRepository {
       const previous = existing.rows[0];
       if (!previous || previous.device_id !== input.deviceId) { await client.query("COMMIT"); return { kind: "missing" }; }
       const result = await client.query<Row>(
-        `UPDATE reminder_jobs SET scheduled_at=$1, notification_type=$2, repeat_cadence=$3, status='pending', idempotency_key=$4, attempt_count=0, claimed_at=NULL, sent_at=NULL, last_error_code=NULL, updated_at=$5, route_key=$8
+        `UPDATE reminder_jobs SET scheduled_at=$1, notification_type=$2, repeat_cadence=$3, status='pending', idempotency_key=$4, attempt_count=0, claimed_at=NULL, sent_at=NULL, last_error_code=NULL, updated_at=$5, route_key=$8, repeat_anchor_at=NULL
          WHERE id=$6 AND device_id=$7 RETURNING *`, [input.scheduledAt, input.notificationType, input.repeatCadence, input.idempotencyKey, input.now, input.id, input.deviceId, input.routeKey ?? null],
       );
       const record = rowToRecord(result.rows[0]!);
@@ -185,8 +186,8 @@ export class PgReminderRepository implements ReminderRepository {
     } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   }
   async markSent(id: string, claimedAt: string, now: string): Promise<void> { await this.pool.query("UPDATE reminder_jobs SET status='sent', sent_at=$1, claimed_at=NULL, last_error_code=NULL, updated_at=$1 WHERE id=$2 AND status='claimed' AND claimed_at=$3", [now, id, claimedAt]); }
-  async rescheduleAfterSend(id: string, claimedAt: string, nextScheduledAt: string, now: string): Promise<void> { await this.withActiveDeviceLock(id, (client) => client.query("UPDATE reminder_jobs SET status='pending', scheduled_at=$1, sent_at=$2, claimed_at=NULL, last_error_code=NULL, updated_at=$2 WHERE id=$3 AND status='claimed' AND claimed_at=$4", [nextScheduledAt, now, id, claimedAt]).then(() => undefined)); }
-  async retry(id: string, claimedAt: string, scheduledAt: string, attemptCount: number, now: string, errorCode: string): Promise<void> { await this.withActiveDeviceLock(id, (client) => client.query("UPDATE reminder_jobs SET status='pending', scheduled_at=$1, attempt_count=$2, claimed_at=NULL, last_error_code=$3, updated_at=$4 WHERE id=$5 AND status='claimed' AND claimed_at=$6", [scheduledAt, attemptCount, errorCode, now, id, claimedAt]).then(() => undefined)); }
+  async rescheduleAfterSend(id: string, claimedAt: string, nextScheduledAt: string, now: string): Promise<void> { await this.withActiveDeviceLock(id, (client) => client.query("UPDATE reminder_jobs SET status='pending', scheduled_at=$1, repeat_anchor_at=NULL, sent_at=$2, claimed_at=NULL, last_error_code=NULL, updated_at=$2 WHERE id=$3 AND status='claimed' AND claimed_at=$4", [nextScheduledAt, now, id, claimedAt]).then(() => undefined)); }
+  async retry(id: string, claimedAt: string, scheduledAt: string, attemptCount: number, now: string, errorCode: string): Promise<void> { await this.withActiveDeviceLock(id, (client) => client.query("UPDATE reminder_jobs SET status='pending', repeat_anchor_at=COALESCE(repeat_anchor_at, scheduled_at), scheduled_at=$1, attempt_count=$2, claimed_at=NULL, last_error_code=$3, updated_at=$4 WHERE id=$5 AND status='claimed' AND claimed_at=$6", [scheduledAt, attemptCount, errorCode, now, id, claimedAt]).then(() => undefined)); }
   async fail(id: string, claimedAt: string, attemptCount: number, now: string, errorCode: string): Promise<void> { await this.pool.query("UPDATE reminder_jobs SET status='failed', attempt_count=$1, claimed_at=NULL, last_error_code=$2, updated_at=$3 WHERE id=$4 AND status='claimed' AND claimed_at=$5", [attemptCount, errorCode, now, id, claimedAt]); }
   async disableDeviceAndFailPending(deviceId: string, reminderId: string, claimedAt: string, now: string, errorCode: string): Promise<void> { const client = await this.pool.connect(); try { await client.query("BEGIN"); const device = await client.query<{ status: "active" | "disabled" }>("SELECT status FROM device_subscriptions WHERE device_id=$1 FOR UPDATE", [deviceId]); if (device.rows[0]?.status !== "active") { await client.query("COMMIT"); return; } const claimed = await client.query("UPDATE reminder_jobs SET status='failed', claimed_at=NULL, last_error_code=$1, updated_at=$2 WHERE id=$3 AND device_id=$4 AND status='claimed' AND claimed_at=$5", [errorCode, now, reminderId, deviceId, claimedAt]); if (claimed.rowCount) { await client.query("UPDATE device_subscriptions SET status='disabled', last_error_code=$1, updated_at=$2 WHERE device_id=$3", [errorCode, now, deviceId]); await client.query("UPDATE reminder_jobs SET status='failed', claimed_at=NULL, last_error_code=$1, updated_at=$2 WHERE device_id=$3 AND status IN ('pending','claimed')", [errorCode, now, deviceId]); } await client.query("COMMIT"); } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); } }
   async recoverStaleClaims(before: string, now: string): Promise<void> { const client = await this.pool.connect(); try { await client.query("BEGIN"); await client.query("SELECT device.device_id FROM device_subscriptions device WHERE device.status='active' AND EXISTS (SELECT 1 FROM reminder_jobs job WHERE job.device_id=device.device_id AND job.status='claimed' AND job.claimed_at < $1) FOR UPDATE", [before]); await client.query("UPDATE reminder_jobs job SET status='pending', claimed_at=NULL, updated_at=$1 FROM device_subscriptions device WHERE job.device_id=device.device_id AND device.status='active' AND job.status='claimed' AND job.claimed_at < $2", [now, before]); await client.query("COMMIT"); } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); } }
@@ -221,7 +222,7 @@ export class PgReminderRepository implements ReminderRepository {
 
 type Row = { id: string; device_id: string; scheduled_at: string; notification_type: ReminderRecord["notificationType"]; repeat_cadence: RepeatCadence | null; status: ReminderStatus; idempotency_key: string; attempt_count: number; claimed_at: string | null; sent_at: string | null; last_error_code: string | null; created_at: string; updated_at: string };
 type DeviceRow = { endpoint: string; p256dh: string; auth: string; app_id?: string; protocol_version?: 1 | 2 };
-function rowToRecord(row: Row & { route_key?: string | null }): ReminderRecord { return { ...(row.route_key ? { routeKey: row.route_key } : {}), id: row.id, deviceId: row.device_id, scheduledAt: row.scheduled_at, notificationType: row.notification_type, repeatCadence: row.repeat_cadence, status: row.status, idempotencyKey: row.idempotency_key, attemptCount: row.attempt_count, claimedAt: row.claimed_at, sentAt: row.sent_at, lastErrorCode: row.last_error_code, createdAt: row.created_at, updatedAt: row.updated_at }; }
+function rowToRecord(row: Row & { route_key?: string | null; repeat_anchor_at?: string | null }): ReminderRecord { return { ...(row.repeat_anchor_at !== undefined ? { repeatAnchorAt: row.repeat_anchor_at } : {}), ...(row.route_key ? { routeKey: row.route_key } : {}), id: row.id, deviceId: row.device_id, scheduledAt: row.scheduled_at, notificationType: row.notification_type, repeatCadence: row.repeat_cadence, status: row.status, idempotencyKey: row.idempotency_key, attemptCount: row.attempt_count, claimedAt: row.claimed_at, sentAt: row.sent_at, lastErrorCode: row.last_error_code, createdAt: row.created_at, updatedAt: row.updated_at }; }
 function normalizeRecord(record: ReminderRecord): ReminderRecord { return { ...record, repeatCadence: record.repeatCadence ?? null }; }
 function nowIso(): string { return new Date().toISOString(); }
 function matchesRequest(row: Row & { route_key?: string | null }, input: Parameters<ReminderRepository["upsert"]>[0]): boolean { return (row.route_key ?? null) === (input.routeKey ?? null) && row.id === input.id && row.scheduled_at === input.scheduledAt && row.notification_type === input.notificationType && row.repeat_cadence === input.repeatCadence; }

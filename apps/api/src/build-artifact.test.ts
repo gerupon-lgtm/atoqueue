@@ -35,6 +35,7 @@ describe("production API build", () => {
     expect(executed[1]).toContain("repeat_cadence");
     expect(executed[2]).toContain("daily");
     expect(executed[3]).toContain("protocol_version");
+    expect(executed[3]).toContain("repeat_anchor_at");
   }, 45_000);
 
   it("can import the compiled production startup without resolving workspace TypeScript source", () => {

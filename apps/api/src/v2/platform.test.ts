@@ -1,15 +1,17 @@
-import { randomUUID } from "node:crypto";
+import { createECDH, randomUUID } from "node:crypto";
 import { describe, it, expect } from "vitest";
 import { buildApp } from "../server.js";
 import { InMemoryDeviceRepository } from "../devices/device-repository.js";
 import { InMemoryReminderRepository } from "../reminders/reminder-repository.js";
 import { ApplicationRegistry } from "../applications/registry.js";
 import { ReminderDispatcher } from "../scheduler/reminder-dispatcher.js";
+const ec = createECDH("prime256v1");
+ec.generateKeys();
 const config = (appId: string) => ({
   appId,
   origins: [`https://${appId}.example`],
-  vapidPublicKey: "B".repeat(87),
-  vapidPrivateKey: "A".repeat(43),
+  vapidPublicKey: ec.getPublicKey().toString("base64url"),
+  vapidPrivateKey: ec.getPrivateKey().toString("base64url"),
   vapidSubject: "mailto:test@example.com",
   notificationKeys: ["review_due"],
   routeKeys: ["review", "home"],

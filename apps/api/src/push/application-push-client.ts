@@ -47,7 +47,7 @@ export class ApplicationPushClient implements PushClient {
         typeof error.statusCode === "number"
       )
         return { statusCode: error.statusCode };
-      throw new Error("Push delivery failed.");
+      throw new Error("Push delivery failed.", { cause: error });
     }
   }
 }

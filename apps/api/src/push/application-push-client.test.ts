@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import { createECDH } from "node:crypto";
 import { ApplicationRegistry } from "../applications/registry.js";
 const sendNotification = vi.fn().mockResolvedValue({ statusCode: 201 });
 vi.mock("web-push", () => ({ default: { sendNotification } }));
@@ -13,8 +14,14 @@ it("F-019 selects independent VAPID credentials on each concurrent send", async 
   const config = {
     appId: "sample",
     origins: ["https://sample.example"],
-    vapidPublicKey: "B".repeat(87),
-    vapidPrivateKey: "A".repeat(43),
+    ...(() => {
+      const ec = createECDH("prime256v1");
+      ec.generateKeys();
+      return {
+        vapidPublicKey: ec.getPublicKey().toString("base64url"),
+        vapidPrivateKey: ec.getPrivateKey().toString("base64url"),
+      };
+    })(),
     vapidSubject: "mailto:test@example.com",
     notificationKeys: ["review_due"],
     routeKeys: ["review"],
