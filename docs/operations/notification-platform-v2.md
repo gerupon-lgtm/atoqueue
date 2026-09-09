@@ -7,6 +7,8 @@
 
 既存の`DATABASE_URL`、`ALLOWED_ORIGIN`、`VAPID_*`はあとキューv1専用として維持する。
 
+v1とv2のVAPID鍵は起動時に検証する。不正な鍵対を「起動成功・配送時だけ失敗」として扱わず、秘密値をログへ出さずに設定修正を求める。既存の有効な鍵は再生成・置換しない。
+
 | 変数 | 初期値 | 用途 |
 | --- | --- | --- |
 | `NOTIFICATION_V2_ENABLED` | `false` | `true`のときv2 routeを公開。`true`/`false`以外は起動時エラー |
