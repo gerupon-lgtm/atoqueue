@@ -7,6 +7,7 @@ const migrations = [
   "001_initial.sql",
   "002_recurring_reminders.sql",
   "003_daily_reminders.sql",
+  "004_notification_platform.sql",
 ];
 const destinationDirectory = resolve(packageRoot, "dist/db/migrations");
 

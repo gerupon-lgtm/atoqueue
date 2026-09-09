@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import type { PushClient } from "../push/push-client.js";
 import type { ReminderRepository } from "../reminders/reminder-repository.js";
+import type { ApplicationRegistry } from "../applications/registry.js";
+import { NotificationPushPayloadV2Schema } from "@atoqueue/contracts";
 
 const RETRY_MINUTES = [5, 15, 60] as const;
 
@@ -11,6 +13,7 @@ export class ReminderDispatcher {
     private readonly push: PushClient,
     private readonly clock = () => new Date(),
     private readonly deliveryLeadSeconds = 0,
+    private readonly applications?: ApplicationRegistry,
   ) {}
 
   async recoverStaleClaims(): Promise<void> {
@@ -30,10 +33,16 @@ export class ReminderDispatcher {
     const claimedAt = job.claimedAt;
     if (!claimedAt) return;
     try {
+      const appId = job.appId ?? "atoqueue";
+      const protocol = job.protocolVersion ?? 1;
+      const application = this.applications?.get(appId);
+      if (protocol === 2 && (!application || !job.routeKey || !application.notificationKeys.includes(job.notificationType) || !application.routeKeys.includes(job.routeKey))) throw new Error("Invalid application delivery configuration.");
+      if (protocol !== 1 && protocol !== 2 || protocol === 1 && appId !== "atoqueue") throw new Error("Invalid delivery protocol.");
       const path = job.notificationType === "inbox_review" ? "/inbox" : "/today";
       const result = await this.push.send({
+        ...(protocol === 2 ? { appId } : {}),
         subscription: job.subscription,
-        payload: {
+        payload: protocol === 2 ? NotificationPushPayloadV2Schema.parse({ version: 2, appId, type: "reminder_due", reminderId: job.id, notificationKey: job.notificationType, routeKey: job.routeKey, groupId: notificationGroupId(`${appId}\0${job.notificationType}`, job.scheduledAt) }) : {
           type: "review_due",
           reminderId: job.id,
           url: `${path}?reminder=${job.id}`,

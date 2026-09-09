@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 
 import { loadConfig } from "./config.js";
 import { PgReminderRepository } from "./reminders/reminder-repository.js";
-import { WebPushClient } from "./push/web-push-client.js";
+import { ApplicationPushClient } from "./push/application-push-client.js";
 import { ReminderDispatcher } from "./scheduler/reminder-dispatcher.js";
 import { buildProductionApp } from "./server.js";
 
@@ -72,13 +72,14 @@ export async function start(
   });
   const dispatcher = new ReminderDispatcher(
     new PgReminderRepository(pool),
-    new WebPushClient({
+    new ApplicationPushClient({
       publicKey: config.vapidPublicKey,
       privateKey: config.vapidPrivateKey,
       subject: config.vapidSubject,
-    }),
+    }, config.applications),
     () => new Date(),
     config.deadlineDeliveryLeadSeconds,
+    config.applications,
   );
   return startServer({
     app,

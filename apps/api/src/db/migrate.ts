@@ -6,6 +6,7 @@ export async function applyInitialMigration(pool: Pool): Promise<void> {
   await pool.query(sql);
   await applyRecurringRemindersMigration(pool);
   await applyDailyRemindersMigration(pool);
+  await pool.query(await readFile(new URL("./migrations/004_notification_platform.sql", import.meta.url), "utf8"));
 }
 
 export async function applyRecurringRemindersMigration(pool: Pool): Promise<void> {

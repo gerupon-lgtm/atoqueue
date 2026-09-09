@@ -30,10 +30,11 @@ describe("production API build", () => {
     const { applyInitialMigration } = await import(compiledMigrationModule);
     const executed: string[] = [];
     await applyInitialMigration({ query: async (sql: string) => { executed.push(sql); } } as never);
-    expect(executed).toHaveLength(3);
+    expect(executed).toHaveLength(4);
     expect(executed[0]).toContain("CREATE TABLE IF NOT EXISTS device_subscriptions");
     expect(executed[1]).toContain("repeat_cadence");
     expect(executed[2]).toContain("daily");
+    expect(executed[3]).toContain("protocol_version");
   }, 45_000);
 
   it("can import the compiled production startup without resolving workspace TypeScript source", () => {

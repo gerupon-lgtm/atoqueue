@@ -12,13 +12,15 @@ export class ReminderService {
     private readonly reminders: ReminderRepository,
     private readonly now = () => new Date().toISOString(),
     private readonly rateLimiter?: DeviceRateLimiter,
+    private readonly appId = "atoqueue",
+    private readonly protocolVersion: 1 | 2 = 1,
   ) {}
 
-  async upsert(input: { deviceId: string; bearer: string | undefined; reminderId: string; scheduledAt: string; notificationType: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review"; repeatCadence?: RepeatCadence; idempotencyKey: string }) {
+  async upsert(input: { deviceId: string; bearer: string | undefined; reminderId: string; scheduledAt: string; notificationType: string; routeKey?: string; repeatCadence?: RepeatCadence; idempotencyKey: string }) {
     await this.authenticate(input.deviceId, input.bearer);
     this.rateLimiter?.consumeDevice(input.deviceId);
     const now = this.now();
-    const result = await this.reminders.upsert({ id: input.reminderId, deviceId: input.deviceId, scheduledAt: input.scheduledAt, notificationType: input.notificationType, repeatCadence: input.repeatCadence ?? null, idempotencyKey: input.idempotencyKey, now });
+    const result = await this.reminders.upsert({ id: input.reminderId, deviceId: input.deviceId, scheduledAt: input.scheduledAt, notificationType: input.notificationType, ...(input.routeKey ? { routeKey: input.routeKey } : {}), repeatCadence: input.repeatCadence ?? null, idempotencyKey: input.idempotencyKey, now });
     if (!("record" in result)) {
       if (result.kind === "invalid_schedule") throw new ApiError(400, "INVALID_SCHEDULE", "Scheduled time is too far in the past.");
       if (result.kind === "conflict") throw new ApiError(409, "IDEMPOTENCY_CONFLICT", "Idempotency key conflicts with a different request.");
@@ -37,7 +39,7 @@ export class ReminderService {
 
   private async authenticate(deviceId: string, bearer: string | undefined): Promise<void> {
     const device = await this.devices.findByDeviceId(deviceId);
-    if (!device) throw new ApiError(404, "DEVICE_NOT_FOUND", "Device not found.");
+    if (!device || (device.appId ?? "atoqueue") !== this.appId || (device.protocolVersion ?? 1) !== this.protocolVersion) throw new ApiError(404, "DEVICE_NOT_FOUND", "Device not found.");
     if (!bearer || !(await argon2.verify(device.secretHash, bearer)) || device.status !== "active") throw new ApiError(401, "DEVICE_UNAUTHORIZED", "Device authentication failed.");
   }
 }
