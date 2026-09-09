@@ -127,6 +127,15 @@ importers:
 
   packages/domain: {}
 
+  packages/notification-client:
+    dependencies:
+      '@atoqueue/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
 packages:
 
   '@adobe/css-tools@4.5.0':
