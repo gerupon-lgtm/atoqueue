@@ -3,7 +3,9 @@ import { makeTempalistFixture } from "../../../../packages/domain/src/tempalist-
 import type { TempalistRepository } from "./tempalist-repository";
 import { createTempalistTransferService } from "./tempalist-transfer-service";
 
-function setup() {
+function setup(
+  environment?: () => "supported" | "ios-browser" | "ios-standalone",
+) {
   const fixture = makeTempalistFixture();
   let stored = structuredClone(fixture.snapshot);
   const repository: TempalistRepository = {
@@ -20,6 +22,7 @@ function setup() {
     .mockReturnValueOnce(fixture.requestId)
     .mockReturnValue("22222222-2222-4222-8222-222222222222");
   const service = createTempalistTransferService({
+    environment,
     repository,
     launcher: { open: launch },
     now: () => fixture.now,
@@ -36,6 +39,20 @@ function setup() {
 }
 
 describe("Tempalist transfer orchestration (F-020)", () => {
+  it("blocks iOS standalone prepare and stored retries before any writes or navigation", async () => {
+    let environment: "ios-browser" | "ios-standalone" = "ios-browser";
+    const s = setup(() => environment);
+    const request = await s.service.prepare(s.draft);
+    const before = structuredClone(s.stored());
+    environment = "ios-standalone";
+    await expect(s.service.prepare(s.draft)).rejects.toThrow(/通常のブラウザ/);
+    await expect(s.service.open(request)).rejects.toThrow(/通常のブラウザ/);
+    expect(s.stored()).toEqual(before);
+    expect(s.launch).not.toHaveBeenCalled();
+    environment = "ios-browser";
+    await s.service.open(request);
+    expect(s.launch).toHaveBeenCalledWith(request.url);
+  });
   it("shares only an identical in-flight draft, then issues a fresh ID", async () => {
     const s = setup();
     const first = s.service.prepare(s.draft);

@@ -6,6 +6,10 @@ import {
   type TempalistDraft,
 } from "../../../../packages/domain/src";
 import type { TempalistRepository } from "./tempalist-repository";
+import {
+  iosTempalistBlockedMessage,
+  type TempalistEnvironment,
+} from "./tempalist-environment";
 
 export interface TempalistLaunchPort {
   open(url: string): void;
@@ -22,7 +26,12 @@ export function createTempalistTransferService(input: {
   launcher: TempalistLaunchPort;
   now: () => string;
   requestId: () => string;
+  environment?: (() => TempalistEnvironment) | undefined;
 }): TempalistTransferService {
+  function assertAvailable() {
+    if (input.environment?.() === "ios-standalone")
+      throw new Error(iosTempalistBlockedMessage);
+  }
   let pending: {
     key: string;
     promise: Promise<PreparedTempalistRequest>;
@@ -30,6 +39,11 @@ export function createTempalistTransferService(input: {
 
   return {
     prepare(draft) {
+      try {
+        assertAvailable();
+      } catch (error) {
+        return Promise.reject(error);
+      }
       const selection: TempalistDraft = {
         title: draft.title,
         tasks: draft.tasks.map(({ id, title, revision }) => ({
@@ -51,6 +65,7 @@ export function createTempalistTransferService(input: {
       // Defer work until the shared Promise has been installed, including ID creation.
       const promise = Promise.resolve()
         .then(async () => {
+          assertAvailable();
           const requestId = input.requestId();
           const state = await input.repository.updateTempalist((latest) => ({
             ...latest.tempalist,
@@ -76,6 +91,7 @@ export function createTempalistTransferService(input: {
         .lastRequest;
     },
     async open(request) {
+      assertAvailable();
       // Validation detaches the entire request synchronously before any await.
       const fixed = validateTempalistState({
         lastRequest: request,

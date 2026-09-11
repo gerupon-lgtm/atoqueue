@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { measureTempalistUrl } from "../../../../../packages/domain/src/tempalist-link";
 import type {
   PreparedTempalistRequest,
@@ -6,18 +6,28 @@ import type {
 } from "../../../../../packages/domain/src";
 import type { TempalistTransferService } from "../../application/tempalist-transfer-service";
 import "./TempalistTransferPanel.css";
+import {
+  iosTempalistBrowserMessage,
+  type TempalistEnvironment,
+} from "../../application/tempalist-environment";
 
 export function TempalistTransferPanel({
   draft,
   onChange,
   onCancel,
   service,
+  environment = "supported",
 }: {
   draft: TempalistDraft;
   onChange(draft: TempalistDraft): void;
   onCancel(): void;
   service: TempalistTransferService;
+  environment?: TempalistEnvironment;
 }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    heading.current?.focus();
+  }, []);
   const [prepared, setPrepared] = useState<PreparedTempalistRequest | null>(
     null,
   );
@@ -96,14 +106,14 @@ export function TempalistTransferPanel({
       aria-labelledby="tempalist-title"
       aria-busy={busy}
     >
-      <h1 id="tempalist-title">チェックリストの確認</h1>
+      <h1 ref={heading} tabIndex={-1} id="tempalist-title">
+        チェックリストの確認
+      </h1>
       <p>
         URLには選択したタスク名が含まれます。URLの共有やブラウザ履歴から内容が見える場合があります。
       </p>
       <p>元のタスクと通知はあとキューに残ります。</p>
-      <p>
-        Androidを優先して確認しています。iOSのアプリ起動・保存先は未検証です。
-      </p>
+      {environment === "ios-browser" && <p>{iosTempalistBrowserMessage}</p>}
       <fieldset disabled={busy}>
         {prepared ? (
           <>

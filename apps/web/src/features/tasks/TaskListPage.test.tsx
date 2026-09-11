@@ -86,6 +86,79 @@ function repository(): AppRepository {
 describe("TaskListPage", () => {
   afterEach(cleanup);
 
+  it("F-020 disables new handoffs and stored retries in iOS standalone without hiding tasks", async () => {
+    const fixture = makeTempalistFixture();
+    const service = {
+      prepare: vi.fn(),
+      open: vi.fn(),
+      lastRequest: async () => prepareTempalistRequest(fixture),
+    };
+    render(
+      <MemoryRouter>
+        <TaskListPage
+          repository={{ ...repository(), load: async () => fixture.snapshot }}
+          tempalist={service}
+          environment={() => "ios-standalone"}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("button", { name: "チェックリストにする" }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "直前の連携を確認" }),
+    ).toBeNull();
+    expect(screen.getByText(/通常のブラウザ/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "牛乳を買う" })).toBeTruthy();
+    expect(service.prepare).not.toHaveBeenCalled();
+    expect(service.open).not.toHaveBeenCalled();
+  });
+
+  it("F-020 collapses selection filters while retaining search, chosen tasks and the grouped actions", async () => {
+    render(
+      <MemoryRouter>
+        <TaskListPage
+          repository={repository()}
+          tempalist={{
+            prepare: vi.fn(),
+            open: vi.fn(),
+            lastRequest: async () => null,
+          }}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "チェックリストにする" }),
+    );
+    expect(screen.queryByRole("combobox", { name: "カテゴリ" })).toBeNull();
+    const search = screen.getByRole("textbox", { name: "検索" });
+    fireEvent.click(screen.getByRole("checkbox", { name: "期限切れを選択" }));
+    fireEvent.click(screen.getByRole("button", { name: "絞り込み" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "カテゴリ" }), {
+      target: { value: "shopping" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "絞り込み" }));
+    expect(search).toBeVisible();
+    expect(
+      screen.getByRole("checkbox", { name: "期限切れを選択" }),
+    ).toBeChecked();
+    const actions = screen.getByRole("region", {
+      name: "チェックリスト選択の操作",
+    });
+    expect(
+      within(actions).getByRole("button", { name: "内容を確認" }),
+    ).toBeEnabled();
+    fireEvent.click(
+      within(actions).getByRole("button", { name: "選択をやめる" }),
+    );
+    expect(
+      screen.queryByRole("region", { name: "チェックリスト選択の操作" }),
+    ).toBeNull();
+    expect(screen.getByRole("combobox", { name: "カテゴリ" })).toHaveValue(
+      "shopping",
+    );
+  });
+
   it("F-020 clears last-request read errors after recovery and hides stale retry data after failure", async () => {
     const fixture = makeTempalistFixture();
     const request = prepareTempalistRequest(fixture);

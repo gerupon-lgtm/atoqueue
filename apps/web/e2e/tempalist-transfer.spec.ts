@@ -1,9 +1,205 @@
 import { expect, test, type Page } from "@playwright/test";
 import { makeTempalistFixture } from "../../../packages/domain/src/tempalist-test-fixture";
-import type { AppSnapshot } from "../../../packages/domain/src";
+import {
+  markTempalistOpened,
+  prepareTempalistRequest,
+  type AppSnapshot,
+} from "../../../packages/domain/src";
 
 const storageKey = "atoqueue:data:v1";
 const receiver = "https://tempalist.sikumilab.com/**";
+
+test("F-020 compact selection keeps aligned badges and reachable bottom actions at mobile widths", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await seed(page);
+  const fixture = makeTempalistFixture();
+  const handoff = markTempalistOpened({
+    state: fixture.snapshot.tempalist,
+    request: prepareTempalistRequest(fixture),
+    existingTaskIds: fixture.snapshot.tasks.map((task) => task.id),
+    now: fixture.now,
+  });
+  await page.evaluate(
+    ({ key, handoff }) => {
+      const snapshot = JSON.parse(localStorage.getItem(key)!);
+      snapshot.tempalist = handoff;
+      for (let index = 2; index < 8; index++) {
+        const task = {
+          ...snapshot.tasks[0],
+          id: `task-${index}`,
+          sourceCaptureId: `capture-${index}`,
+          title: `買い物の確認 ${index}`,
+        };
+        snapshot.tasks.push(task);
+        snapshot.captures.push({
+          ...snapshot.captures[0],
+          id: task.sourceCaptureId,
+          linkedTaskId: task.id,
+        });
+      }
+      localStorage.setItem(key, JSON.stringify(snapshot));
+    },
+    { key: storageKey, handoff },
+  );
+  await page.reload();
+  await page
+    .getByRole("button", { name: "チェックリストにする", exact: true })
+    .click();
+  await page.getByRole("checkbox", { name: "牛乳を買うを選択" }).check();
+  await page.getByRole("checkbox", { name: "電池を買うを選択" }).check();
+  for (const width of [320, 390, 414]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.evaluate(() => scrollTo(0, 0));
+    const checkbox = page.getByRole("checkbox", { name: "牛乳を買うを選択" });
+    const checkBox = (await checkbox.boundingBox())!;
+    expect(checkBox.width).toBeLessThanOrEqual(24);
+    expect(checkBox.height).toBeLessThanOrEqual(24);
+    const label = checkbox.locator("..");
+    expect((await label.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const text = (await label
+      .getByText("選択", { exact: true })
+      .boundingBox())!;
+    expect(
+      Math.abs(text.y + text.height / 2 - checkBox.y - checkBox.height / 2),
+    ).toBeLessThan(2);
+    const badges = await page
+      .getByLabel("テンパリストへ開く操作済み", { exact: true })
+      .all();
+    const boxes = await Promise.all(badges.map((badge) => badge.boundingBox()));
+    expect(
+      Math.abs(boxes[0]!.x + boxes[0]!.width - boxes[1]!.x - boxes[1]!.width),
+    ).toBeLessThan(2);
+    expect(
+      Math.abs(
+        boxes[0]!.y + boxes[0]!.height / 2 - checkBox.y - checkBox.height / 2,
+      ),
+    ).toBeLessThan(2);
+    const card = page
+      .getByRole("link", { name: "牛乳を買う", exact: true })
+      .locator("xpath=ancestor::li[1]");
+    expect((await card.boundingBox())!.height).toBeLessThanOrEqual(190);
+    const bar = page.getByRole("region", { name: "チェックリスト選択の操作" });
+    const before = (await bar.boundingBox())!;
+    await expectBottomControlsVisible(page, ["選択をやめる", "内容を確認"]);
+    expect(await page.evaluate(() => scrollY)).toBeGreaterThan(100);
+    expect((await bar.boundingBox())!.y).toBeCloseTo(before.y, 0);
+    const lastCard = (await page
+      .getByRole("link", { name: "買い物の確認 7", exact: true })
+      .locator("xpath=ancestor::li[1]")
+      .boundingBox())!;
+    expect(lastCard.y + lastCard.height).toBeLessThanOrEqual(before.y);
+    const cancel = (await page
+      .getByRole("button", { name: "選択をやめる" })
+      .boundingBox())!;
+    const confirm = (await page
+      .getByRole("button", { name: "内容を確認", exact: true })
+      .boundingBox())!;
+    expect(cancel.y).toBeCloseTo(confirm.y, 0);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.screenshot({
+      path: testInfo.outputPath(`selection-${width}.png`),
+      fullPage: false,
+    });
+  }
+  await page.setViewportSize({ width: 320, height: 450 });
+  await expectBottomControlsVisible(page, ["選択をやめる", "内容を確認"]);
+  await page.getByRole("checkbox", { name: "牛乳を買うを選択" }).check();
+  await page.getByRole("button", { name: "内容を確認", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "チェックリストの確認" }),
+  ).toBeFocused();
+});
+
+for (const scenario of [
+  {
+    name: "iPhone home screen",
+    agent: "iPhone",
+    platform: "iPhone",
+    standalone: true,
+    fullscreen: false,
+    blocked: true,
+  },
+  {
+    name: "iPad desktop identity",
+    agent: "Macintosh",
+    platform: "MacIntel",
+    standalone: true,
+    fullscreen: false,
+    blocked: true,
+  },
+  {
+    name: "iPhone fullscreen",
+    agent: "iPhone",
+    platform: "iPhone",
+    standalone: false,
+    fullscreen: true,
+    blocked: true,
+  },
+  {
+    name: "iPhone browser",
+    agent: "iPhone",
+    platform: "iPhone",
+    standalone: false,
+    fullscreen: false,
+    blocked: false,
+  },
+  {
+    name: "Android home screen",
+    agent: "Android",
+    platform: "Linux arm",
+    standalone: true,
+    fullscreen: false,
+    blocked: false,
+  },
+]) {
+  test(`F-020 sender availability: ${scenario.name}`, async ({ page }) => {
+    await page.addInitScript((scenario) => {
+      Object.defineProperty(navigator, "userAgent", { value: scenario.agent });
+      Object.defineProperty(navigator, "platform", {
+        value: scenario.platform,
+      });
+      Object.defineProperty(navigator, "maxTouchPoints", { value: 5 });
+      Object.defineProperty(navigator, "standalone", {
+        value: scenario.standalone,
+      });
+      const original = window.matchMedia.bind(window);
+      window.matchMedia = (query) =>
+        query === "(display-mode: fullscreen)"
+          ? { ...original(query), matches: scenario.fullscreen }
+          : original(query);
+    }, scenario);
+    const state = await seed(page);
+    const start = page.getByRole("button", {
+      name: "チェックリストにする",
+      exact: true,
+    });
+    if (scenario.blocked) {
+      await expect(start).toBeDisabled();
+      await expect(
+        page.getByText(/ホーム画面版では連携を利用できません/),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "直前の連携を確認" }),
+      ).toHaveCount(0);
+      expectUnchanged(await readSnapshot(page), state.snapshot);
+    } else {
+      await review(page);
+      await page
+        .getByRole("button", { name: "内容を確定", exact: true })
+        .click();
+      await open(page);
+      expect(state.externalOpens()).toBe(1);
+    }
+    expect(state.notificationRequests()).toBe(0);
+  });
+}
 
 async function seed(page: Page) {
   const { snapshot, now } = makeTempalistFixture();
@@ -165,7 +361,7 @@ test("F-020 persists only handoff state, reopens the stored URL after return/rel
   await page.goBack();
   await page.reload();
   await expect(
-    page.getByText("テンパリスト連携済", { exact: true }),
+    page.getByLabel("テンパリストへ開く操作済み", { exact: true }),
   ).toHaveCount(2);
   await page.screenshot({
     path: testInfo.outputPath("tempalist-linked-320.png"),

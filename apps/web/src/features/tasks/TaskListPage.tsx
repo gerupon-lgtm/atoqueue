@@ -16,6 +16,12 @@ import type { TempalistTransferService } from "../../application/tempalist-trans
 import { TempalistTransferPanel } from "../tempalist/TempalistTransferPanel";
 import { TempalistLinkedBadge } from "../../presentation/TempalistLinkedBadge";
 import {
+  iosTempalistBlockedMessage,
+  iosTempalistBrowserMessage,
+  type TempalistEnvironment,
+} from "../../application/tempalist-environment";
+import "./TaskListPage.css";
+import {
   taskCategoryDisplayLabel,
   taskCategoryOptions,
 } from "./task-category-options";
@@ -32,6 +38,7 @@ export interface TaskListPageProps {
   repository: AppRepository;
   now?: () => string;
   tempalist?: TempalistTransferService;
+  environment?: () => TempalistEnvironment;
 }
 
 export function TaskListPage(props: TaskListPageProps) {
@@ -52,12 +59,16 @@ function TaskListView({
   now = currentTime,
   overdueOnly,
   tempalist,
+  environment,
 }: TaskListPageProps & { overdueOnly: boolean }) {
+  const launchEnvironment = environment?.() ?? "supported";
+  const blocked = launchEnvironment === "ios-standalone";
   const { snapshot, timestamp, error } = useTaskSnapshot(repository, now);
   const [tab, setTab] = useState<TaskTab>("active");
   const [due, setDue] = useState<DueFilter | "">(overdueOnly ? "overdue" : "");
   const [category, setCategory] = useState<Task["category"] | "">("");
   const [search, setSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [mode, setMode] = useState<"list" | "select" | "review" | "retry">(
     "list",
   );
@@ -72,7 +83,7 @@ function TaskListView({
   const [retryMessage, setRetryMessage] = useState("");
   const [lastRequestError, setLastRequestError] = useState("");
   useEffect(() => {
-    if (mode === "review" || mode === "retry") return;
+    if (blocked || mode === "review" || mode === "retry") return;
     let active = true;
     if (tempalist)
       void tempalist
@@ -94,7 +105,7 @@ function TaskListView({
     return () => {
       active = false;
     };
-  }, [tempalist, mode]);
+  }, [tempalist, mode, blocked]);
 
   const display = useMemo(() => {
     if (!snapshot || !timestamp) return;
@@ -132,12 +143,14 @@ function TaskListView({
     );
   if (!snapshot || !display) return <p>読み込み中です…</p>;
   const categoryOptions = taskCategoryOptions(snapshot);
-  if (tempalist && mode === "review")
+  const selecting = mode === "select" && !blocked;
+  if (tempalist && !blocked && mode === "review")
     return (
       <TempalistTransferPanel
         draft={draft}
         onChange={setDraft}
         service={tempalist}
+        environment={launchEnvironment}
         onCancel={() => {
           // Explicit return refreshes the selection after a changed/deleted-task warning.
           setDraft((previous) => ({
@@ -155,7 +168,7 @@ function TaskListView({
         }}
       />
     );
-  if (tempalist && mode === "retry" && lastRequest)
+  if (tempalist && !blocked && mode === "retry" && lastRequest)
     return (
       <section className="tempalist-transfer" aria-busy={retryBusy}>
         <h1>直前の連携</h1>
@@ -168,9 +181,10 @@ function TaskListView({
         <p>
           保存済みの確定内容をもう一度開きます。元のタスクと通知はあとキューに残ります。
         </p>
-        <p>
-          URLには選択したタスク名が含まれます。Android優先・iOSの起動先と保存先は未検証です。
-        </p>
+        <p>URLには選択したタスク名が含まれます。</p>
+        {launchEnvironment === "ios-browser" && (
+          <p>{iosTempalistBrowserMessage}</p>
+        )}
         <button
           type="button"
           disabled={retryBusy}
@@ -211,50 +225,56 @@ function TaskListView({
       </section>
     );
   return (
-    <section aria-labelledby="task-list-title" className="task-list">
+    <section
+      aria-labelledby="task-list-title"
+      className="task-list"
+      data-selecting={selecting}
+    >
       <h1 id="task-list-title">タスク</h1>
-      {tempalist && (
+      {tempalist && !selecting && (
         <div className="tempalist-selection">
-          {mode === "list" ? (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setDraft({ title: "あとキューのチェックリスト", tasks: [] });
-                  setMode("select");
-                }}
-              >
-                チェックリストにする
-              </button>
-              {lastRequest && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRetryMessage("");
-                    setMode("retry");
-                  }}
-                >
-                  直前の連携を確認
-                </button>
-              )}
-              {lastRequestError && <p role="status">{lastRequestError}</p>}
-            </>
-          ) : (
-            <>
-              <p aria-live="polite">
-                {draft.tasks.length}件選択中（表示外も含む）
-              </p>
-              <button
-                type="button"
-                disabled={draft.tasks.length === 0}
-                onClick={() => setMode("review")}
-              >
-                内容を確認
-              </button>
-              <button type="button" onClick={() => setMode("list")}>
-                選択をやめる
-              </button>
-            </>
+          <button
+            type="button"
+            disabled={blocked}
+            aria-describedby={
+              blocked ? "tempalist-environment-note" : undefined
+            }
+            onClick={() => {
+              setDraft({ title: "あとキューのチェックリスト", tasks: [] });
+              setFiltersOpen(false);
+              setMode("select");
+            }}
+          >
+            チェックリストにする
+          </button>
+          {!blocked && lastRequest && (
+            <button
+              type="button"
+              onClick={() => {
+                setRetryMessage("");
+                setMode("retry");
+              }}
+            >
+              直前の連携を確認
+            </button>
+          )}
+          {!blocked && lastRequestError && (
+            <p role="status">{lastRequestError}</p>
+          )}
+        </div>
+      )}
+      {tempalist && launchEnvironment !== "supported" && (
+        <div
+          id="tempalist-environment-note"
+          className="tempalist-environment-note"
+        >
+          <p>
+            {blocked ? iosTempalistBlockedMessage : iosTempalistBrowserMessage}
+          </p>
+          {blocked && (
+            <p>
+              ホーム画面版のタスクはブラウザ版へ自動では移りません。既存データはそのまま残ります。
+            </p>
           )}
         </div>
       )}
@@ -274,60 +294,109 @@ function TaskListView({
           件）
         </button>
       ) : null}
-      <section aria-label="タスクを絞り込む" className="task-list__filters">
-        <label>
-          状態
-          <select
-            style={touchTarget}
-            value={tab}
-            onChange={(event) => setTab(event.target.value as TaskTab)}
+      {selecting && (
+        <div className="task-list__selection-search">
+          <label>
+            検索
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="タスクを検索"
+            />
+          </label>
+          <button
+            type="button"
+            aria-expanded={filtersOpen}
+            aria-controls="task-selection-filters"
+            onClick={() => setFiltersOpen((open) => !open)}
           >
-            <option value="all">すべて</option>
-            <option value="active">対応中</option>
-            <option value="completed">完了</option>
-            <option value="archived">アーカイブ</option>
-          </select>
-        </label>
-        <label>
-          期限
-          <select
-            style={touchTarget}
-            value={due}
-            onChange={(event) => setDue(event.target.value as DueFilter | "")}
-          >
-            <option value="">すべて</option>
-            <option value="overdue">期限超過</option>
-            <option value="today">今日</option>
-            <option value="unset">未設定</option>
-            <option value="none">なし</option>
-          </select>
-        </label>
-        <label className="task-list__category">
-          カテゴリ
-          <select
-            style={touchTarget}
-            value={category}
-            onChange={(event) =>
-              setCategory(event.target.value as Task["category"] | "")
+            絞り込み
+          </button>
+          <p className="task-list__filter-summary">
+            {
+              {
+                all: "すべて",
+                active: "対応中",
+                completed: "完了",
+                archived: "アーカイブ",
+              }[tab]
             }
-          >
-            <option value="">すべて</option>
-            {categoryOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="task-list__search">
-          検索
-          <input
-            style={touchTarget}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
-      </section>
+            ・期限
+            {due
+              ? {
+                  overdue: "超過",
+                  today: "今日",
+                  unset: "未設定",
+                  none: "なし",
+                }[due]
+              : "すべて"}
+            ・カテゴリ
+            {category ? taskCategoryDisplayLabel(snapshot, category) : "すべて"}
+          </p>
+        </div>
+      )}
+      {(!selecting || filtersOpen) && (
+        <section
+          id="task-selection-filters"
+          aria-label="タスクを絞り込む"
+          className="task-list__filters"
+        >
+          <label>
+            状態
+            <select
+              style={touchTarget}
+              value={tab}
+              onChange={(event) => setTab(event.target.value as TaskTab)}
+            >
+              <option value="all">すべて</option>
+              <option value="active">対応中</option>
+              <option value="completed">完了</option>
+              <option value="archived">アーカイブ</option>
+            </select>
+          </label>
+          <label>
+            期限
+            <select
+              style={touchTarget}
+              value={due}
+              onChange={(event) => setDue(event.target.value as DueFilter | "")}
+            >
+              <option value="">すべて</option>
+              <option value="overdue">期限超過</option>
+              <option value="today">今日</option>
+              <option value="unset">未設定</option>
+              <option value="none">なし</option>
+            </select>
+          </label>
+          <label className="task-list__category">
+            カテゴリ
+            <select
+              style={touchTarget}
+              value={category}
+              onChange={(event) =>
+                setCategory(event.target.value as Task["category"] | "")
+              }
+            >
+              <option value="">すべて</option>
+              {categoryOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!selecting && (
+            <label className="task-list__search">
+              検索
+              <input
+                style={touchTarget}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </label>
+          )}
+        </section>
+      )}
       {tab === "completed" ? (
         <p className="task-list__hint">
           完了したタスクは、詳細画面の「再開」で戻せます。
@@ -338,44 +407,57 @@ function TaskListView({
       ) : (
         <ul className="task-list__items">
           {display.tasks.map((task) => (
-            <li key={task.id}>
-              {mode === "select" && (
-                <label className="tempalist-select-task">
-                  <input
-                    type="checkbox"
-                    aria-label={`${task.title}を選択`}
-                    checked={draft.tasks.some(
-                      (selected) => selected.id === task.id,
-                    )}
-                    onChange={(event) =>
-                      setDraft((previous) => ({
-                        ...previous,
-                        tasks: event.target.checked
-                          ? [
-                              ...previous.tasks,
-                              {
-                                id: task.id,
-                                title: task.title,
-                                revision: task.revision,
-                              },
-                            ]
-                          : previous.tasks.filter(
-                              (selected) => selected.id !== task.id,
-                            ),
-                      }))
-                    }
-                  />
-                  選択
-                </label>
-              )}
-              <Link
-                aria-label={task.title}
-                className="task-list__item-title"
-                style={touchTarget}
-                to={`/tasks/${task.id}`}
-              >
-                {task.title}
-              </Link>
+            <li
+              key={task.id}
+              data-selected={
+                selecting &&
+                draft.tasks.some((selected) => selected.id === task.id)
+              }
+            >
+              <div className="task-list__item-header">
+                {selecting && (
+                  <label className="tempalist-select-task">
+                    <input
+                      type="checkbox"
+                      aria-label={`${task.title}を選択`}
+                      checked={draft.tasks.some(
+                        (selected) => selected.id === task.id,
+                      )}
+                      onChange={(event) =>
+                        setDraft((previous) => ({
+                          ...previous,
+                          tasks: event.target.checked
+                            ? [
+                                ...previous.tasks,
+                                {
+                                  id: task.id,
+                                  title: task.title,
+                                  revision: task.revision,
+                                },
+                              ]
+                            : previous.tasks.filter(
+                                (selected) => selected.id !== task.id,
+                              ),
+                        }))
+                      }
+                    />
+                    <span>選択</span>
+                  </label>
+                )}
+                <Link
+                  aria-label={task.title}
+                  className="task-list__item-title"
+                  style={touchTarget}
+                  to={`/tasks/${task.id}`}
+                >
+                  {task.title}
+                </Link>
+                <TempalistLinkedBadge
+                  linked={snapshot.tempalist.markers.some(
+                    (marker) => marker.taskId === task.id,
+                  )}
+                />
+              </div>
               <div className="task-list__item-meta">
                 {isTaskOverdue(task, display.timestamp) ? (
                   <OverdueIndicator ariaLabel={`${task.title}の期限状態`} />
@@ -412,15 +494,35 @@ function TaskListView({
                     snapshot.settings.timeZone,
                   )}
                 </span>
-                <TempalistLinkedBadge
-                  linked={snapshot.tempalist.markers.some(
-                    (marker) => marker.taskId === task.id,
-                  )}
-                />
               </div>
             </li>
           ))}
         </ul>
+      )}
+      {selecting && (
+        <div
+          role="region"
+          aria-label="チェックリスト選択の操作"
+          className="task-list__selection-bar"
+        >
+          <p aria-live="polite">{draft.tasks.length}件選択中（表示外も含む）</p>
+          <div className="task-list__selection-actions">
+            <button
+              type="button"
+              className="task-list__cancel-selection"
+              onClick={() => setMode("list")}
+            >
+              選択をやめる
+            </button>
+            <button
+              type="button"
+              disabled={draft.tasks.length === 0}
+              onClick={() => setMode("review")}
+            >
+              内容を確認
+            </button>
+          </div>
+        </div>
       )}
     </section>
   );

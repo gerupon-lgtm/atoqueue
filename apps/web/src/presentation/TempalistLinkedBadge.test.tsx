@@ -9,10 +9,10 @@ it("F-020 renders a non-interactive badge only when linked with a stable accessi
   expect(view.container.childElementCount).toBe(0);
   view.rerender(<TempalistLinkedBadge linked />);
   const badge = screen.getByLabelText("テンパリストへ開く操作済み");
-  expect(badge.textContent).toBe("テンパリスト連携済");
+  expect(badge.textContent).toBe("連携済");
   expect(badge.tagName).toBe("SPAN");
   expect(screen.queryByRole("button")).toBeNull();
-  expect(view.container.querySelector("img")).toBeNull();
+  expect(view.container.querySelector("img")?.getAttribute("src")).toBeTruthy();
   view.rerender(<TempalistLinkedBadge linked iconSrc="/provided-icon.svg" />);
   expect(screen.getByLabelText("テンパリストへ開く操作済み").textContent).toBe(
     "連携済",

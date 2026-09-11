@@ -28,6 +28,7 @@ import { SettingsPage } from "../features/settings/SettingsPage";
 import {
   createBrowserInstallExperience,
   createInstallPromptPreference,
+  getBrowserTempalistEnvironment,
 } from "../infrastructure/install/browser-install-experience";
 
 type PageDefinition = {
@@ -49,7 +50,9 @@ const developmentRoutes = import.meta.env.DEV
   : [];
 
 const applicationRepository = new LocalStorageRepository(window.localStorage);
+const tempalistEnvironment = () => getBrowserTempalistEnvironment(window);
 const tempalistTransfer = createTempalistTransferService({
+  environment: tempalistEnvironment,
   repository: applicationRepository,
   launcher: createBrowserTempalistLauncher(),
   now: () => new Date().toISOString(),
@@ -103,6 +106,7 @@ export const router = createBrowserRouter([
           <TaskListPage
             repository={applicationRepository}
             tempalist={tempalistTransfer}
+            environment={tempalistEnvironment}
           />
         ) : page.path === "settings" ? (
           <SettingsPage

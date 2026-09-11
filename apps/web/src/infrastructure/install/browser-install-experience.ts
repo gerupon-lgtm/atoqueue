@@ -3,6 +3,7 @@ import type {
   InstallExperienceState,
   InstallPromptPreference,
 } from "../../application/install-experience";
+import type { TempalistEnvironment } from "../../application/tempalist-environment";
 
 const INSTALL_PROMPT_SEEN_KEY = "atoqueue:install-prompt-seen:v1";
 
@@ -34,6 +35,17 @@ function isInstalled(target: InstallTarget): boolean {
     target.matchMedia("(display-mode: standalone)").matches ||
     target.navigator.standalone === true
   );
+}
+
+/** The sender's display mode, not proof of the receiver's storage or installation. */
+export function getBrowserTempalistEnvironment(
+  target: InstallTarget,
+): TempalistEnvironment {
+  if (!isIos(target)) return "supported";
+  return isInstalled(target) ||
+    target.matchMedia("(display-mode: fullscreen)").matches
+    ? "ios-standalone"
+    : "ios-browser";
 }
 
 export function createBrowserInstallExperience(
