@@ -65,6 +65,18 @@ export function validateTempalistPayload(value: unknown): TempalistPayload {
 }
 
 export function buildTempalistUrl(value: unknown): string {
+  const url = encodeTempalistUrl(value);
+  if (url.length > MAX_URL_LENGTH)
+    throw new Error("項目を分けて送ってください。");
+  return url;
+}
+
+/** Exact full URL length, including when the validated payload exceeds the limit. */
+export function measureTempalistUrl(value: unknown): number {
+  return encodeTempalistUrl(value).length;
+}
+
+function encodeTempalistUrl(value: unknown): string {
   const payload = validateTempalistPayload(value);
   const bytes = new TextEncoder().encode(JSON.stringify(payload));
   let binary = "";
@@ -73,10 +85,7 @@ export function buildTempalistUrl(value: unknown): string {
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/, "");
-  const url = `${TEMPALIST_ORIGIN}#create=${encoded}`;
-  if (url.length > MAX_URL_LENGTH)
-    throw new Error("項目を分けて送ってください。");
-  return url;
+  return `${TEMPALIST_ORIGIN}#create=${encoded}`;
 }
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {

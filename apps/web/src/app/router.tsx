@@ -21,6 +21,8 @@ import { ReviewResultPage } from "../features/review/ReviewResultPage";
 import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
 import { TaskListPage } from "../features/tasks/TaskListPage";
 import { TempalistLinkProbe } from "../features/tempalist/TempalistLinkProbe";
+import { createTempalistTransferService } from "../application/tempalist-transfer-service";
+import { createBrowserTempalistLauncher } from "../infrastructure/tempalist/browser-tempalist-launcher";
 import { AppShell } from "./AppShell";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import {
@@ -47,6 +49,12 @@ const developmentRoutes = import.meta.env.DEV
   : [];
 
 const applicationRepository = new LocalStorageRepository(window.localStorage);
+const tempalistTransfer = createTempalistTransferService({
+  repository: applicationRepository,
+  launcher: createBrowserTempalistLauncher(),
+  now: () => new Date().toISOString(),
+  requestId: () => crypto.randomUUID(),
+});
 const installExperience = createBrowserInstallExperience(window);
 const installPromptPreference = createInstallPromptPreference(
   window.localStorage,
@@ -92,7 +100,10 @@ export const router = createBrowserRouter([
         ) : page.path === "today" ? (
           <TodayReviewRoute />
         ) : page.path === "tasks" ? (
-          <TaskListPage repository={applicationRepository} />
+          <TaskListPage
+            repository={applicationRepository}
+            tempalist={tempalistTransfer}
+          />
         ) : page.path === "settings" ? (
           <SettingsPage
             deleteDeviceData={async () => {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   createLocalCalendar,
@@ -8,8 +8,12 @@ import {
   type DueFilter,
   type Task,
   type TaskTab,
+  type TempalistDraft,
+  type PreparedTempalistRequest,
 } from "../../../../../packages/domain/src";
 import { formatLocalDateTime } from "../../presentation/format-local-date-time";
+import type { TempalistTransferService } from "../../application/tempalist-transfer-service";
+import { TempalistTransferPanel } from "../tempalist/TempalistTransferPanel";
 import {
   taskCategoryDisplayLabel,
   taskCategoryOptions,
@@ -26,6 +30,7 @@ import {
 export interface TaskListPageProps {
   repository: AppRepository;
   now?: () => string;
+  tempalist?: TempalistTransferService;
 }
 
 export function TaskListPage(props: TaskListPageProps) {
@@ -45,12 +50,44 @@ function TaskListView({
   repository,
   now = currentTime,
   overdueOnly,
+  tempalist,
 }: TaskListPageProps & { overdueOnly: boolean }) {
   const { snapshot, timestamp, error } = useTaskSnapshot(repository, now);
   const [tab, setTab] = useState<TaskTab>("active");
   const [due, setDue] = useState<DueFilter | "">(overdueOnly ? "overdue" : "");
   const [category, setCategory] = useState<Task["category"] | "">("");
   const [search, setSearch] = useState("");
+  const [mode, setMode] = useState<"list" | "select" | "review" | "retry">(
+    "list",
+  );
+  const [draft, setDraft] = useState<TempalistDraft>({
+    title: "あとキューのチェックリスト",
+    tasks: [],
+  });
+  const [lastRequest, setLastRequest] =
+    useState<PreparedTempalistRequest | null>(null);
+  const [retryBusy, setRetryBusy] = useState(false);
+  const retryPending = useRef(false);
+  const [retryMessage, setRetryMessage] = useState("");
+  useEffect(() => {
+    if (mode === "review" || mode === "retry") return;
+    let active = true;
+    if (tempalist)
+      void tempalist
+        .lastRequest()
+        .then((request) => {
+          if (active) setLastRequest(request);
+        })
+        .catch(() => {
+          if (active)
+            setRetryMessage(
+              "直前の連携を読み込めませんでした。タスクから選び直してください。",
+            );
+        });
+    return () => {
+      active = false;
+    };
+  }, [tempalist, mode]);
 
   const display = useMemo(() => {
     if (!snapshot || !timestamp) return;
@@ -88,9 +125,132 @@ function TaskListView({
     );
   if (!snapshot || !display) return <p>読み込み中です…</p>;
   const categoryOptions = taskCategoryOptions(snapshot);
+  if (tempalist && mode === "review")
+    return (
+      <TempalistTransferPanel
+        draft={draft}
+        onChange={setDraft}
+        service={tempalist}
+        onCancel={() => {
+          // Explicit return refreshes the selection after a changed/deleted-task warning.
+          setDraft((previous) => ({
+            ...previous,
+            tasks: previous.tasks.flatMap((selected) => {
+              const task = snapshot.tasks.find(
+                (task) => task.id === selected.id,
+              );
+              return task
+                ? [{ id: task.id, title: task.title, revision: task.revision }]
+                : [];
+            }),
+          }));
+          setMode("select");
+        }}
+      />
+    );
+  if (tempalist && mode === "retry" && lastRequest)
+    return (
+      <section className="tempalist-transfer" aria-busy={retryBusy}>
+        <h1>直前の連携</h1>
+        <h2>{lastRequest.payload.title}</h2>
+        <ol>
+          {lastRequest.payload.items.map((item) => (
+            <li key={item.sourceTaskId}>{item.label}</li>
+          ))}
+        </ol>
+        <p>
+          保存済みの確定内容をもう一度開きます。元のタスクと通知はあとキューに残ります。
+        </p>
+        <p>
+          URLには選択したタスク名が含まれます。Android優先・iOSの起動先と保存先は未検証です。
+        </p>
+        <button
+          type="button"
+          disabled={retryBusy}
+          onClick={() => {
+            if (retryPending.current) return;
+            retryPending.current = true;
+            setRetryBusy(true);
+            setRetryMessage("");
+            void tempalist
+              .open(lastRequest)
+              .then(() =>
+                setRetryMessage(
+                  "開く操作を受け付けました。受信・保存の成功を示すものではありません。",
+                ),
+              )
+              .catch(() =>
+                setRetryMessage(
+                  "開く操作を完了できませんでした。同じ内容でもう一度開いてください。",
+                ),
+              )
+              .finally(() => {
+                retryPending.current = false;
+                setRetryBusy(false);
+              });
+          }}
+        >
+          直前の連携をもう一度開く
+        </button>
+        <button
+          type="button"
+          disabled={retryBusy}
+          onClick={() => setMode("list")}
+        >
+          タスクに戻る
+        </button>
+        {retryBusy && <p role="status">保存しています…</p>}
+        {retryMessage && <p role="status">{retryMessage}</p>}
+      </section>
+    );
   return (
     <section aria-labelledby="task-list-title" className="task-list">
       <h1 id="task-list-title">タスク</h1>
+      {tempalist && (
+        <div className="tempalist-selection">
+          {mode === "list" ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft({ title: "あとキューのチェックリスト", tasks: [] });
+                  setMode("select");
+                }}
+              >
+                チェックリストにする
+              </button>
+              {lastRequest && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRetryMessage("");
+                    setMode("retry");
+                  }}
+                >
+                  直前の連携を確認
+                </button>
+              )}
+              {retryMessage && <p role="status">{retryMessage}</p>}
+            </>
+          ) : (
+            <>
+              <p aria-live="polite">
+                {draft.tasks.length}件選択中（表示外も含む）
+              </p>
+              <button
+                type="button"
+                disabled={draft.tasks.length === 0}
+                onClick={() => setMode("review")}
+              >
+                内容を確認
+              </button>
+              <button type="button" onClick={() => setMode("list")}>
+                選択をやめる
+              </button>
+            </>
+          )}
+        </div>
+      )}
       {display.overdueCount > 0 ? (
         <button
           aria-label="期限超過のタスクを見る"
@@ -172,6 +332,35 @@ function TaskListView({
         <ul className="task-list__items">
           {display.tasks.map((task) => (
             <li key={task.id}>
+              {mode === "select" && (
+                <label className="tempalist-select-task">
+                  <input
+                    type="checkbox"
+                    aria-label={`${task.title}を選択`}
+                    checked={draft.tasks.some(
+                      (selected) => selected.id === task.id,
+                    )}
+                    onChange={(event) =>
+                      setDraft((previous) => ({
+                        ...previous,
+                        tasks: event.target.checked
+                          ? [
+                              ...previous.tasks,
+                              {
+                                id: task.id,
+                                title: task.title,
+                                revision: task.revision,
+                              },
+                            ]
+                          : previous.tasks.filter(
+                              (selected) => selected.id !== task.id,
+                            ),
+                      }))
+                    }
+                  />
+                  選択
+                </label>
+              )}
               <Link
                 aria-label={task.title}
                 className="task-list__item-title"

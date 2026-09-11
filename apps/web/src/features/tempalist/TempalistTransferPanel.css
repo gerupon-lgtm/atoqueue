@@ -1,0 +1,56 @@
+.tempalist-transfer {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tempalist-transfer p {
+  margin: 0;
+  line-height: 1.65;
+}
+.tempalist-transfer fieldset {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.tempalist-transfer input {
+  width: 100%;
+  min-width: 0;
+}
+.tempalist-transfer label {
+  display: grid;
+  gap: 0.5rem;
+}
+.tempalist-transfer__items {
+  margin: 0;
+  padding-left: 1.5rem;
+}
+.tempalist-transfer__items li {
+  padding-block: 0.5rem;
+}
+.tempalist-transfer__actions,
+.tempalist-selection {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.tempalist-transfer button,
+.tempalist-selection button {
+  min-width: 44px;
+  min-height: 44px;
+  white-space: normal;
+}
+.tempalist-transfer :focus-visible,
+.tempalist-selection :focus-visible {
+  outline: 2px solid #173b33;
+  outline-offset: 3px;
+}
+.tempalist-select-task {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+}

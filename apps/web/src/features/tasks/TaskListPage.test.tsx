@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 
 import {
   cleanup,
@@ -6,8 +7,10 @@ import {
   render,
   screen,
   within,
+  act,
+  waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import {
   createEmptySnapshot,
@@ -16,6 +19,8 @@ import {
   type Task,
 } from "../../../../../packages/domain/src";
 import { TaskListPage } from "./TaskListPage";
+import { makeTempalistFixture } from "../../../../../packages/domain/src/tempalist-test-fixture";
+import { prepareTempalistRequest } from "../../../../../packages/domain/src";
 
 const now = "2026-08-03T09:00:00.000Z";
 
@@ -61,7 +66,11 @@ function repository(): AppRepository {
         dueMode: "scheduled",
         dueAt: "2026-08-02T23:59:00.000Z",
       }),
-      task("保管済み", { status: "archived", archivedAt: now, category: "旧分類" }),
+      task("保管済み", {
+        status: "archived",
+        archivedAt: now,
+        category: "旧分類",
+      }),
     ],
   };
   snapshot.settings.customTaskCategories = ["冷蔵庫"];
@@ -76,6 +85,109 @@ function repository(): AppRepository {
 
 describe("TaskListPage", () => {
   afterEach(cleanup);
+
+  it("F-020 preserves a confirmation draft across metadata refresh and reselects at the end", async () => {
+    const fixture = makeTempalistFixture();
+    let refresh = () => {};
+    const repo = {
+      ...repository(),
+      load: async () => fixture.snapshot,
+      subscribe: (listener: () => void) => {
+        refresh = listener;
+        return () => {};
+      },
+    };
+    render(
+      <MemoryRouter>
+        <TaskListPage
+          repository={repo}
+          tempalist={{
+            prepare: async () => prepareTempalistRequest(fixture),
+            open: async () => undefined,
+            lastRequest: async () => null,
+          }}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "チェックリストにする" }),
+    );
+    for (const name of ["牛乳を買う", "電池を買う", "牛乳を買う", "牛乳を買う"])
+      fireEvent.click(screen.getByRole("checkbox", { name: `${name}を選択` }));
+    fireEvent.click(screen.getByRole("button", { name: "内容を確認" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "リスト名" }), {
+      target: { value: "入力を維持" },
+    });
+    await act(async () => {
+      refresh();
+    });
+    expect(screen.getByRole("textbox", { name: "リスト名" })).toHaveValue(
+      "入力を維持",
+    );
+    expect(screen.getAllByTestId("transfer-item")[0]).toHaveTextContent(
+      "電池を買う",
+    );
+  });
+
+  it("F-020 reopens only persisted confirmation after reload and never launches automatically", async () => {
+    const fixture = makeTempalistFixture();
+    const request = prepareTempalistRequest(fixture);
+    fixture.snapshot.tasks = [];
+    const service = {
+      prepare: vi.fn(),
+      lastRequest: vi.fn(async () => request),
+      open: vi.fn(async () => undefined),
+    };
+    render(
+      <MemoryRouter>
+        <TaskListPage
+          repository={{ ...repository(), load: async () => fixture.snapshot }}
+          tempalist={service}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "直前の連携を確認" }),
+    );
+    expect(service.open).not.toHaveBeenCalled();
+    expect(screen.getByText("牛乳を買う")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "直前の連携をもう一度開く" }),
+    );
+    await waitFor(() => expect(service.open).toHaveBeenCalledWith(request));
+    expect(service.prepare).not.toHaveBeenCalled();
+  });
+
+  it("F-020 retains selection across search and reviews every selected task", async () => {
+    const fixture = makeTempalistFixture();
+    render(
+      <MemoryRouter>
+        <TaskListPage
+          repository={{ ...repository(), load: async () => fixture.snapshot }}
+          tempalist={{
+            prepare: async () => prepareTempalistRequest(fixture),
+            open: async () => undefined,
+            lastRequest: async () => null,
+          }}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "チェックリストにする" }),
+    );
+    expect(screen.getByRole("button", { name: "内容を確認" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "牛乳を買うを選択" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "電池を買うを選択" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "検索" }), {
+      target: { value: "牛乳" },
+    });
+    expect(screen.getByText("2件選択中（表示外も含む）")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "内容を確認" }));
+    expect(screen.getByRole("textbox", { name: "リスト名" })).toHaveValue(
+      "あとキューのチェックリスト",
+    );
+    expect(screen.getAllByRole("button", { name: /除外/ })).toHaveLength(2);
+  });
 
   it("F-014 renders a text due-state badge and links each matching active task to its detail", async () => {
     render(

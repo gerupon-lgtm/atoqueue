@@ -1,6 +1,10 @@
 import { Buffer } from "node:buffer";
 import { describe, expect, it } from "vitest";
-import { buildTempalistUrl, validateTempalistPayload } from "./tempalist-link";
+import {
+  buildTempalistUrl,
+  measureTempalistUrl,
+  validateTempalistPayload,
+} from "./tempalist-link";
 
 const REQUEST_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -19,6 +23,24 @@ function validPayload() {
 }
 
 describe("Tempalist checklist-link contract", () => {
+  it("F-020 measures the complete encoded URL on both sides of the limit", () => {
+    expect(measureTempalistUrl(validPayload())).toBe(
+      buildTempalistUrl(validPayload()).length,
+    );
+    const payload = {
+      ...validPayload(),
+      title: "x",
+      items: [{ sourceTaskId: "id", label: "a".repeat(5799) }],
+    };
+    expect(measureTempalistUrl(payload)).toBe(8000);
+    expect(
+      measureTempalistUrl({
+        ...payload,
+        items: [{ sourceTaskId: "id", label: "a".repeat(5800) }],
+      }),
+    ).toBe(8002);
+    expect(() => measureTempalistUrl({ ...payload, title: " " })).toThrow();
+  });
   it("F-020 preserves UTF-8, order and opaque IDs without private extras", () => {
     const payload = validPayload();
 
