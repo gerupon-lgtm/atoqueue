@@ -20,6 +20,7 @@ import { TodayReviewPage } from "../features/review/TodayReviewPage";
 import { ReviewResultPage } from "../features/review/ReviewResultPage";
 import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
 import { TaskListPage } from "../features/tasks/TaskListPage";
+import { TempalistLinkProbe } from "../features/tempalist/TempalistLinkProbe";
 import { AppShell } from "./AppShell";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import {
@@ -40,6 +41,10 @@ const pages: PageDefinition[] = [
   { path: "tasks", label: "タスク" },
   { path: "settings", label: "設定" },
 ];
+
+const developmentRoutes = import.meta.env.DEV
+  ? [{ path: "dev/tempalist-link", element: <TempalistLinkProbe /> }]
+  : [];
 
 const applicationRepository = new LocalStorageRepository(window.localStorage);
 const installExperience = createBrowserInstallExperience(window);
@@ -112,6 +117,7 @@ export const router = createBrowserRouter([
         element: <ReviewResultPage repository={applicationRepository} />,
       },
       { path: "tasks/:taskId", element: <TaskCorrectionRoute /> },
+      ...developmentRoutes,
     ],
   },
 ]);
