@@ -156,9 +156,10 @@ test.describe("PWA shell", () => {
 
   test("shows iOS installation guidance once in a browser profile", async ({
     browser,
+    baseURL,
   }) => {
     const context = await browser.newContext({
-      baseURL: "http://127.0.0.1:4173",
+      baseURL,
       userAgent:
         "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 Version/18.6 Mobile/15E148 Safari/604.1",
     });

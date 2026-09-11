@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("saves a capture that remains in the local snapshot after reload", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByText("バージョン mvp-1.27.0")).toBeVisible();
+  await expect(page.getByText("バージョン mvp-1.28.0")).toBeVisible();
 
   await page.getByRole("textbox", { name: "思いついたこと" }).fill("牛乳を買う");
   await page.getByRole("button", { name: "保存して戻る" }).click();
@@ -32,6 +32,9 @@ test("focuses capture input on launch and after returning from another page", as
   const input = page.getByRole("textbox", { name: "思いついたこと" });
   await input.fill("フォーカス確認用");
   await page.getByRole("button", { name: "保存して戻る" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "保存しました。いまの作業に戻って大丈夫です",
+  );
 
   await page.evaluate(() => {
     const key = "atoqueue:data:v1";

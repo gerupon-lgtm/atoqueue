@@ -70,6 +70,7 @@ function TaskListView({
   const [retryBusy, setRetryBusy] = useState(false);
   const retryPending = useRef(false);
   const [retryMessage, setRetryMessage] = useState("");
+  const [lastRequestError, setLastRequestError] = useState("");
   useEffect(() => {
     if (mode === "review" || mode === "retry") return;
     let active = true;
@@ -77,13 +78,18 @@ function TaskListView({
       void tempalist
         .lastRequest()
         .then((request) => {
-          if (active) setLastRequest(request);
+          if (active) {
+            setLastRequest(request);
+            setLastRequestError("");
+          }
         })
         .catch(() => {
-          if (active)
-            setRetryMessage(
+          if (active) {
+            setLastRequest(null);
+            setLastRequestError(
               "直前の連携を読み込めませんでした。タスクから選び直してください。",
             );
+          }
         });
     return () => {
       active = false;
@@ -231,7 +237,7 @@ function TaskListView({
                   直前の連携を確認
                 </button>
               )}
-              {retryMessage && <p role="status">{retryMessage}</p>}
+              {lastRequestError && <p role="status">{lastRequestError}</p>}
             </>
           ) : (
             <>

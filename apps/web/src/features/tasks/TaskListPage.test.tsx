@@ -86,6 +86,50 @@ function repository(): AppRepository {
 describe("TaskListPage", () => {
   afterEach(cleanup);
 
+  it("F-020 clears last-request read errors after recovery and hides stale retry data after failure", async () => {
+    const fixture = makeTempalistFixture();
+    const request = prepareTempalistRequest(fixture);
+    const lastRequest = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("read failed"))
+      .mockResolvedValueOnce(request)
+      .mockRejectedValueOnce(new Error("read failed again"))
+      .mockResolvedValueOnce(request);
+    render(
+      <MemoryRouter>
+        <TaskListPage
+          repository={{ ...repository(), load: async () => fixture.snapshot }}
+          tempalist={{ lastRequest, prepare: vi.fn(), open: vi.fn() }}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText(/直前の連携を読み込めませんでした/),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "チェックリストにする" }),
+    );
+    await waitFor(() => expect(lastRequest).toHaveBeenCalledTimes(2));
+    // Returning to the list triggers a failed read after a successful read in selection mode.
+    fireEvent.click(screen.getByRole("button", { name: "選択をやめる" }));
+    expect(
+      await screen.findByText(/直前の連携を読み込めませんでした/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "直前の連携を確認" }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "チェックリストにする" }),
+    );
+    await waitFor(() => expect(lastRequest).toHaveBeenCalledTimes(4));
+    lastRequest.mockResolvedValue(request);
+    fireEvent.click(screen.getByRole("button", { name: "選択をやめる" }));
+    expect(
+      await screen.findByRole("button", { name: "直前の連携を確認" }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/直前の連携を読み込めませんでした/)).toBeNull();
+  });
+
   it("F-020 preserves a confirmation draft across metadata refresh and reselects at the end", async () => {
     const fixture = makeTempalistFixture();
     let refresh = () => {};

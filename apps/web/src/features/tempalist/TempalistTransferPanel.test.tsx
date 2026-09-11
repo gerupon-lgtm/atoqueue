@@ -16,6 +16,31 @@ import { TempalistTransferPanel } from "./TempalistTransferPanel";
 import userEvent from "@testing-library/user-event";
 
 afterEach(cleanup);
+
+it("F-020 retries an open failure with the identical prepared request and clears the error", async () => {
+  const open = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("private payload"))
+    .mockResolvedValueOnce(undefined);
+  const { service, request } = setup({ open });
+  fireEvent.click(screen.getByRole("button", { name: "内容を確定" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "テンパリストで開く" }),
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "同じ内容でもう一度開いてください",
+  );
+  expect(document.body.textContent).not.toContain("private payload");
+  fireEvent.click(screen.getByRole("button", { name: "テンパリストで開く" }));
+  expect(
+    await screen.findByText(
+      "開く操作を受け付けました。同じ内容でもう一度開けます。",
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(service.prepare).toHaveBeenCalledTimes(1);
+  expect(open.mock.calls).toEqual([[request], [request]]);
+});
 function setup(overrides: Partial<TempalistTransferService> = {}) {
   const fixture = makeTempalistFixture();
   const request = prepareTempalistRequest(fixture);
