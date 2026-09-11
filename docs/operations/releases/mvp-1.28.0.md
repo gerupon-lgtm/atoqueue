@@ -1,4 +1,4 @@
-# mvp-1.28.0 テンパリスト連携のローカル検証記録
+# mvp-1.28.0 テンパリスト連携の検証・公開記録
 
 日付: 2026-09-11。対象要件: F-020、F-003、F-016、F-017、NF-004〜NF-006、NF-013。
 
@@ -59,15 +59,31 @@ E2Eは `ATOQUEUE_E2E_PORT=4189` と既存の `PLAYWRIGHT_BROWSERS_PATH` を指�
 
 全件コマンドは `node dist/task-7-verify.mjs unit 1 final-fix-unit` と `node dist/task-7-verify.mjs e2e 1 final-fix-e2e`。最大5ファイル・1workerの直列実行で、展開済みコマンド・件数・終了コードは `dist/task-7-gates/final-fix-unit/` と `dist/task-7-gates/final-fix-e2e/` のログとresults.jsonへ保存した。E2Eは再build後の専用4189 previewに対して実行し、終了後はそのPIDだけを停止した。詳細はGit管理外の `.superpowers/sdd/2026-09-11-tempalist-checklist-link/final-fix-report.md`。
 
-## 完了範囲と公開前に必要な確認
+## 完了範囲と実機で残る確認
 
 | 範囲 | 状態 |
 | --- | --- |
 | 送信側ローカル実装・回帰テスト | ローカル自動検証済み（上記ゲート）。実機判定は別 |
 | Android / iOSの実機起動先・保存領域 | 未実施。ブラウザのエミュレーションでは代替不可 |
 | 正式アイコン | 未提供。現在は文字ラベルで表示 |
-| 本番公開・HTTPS試験配置 | 未実施。本作業ではdeploy/push/mergeやAPI再起動を行わない |
+| 本番公開・HTTPS確認 | 2026-09-11にPWA 1.28.0を公開。下記の配信・画面確認済み。APIは再配置しない |
 
 本番向け操作はタスク一覧から確定して開くボタンを使う。`/dev/tempalist-link` は開発時だけの固定合成anchor試験で、本番には存在しない。実機では本番向け操作から、Androidの相手PWA起動中／終了時、保存後に普段のホーム画面PWAで同じリストが見えること、同じURL再試行で既存リストを再利用することを確認する。iOSも保存領域と操作数を記録し、成立しなければ本連携のみAndroid限定とする判断が必要。
 
-実機の判定結果は [確認票](../tempalist-link-device-check.md) に記録する。未実施欄は維持し、現在のローカル検証を公開版やOSの受信成功へ読み替えない。
+実機の判定結果は [確認票](../tempalist-link-device-check.md) に記録する。未実施欄は維持し、ローカル・公開ブラウザ検証をOSの受信成功へ読み替えない。
+
+## 利用者承認後の統合・公開（2026-09-11）
+
+対象要件: F-020、NF-004〜NF-006、NF-013。利用者の「デプロイまで、1→2」の依頼に従い、`task/tempalist-link` を `task/atoqueue-mvp` へfast-forward統合し、pushして [既存PR #1](https://github.com/gerupon-lgtm/atoqueue/pull/1) を更新した。mainへのマージは行わず、指定SHAからPWAだけを公開した。
+
+- 公開先: <https://atoqueue.sikumilab.com/>、画面版 `mvp-1.28.0`。
+- 配置SHA: `8194a9b5318ec26bceed1c67a018ab3f31a36024`。
+- [Deploy run 34582068872](https://github.com/gerupon-lgtm/atoqueue/actions/runs/34582068872): `workflow_dispatch` / `target=pwa`。品質ゲートとGitHub Pages公開が成功し、API配置ジョブはskip。
+- 統合直前と統合後に単体・結合80ファイル752件を各1回実行し、全18バッチ終了0。統合後ログは元作業領域 `dist/task-7-gates/deploy-postmerge-unit/`。実装SHAのE2E17ファイル55件は上記最終検証記録を参照。
+- push CI、PR CI、配置CIがすべて成功。配置CIでlint、型検査、単体・結合、Web/API build、配置成果物検査に加え、CI専用PostgreSQL 17で移行・登録と分離・同時取得と取消・購読と秘匿・繰返し再試行の5検証群がPASS。本番DBへの接続・移行は行っていない。
+- 公開JS: `/assets/index-DfzkjvcX.js`。SHA-256 `801a00802a5ff5d3d35d1fe8143d0010c0d5250b62a790f066958fb013097309`。分離worktreeで検証したローカルbuildと完全一致。版数と連携UI文字列の存在、DEV試験画面の除外を確認。
+- 公開サイトを新規の隔離Chromium profile（390×844）で開き、版表示、タスク一覧から複数選択画面への遷移、0件時の確認ボタン無効を確認。APIとテンパリストへの通信を遮断し、外部保存なし。画面画像も目視確認。これは実端末のPWA捕捉・保存領域や受信側作成の試験ではない。
+- 公開後の通知API `/healthz` は `status=ok`、`version=mvp-1.27.0`（2026-09-11 09:05 UTC）。稼働API、v2登録設定、DB、VAPIDは今回の公開では変更しない。
+- 元作業領域の既存未コミット変更は復元・保持し、公開コミットへ混入させていない。重なったtasks文書は既存v2登録記録と新しい連携記録を両方残した。復元用stashと分離worktreeも保持する。
+
+公開確認用スクリプトと画像は分離worktreeのGit管理外 `dist/deploy-tempalist-verify.mjs`、`dist/deploy-public-smoke.mjs`、`dist/deploy-public-1.28.0.png`。正式アイコンとAndroid/iOSの実機判定は引き続き未完了。
