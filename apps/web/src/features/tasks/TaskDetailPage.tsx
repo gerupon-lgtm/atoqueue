@@ -24,7 +24,11 @@ import {
   taskCategoryOptions,
 } from "./task-category-options";
 import { OverdueIndicator } from "../../presentation/OverdueIndicator";
-import { useDisplayTime } from "../../presentation/use-task-snapshot";
+import {
+  useDisplayTime,
+  useTaskSnapshot,
+} from "../../presentation/use-task-snapshot";
+import { TempalistLinkedBadge } from "../../presentation/TempalistLinkedBadge";
 
 const defaultNow = () => new Date().toISOString();
 
@@ -44,6 +48,7 @@ export function TaskDetailPage({
   sync,
 }: TaskDetailPageProps) {
   const displayTime = useDisplayTime(now);
+  const { snapshot: displaySnapshot } = useTaskSnapshot(repository, now);
   const [snapshot, setSnapshot] = useState<AppSnapshot>();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<Task["category"] | "">("");
@@ -256,6 +261,13 @@ export function TaskDetailPage({
             <dd>{neglectReason(level)}</dd>
           </div>
         </dl>
+        <TempalistLinkedBadge
+          linked={
+            displaySnapshot?.tempalist.markers.some(
+              (marker) => marker.taskId === taskId,
+            ) ?? false
+          }
+        />
       </section>
       {task.status === "active" ? (
         <section

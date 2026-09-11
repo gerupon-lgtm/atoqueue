@@ -14,6 +14,7 @@ import {
 import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 import type { TempalistTransferService } from "../../application/tempalist-transfer-service";
 import { TempalistTransferPanel } from "../tempalist/TempalistTransferPanel";
+import { TempalistLinkedBadge } from "../../presentation/TempalistLinkedBadge";
 import {
   taskCategoryDisplayLabel,
   taskCategoryOptions,
@@ -405,6 +406,11 @@ function TaskListView({
                     snapshot.settings.timeZone,
                   )}
                 </span>
+                <TempalistLinkedBadge
+                  linked={snapshot.tempalist.markers.some(
+                    (marker) => marker.taskId === task.id,
+                  )}
+                />
               </div>
             </li>
           ))}

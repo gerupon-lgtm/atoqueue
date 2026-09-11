@@ -1,0 +1,22 @@
+.tempalist-linked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid #ccd7cd;
+  border-radius: 0.25rem;
+  background: #f0f4ed;
+  color: #526a60;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+
+.tempalist-linked-badge img {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}

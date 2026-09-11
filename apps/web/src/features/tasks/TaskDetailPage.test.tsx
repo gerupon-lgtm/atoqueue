@@ -112,7 +112,7 @@ describe("TaskDetailPage", () => {
     },
   );
 
-  it("keeps one stable initial load when it uses the built-in clock", async () => {
+  it("keeps stable initial editing and read-only metadata loads with the built-in clock", async () => {
     const { repository } = repositoryWithTask();
     const load = vi.spyOn(repository, "load");
     render(<TaskDetailPage repository={repository} taskId="task-1" />);
@@ -120,7 +120,8 @@ describe("TaskDetailPage", () => {
     await screen.findByRole("heading", { level: 1 });
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    expect(load).toHaveBeenCalledTimes(1);
+    // One editable snapshot and one independently refreshed display snapshot.
+    expect(load).toHaveBeenCalledTimes(2);
   });
 
   it("F-015 returns to the task list from the right-side correction header action", async () => {

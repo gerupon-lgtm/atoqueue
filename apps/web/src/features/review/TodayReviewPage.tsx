@@ -26,7 +26,11 @@ import {
 import { resolveReminderTaskId } from "../../infrastructure/notifications/reminder-navigation";
 import { taskCategoryDisplayLabel } from "../tasks/task-category-options";
 import { OverdueIndicator } from "../../presentation/OverdueIndicator";
-import { useDisplayTime } from "../../presentation/use-task-snapshot";
+import {
+  useDisplayTime,
+  useTaskSnapshot,
+} from "../../presentation/use-task-snapshot";
+import { TempalistLinkedBadge } from "../../presentation/TempalistLinkedBadge";
 import "./TodayReviewPage.css";
 
 export interface TodayReviewPageProps {
@@ -57,6 +61,7 @@ export function TodayReviewPage({
   const [error, setError] = useState<string>();
   const reviewCalendar = calendar;
   const displayTime = useDisplayTime(now);
+  const { snapshot: displaySnapshot } = useTaskSnapshot(repository, now);
 
   useEffect(() => {
     let active = true;
@@ -368,6 +373,13 @@ export function TodayReviewPage({
           <span>{presentation.deadline}</span>
         </p>
         <p>{presentation.elapsed}</p>
+        <TempalistLinkedBadge
+          linked={
+            displaySnapshot?.tempalist.markers.some(
+              (marker) => marker.taskId === task.id,
+            ) ?? false
+          }
+        />
         {currentStatus ? (
           <p className="reviewCurrentStatus">
             <span>現在：</span>
