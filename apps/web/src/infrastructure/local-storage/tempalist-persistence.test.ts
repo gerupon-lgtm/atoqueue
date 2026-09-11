@@ -212,10 +212,11 @@ describe("F-003/F-020 locked namespace persistence", () => {
     const repository = new LocalStorageRepository(localStorage);
     await repository.save(snapshot);
     await repository.updateTempalist((latest) => latest.tempalist);
+    await repository.updateSnapshot((latest) => latest);
     await repository.save(snapshot, { replaceTempalist: true });
     await repository.clearAppData();
     expect(request.mock.calls.map((call) => call[0])).toEqual(
-      Array(4).fill("atoqueue:snapshot-write"),
+      Array(5).fill("atoqueue:snapshot-write"),
     );
   });
 });

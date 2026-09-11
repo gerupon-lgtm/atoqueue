@@ -15,6 +15,7 @@ import type { AppRepository, AppSnapshot } from "../../../../../packages/domain/
 import {
   createCapture,
   createEmptySnapshot,
+  PersistenceError,
 } from "../../../../../packages/domain/src";
 import { APP_VERSION } from "../../app-version";
 import { QuickCapturePage } from "./QuickCapturePage";
@@ -527,9 +528,9 @@ describe("QuickCapturePage", () => {
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
   });
 
-  it("retains the text and gives recovery guidance when repository work fails", async () => {
+  it.each([new Error("quota exceeded"), new PersistenceError("保存待ちの間にデータが更新されました。もう一度保存してください。")])("retains the text and gives recovery guidance when repository work fails: %s", async reason => {
     const repository = createRepository({
-      save: vi.fn().mockRejectedValue(new Error("quota exceeded")),
+      save: vi.fn().mockRejectedValue(reason),
     });
     const user = userEvent.setup();
     render(<QuickCapturePage repository={repository} />);

@@ -1,5 +1,6 @@
 import {
   backfillMissingNotifications,
+  updateSnapshot,
   type AppRepository,
 } from "../../../../../packages/domain/src";
 
@@ -26,12 +27,12 @@ export async function reconcileMissingNotifications(input: {
     now: savedAt,
   });
   if (!delivery) return false;
-  const latest = await input.repository.load();
-  const latestDelivery = backfillMissingNotifications({
-    snapshot: latest,
-    now: savedAt,
+  let repaired = false;
+  await updateSnapshot(input.repository, latest => {
+    const latestDelivery = backfillMissingNotifications({ snapshot: latest, now: savedAt });
+    if (!latestDelivery) return latest;
+    repaired = true;
+    return { ...latest, ...latestDelivery, savedAt };
   });
-  if (!latestDelivery) return false;
-  await input.repository.save({ ...latest, ...latestDelivery, savedAt });
-  return true;
+  return repaired;
 }

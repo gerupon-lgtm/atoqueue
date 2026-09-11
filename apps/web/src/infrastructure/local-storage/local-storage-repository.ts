@@ -56,7 +56,14 @@ export class LocalStorageRepository
   }
 
   private readCurrentSnapshot(): AppSnapshot {
-    const stored = this.storage.getItem(DATA_KEY);
+    let stored: string | null;
+    try {
+      stored = this.storage.getItem(DATA_KEY);
+    } catch (error) {
+      throw new PersistenceError("Unable to read application data.", {
+        cause: error,
+      });
+    }
     if (stored === null) {
       return createEmptySnapshot({
         appVersion: this.appVersion,
@@ -86,8 +93,18 @@ export class LocalStorageRepository
     next: AppSnapshot,
     options?: { replaceTempalist?: boolean },
   ): Promise<void> {
+    // Capture the baseline before waiting for Web Locks. A prepared full snapshot
+    // must not resurrect API state committed while its write was queued.
+    const baseline = options?.replaceTempalist
+      ? undefined
+      : this.readCurrentSnapshot();
     await this.runSnapshotWrite(() => {
       const latest = this.readCurrentSnapshot();
+      if (baseline && ordinaryState(baseline) !== ordinaryState(latest)) {
+        throw new PersistenceError(
+          "保存待ちの間に別の操作でデータが更新されました。入力内容を確認して、もう一度保存してください。",
+        );
+      }
       const tempalist = options?.replaceTempalist
         ? next.tempalist
         : latest.tempalist;
@@ -101,6 +118,29 @@ export class LocalStorageRepository
           ),
         },
       });
+    });
+  }
+
+  async updateSnapshot(
+    update: (latest: AppSnapshot) => AppSnapshot,
+  ): Promise<AppSnapshot> {
+    return this.runSnapshotWrite(() => {
+      const latest = this.readCurrentSnapshot();
+      const input = structuredClone(latest);
+      const next = update(input);
+      if (next === input) return latest;
+      const taskIds = new Set(next.tasks.map((task) => task.id));
+      const committed = migrateSnapshot({
+        ...next,
+        tempalist: {
+          ...latest.tempalist,
+          markers: latest.tempalist.markers.filter((marker) =>
+            taskIds.has(marker.taskId),
+          ),
+        },
+      });
+      this.writeValidatedSnapshot(committed);
+      return structuredClone(committed);
     });
   }
 
@@ -128,6 +168,7 @@ export class LocalStorageRepository
   private writeValidatedSnapshot(next: AppSnapshot): void {
     const serialized = JSON.stringify(migrateSnapshot(next));
     this.storage.setItem(DATA_KEY, serialized);
+    this.notifyCommittedChange();
   }
 
   private async runSnapshotWrite<T>(
@@ -135,15 +176,10 @@ export class LocalStorageRepository
     requireLock = false,
   ): Promise<T> {
     try {
-      const commit = () => {
-        const result = operation();
-        this.notifyCommittedChange();
-        return result;
-      };
       // Legacy task saves remain available when cross-tab exclusion is unsupported.
       if (!requireLock && !this.hasInjectedLock && !globalThis.navigator?.locks)
-        return commit();
-      return await this.writeLock.run(commit);
+        return operation();
+      return await this.writeLock.run(operation);
     } catch (error) {
       if (
         error instanceof CorruptDataError ||
@@ -212,6 +248,7 @@ export class LocalStorageRepository
     await this.runSnapshotWrite(() => {
       this.storage.removeItem(DATA_KEY);
       this.storage.removeItem(DRAFT_KEY);
+      this.notifyCommittedChange();
     });
   }
 
@@ -238,4 +275,15 @@ export class LocalStorageRepository
 
 function createDeviceId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `local-${Date.now()}`;
+}
+
+function ordinaryState(snapshot: AppSnapshot): string {
+  // savedAt also changes for tempalist-only commits; it is not business state.
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries(snapshot).filter(
+        ([key]) => key !== "tempalist" && key !== "savedAt",
+      ),
+    ),
+  );
 }

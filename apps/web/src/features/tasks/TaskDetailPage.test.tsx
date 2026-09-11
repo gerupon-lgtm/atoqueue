@@ -10,6 +10,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createEmptySnapshot,
+  PersistenceError,
   type AppRepository,
   type AppSnapshot,
 } from "../../../../../packages/domain/src";
@@ -380,6 +381,31 @@ describe("TaskDetailPage", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(
       "変更を保存できませんでした。もう一度お試しください。",
     );
+  });
+
+  it("keeps the edited title after a write-lock conflict and preserves notification completion on retry", async () => {
+    const { repository, snapshot } = repositoryWithTask();
+    snapshot().notificationOutbox.push({ id: "delivered-operation", operation: "cancel", reminderId: "delivered-reminder", taskRevision: 1, attemptCount: 0, nextAttemptAt: now, createdAt: now });
+    const originalSave = repository.save;
+    repository.save = vi.fn()
+      .mockImplementationOnce(async () => {
+        const completed = structuredClone(snapshot());
+        completed.notificationOutbox = [];
+        await originalSave(completed);
+        throw new PersistenceError("保存待ちの間にデータが更新されました。もう一度保存してください。");
+      })
+      .mockImplementation(originalSave);
+    render(<TaskDetailPage now={() => now} repository={repository} taskId="task-1" />);
+    const title = await screen.findByDisplayValue("牛乳を買う");
+    fireEvent.change(title, { target: { value: "牛乳と電池を買う" } });
+    fireEvent.click(screen.getByRole("button", { name: "内容を保存" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("もう一度");
+    expect(screen.getByDisplayValue("牛乳と電池を買う")).toBe(title);
+    expect(snapshot().tasks[0]!.title).toBe("牛乳を買う");
+    fireEvent.click(screen.getByRole("button", { name: "内容を保存" }));
+    await screen.findByText("内容を保存しました。");
+    expect(snapshot().tasks[0]!.title).toBe("牛乳と電池を買う");
+    expect(snapshot().notificationOutbox.some(item => item.id === "delivered-operation")).toBe(false);
   });
 
   it("NF-006 gives every primary detail action a 44px minimum touch target", async () => {

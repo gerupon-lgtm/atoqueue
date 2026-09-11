@@ -97,12 +97,13 @@ export function TaskDetailPage({
     setFeedback(undefined);
     try {
       const timestamp = now();
+      const latest = await repository.load();
       const next = modifyTask({
-        snapshot,
+        snapshot: latest,
         taskId,
         change,
         now: timestamp,
-        calendar: createReviewCalendar(snapshot.settings.timeZone),
+        calendar: createReviewCalendar(latest.settings.timeZone),
       });
       await repository.save(next);
       setSnapshot(next);

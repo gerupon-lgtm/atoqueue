@@ -4,6 +4,7 @@ import {
   notificationTypeForTask,
   planNotificationSchedules,
   nextGlobalRepeatAt,
+  updateSnapshot,
   type AppRepository,
   type AppSnapshot,
   type NotificationOutboxItem,
@@ -32,7 +33,10 @@ export async function flushOutbox({ repository, api, now = () => new Date().toIS
       ? { deviceId: current.device.pushDeviceId, deviceSecret: current.device.pushDeviceSecret }
       : undefined;
     if (!queued || !credentials || queued.nextAttemptAt > now()) continue;
-    if (isStale(queued, current)) { await persist(repository, discard(current, queued), now()); continue; }
+    if (isStale(queued, current)) {
+      await updateQueued(repository, queued.id, (latest, item) => isStale(item, latest) ? discard(latest, item) : latest, now());
+      continue;
+    }
     try {
       if (queued.operation === "upsert") await api.upsert(queued, credentials);
       else await api.cancel(queued, credentials);
@@ -83,13 +87,12 @@ export async function flushOutbox({ repository, api, now = () => new Date().toIS
 }
 
 async function updateQueued(repository: AppRepository, id: string, update: (snapshot: AppSnapshot, item: NotificationOutboxItem) => AppSnapshot, savedAt: string): Promise<void> {
-  const latest = await repository.load();
-  const item = latest.notificationOutbox.find((candidate) => candidate.id === id);
-  if (item) await persist(repository, update(latest, item), savedAt);
-}
-
-async function persist(repository: AppRepository, snapshot: AppSnapshot, savedAt: string): Promise<void> {
-  await repository.save({ ...snapshot, savedAt });
+  await updateSnapshot(repository, latest => {
+    const item = latest.notificationOutbox.find((candidate) => candidate.id === id);
+    if (!item) return latest;
+    const next = update(latest, item);
+    return next === latest ? latest : { ...next, savedAt };
+  });
 }
 
 function isStale(item: NotificationOutboxItem, snapshot: AppSnapshot): boolean {

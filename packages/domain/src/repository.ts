@@ -43,8 +43,27 @@ export interface AppRepository {
   /** Observe committed snapshot changes, never draft edits or failed writes. */
   subscribe?(listener: () => void): () => void;
   load(): Promise<AppSnapshot>;
-  save(next: AppSnapshot, options?: { replaceTempalist?: boolean }): Promise<void>;
+  save(
+    next: AppSnapshot,
+    options?: { replaceTempalist?: boolean },
+  ): Promise<void>;
+  /** Apply a pure synchronous transition inside the write lock; return input for no change. */
+  updateSnapshot?(
+    update: (latest: AppSnapshot) => AppSnapshot,
+  ): Promise<AppSnapshot>;
   loadDraft(): Promise<string>;
   saveDraft(value: string): Promise<void>;
   clearDraft(): Promise<void>;
+}
+
+/** Legacy adapters keep their synchronous-save behavior; browser persistence provides the lock. */
+export async function updateSnapshot(
+  repository: AppRepository,
+  update: (latest: AppSnapshot) => AppSnapshot,
+): Promise<AppSnapshot> {
+  if (repository.updateSnapshot) return repository.updateSnapshot(update);
+  const latest = await repository.load();
+  const next = update(latest);
+  if (next !== latest) await repository.save(next);
+  return next;
 }

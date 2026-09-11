@@ -1,6 +1,7 @@
 import {
   rebuildActiveTaskNotifications,
   rebuildGlobalNotificationSchedules,
+  updateSnapshot,
   type AppRepository,
 } from "../../../../../packages/domain/src";
 import type { PushSubscription } from "../../../../../packages/contracts/src";
@@ -114,34 +115,36 @@ export async function enableNotifications(input: {
 
   try {
     const savedAt = now();
-    const updated = {
-      ...snapshot,
-      device: {
-        ...snapshot.device,
-        pushSubscriptionStatus: "granted" as const,
-        ...(registered
-          ? {
-              pushDeviceId: registered.deviceId,
-              pushDeviceSecret: registered.deviceSecret,
-              registeredAt: registered.createdAt,
-            }
-          : {}),
-      },
-      settings: { ...snapshot.settings, notificationEnabled: true },
-      savedAt,
-    };
-    const taskDelivery = rebuildActiveTaskNotifications({
-      snapshot: updated,
-      now: savedAt,
+    await updateSnapshot(repository, snapshot => {
+      const updated = {
+        ...snapshot,
+        device: {
+          ...snapshot.device,
+          pushSubscriptionStatus: "granted" as const,
+          ...(registered
+            ? {
+                pushDeviceId: registered.deviceId,
+                pushDeviceSecret: registered.deviceSecret,
+                registeredAt: registered.createdAt,
+              }
+            : {}),
+        },
+        settings: { ...snapshot.settings, notificationEnabled: true },
+        savedAt,
+      };
+      const taskDelivery = rebuildActiveTaskNotifications({
+        snapshot: updated,
+        now: savedAt,
+      });
+      const captureDelivery = rebuildGlobalNotificationSchedules({
+        snapshot: { ...updated, ...taskDelivery },
+        now: savedAt,
+        // Explicit setup repairs reservations on the registered/re-enabled device.
+        // Ordinary startup and unchanged preferences must not force a rebuild.
+        force: true,
+      });
+      return { ...updated, ...captureDelivery };
     });
-    const captureDelivery = rebuildGlobalNotificationSchedules({
-      snapshot: { ...updated, ...taskDelivery },
-      now: savedAt,
-      // Explicit setup repairs reservations on the registered/re-enabled device.
-      // Ordinary startup and unchanged preferences must not force a rebuild.
-      force: true,
-    });
-    await repository.save({ ...updated, ...captureDelivery });
     return { state: "granted" };
   } catch {
     return { state: "error", reason: "storage" };
@@ -172,23 +175,21 @@ async function saveSetupFailure(
 }
 
 async function saveSetupError(repository: AppRepository): Promise<void> {
-  const snapshot = await repository.load();
-  await repository.save({
+  await updateSnapshot(repository, snapshot => ({
     ...snapshot,
     settings: { ...snapshot.settings, notificationEnabled: false },
-  });
+  }));
 }
 
 async function saveState(
   repository: AppRepository,
   state: "denied" | "unavailable",
 ): Promise<NotificationSetupResult> {
-  const snapshot = await repository.load();
-  await repository.save({
+  await updateSnapshot(repository, snapshot => ({
     ...snapshot,
     device: { ...snapshot.device, pushSubscriptionStatus: state },
     settings: { ...snapshot.settings, notificationEnabled: false },
-  });
+  }));
   return { state };
 }
 
