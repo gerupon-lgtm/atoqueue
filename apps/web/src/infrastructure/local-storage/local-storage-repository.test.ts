@@ -31,11 +31,11 @@ function repositoryContract(
   describe(_name, () => {
     afterEach(() => window.localStorage.clear());
 
-    it("returns an empty version 10 snapshot when storage is missing", async () => {
+    it("returns an empty version 11 snapshot when storage is missing", async () => {
       const snapshot = await createRepository().load();
 
       expect(snapshot).toMatchObject({
-        schemaVersion: 10,
+        schemaVersion: 11,
         captures: [],
         tasks: [],
         actionHistory: [],
@@ -99,7 +99,7 @@ function repositoryContract(
     });
 
     it("rejects a future schema version without overwriting it", async () => {
-      const stored = JSON.stringify({ schemaVersion: 11 });
+      const stored = JSON.stringify({ schemaVersion: 12 });
       window.localStorage.setItem(DATA_KEY, stored);
 
       await expect(createRepository().load()).rejects.toBeInstanceOf(
@@ -152,7 +152,7 @@ describe("LocalStorageRepository persistence failures", () => {
   });
 
   it("preserves an unknown existing schema version when save is attempted", async () => {
-    const existing = JSON.stringify({ schemaVersion: 11 });
+    const existing = JSON.stringify({ schemaVersion: 12 });
     window.localStorage.setItem(DATA_KEY, existing);
 
     await expect(
@@ -310,7 +310,7 @@ describe("F-003 committed snapshot observation", () => {
     const repository = new LocalStorageRepository(window.localStorage);
     const unsubscribe = repository.subscribe(() => { throw new Error("display failure"); });
     await expect(repository.save(sampleSnapshot())).resolves.toBeUndefined();
-    expect((await repository.load()).schemaVersion).toBe(10);
+    expect((await repository.load()).schemaVersion).toBe(11);
     unsubscribe();
   });
 
@@ -331,7 +331,7 @@ describe("F-003 committed snapshot observation", () => {
 
 function sampleSnapshot(): AppSnapshot {
   return {
-    schemaVersion: 10,
+    schemaVersion: 11,
     appVersion: "0.1.0",
     device: {
       localDeviceId: "device-1",
@@ -357,6 +357,7 @@ function sampleSnapshot(): AppSnapshot {
     actionHistory: [],
     notificationOutbox: [],
     reminderMap: [],
+    tempalist: { lastRequest: null, markers: [] },
     savedAt: "2026-08-03T00:00:00.000Z",
   };
 }

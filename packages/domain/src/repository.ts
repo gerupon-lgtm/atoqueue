@@ -1,4 +1,5 @@
 import type { AppSnapshot } from "./model";
+import { emptyTempalistState } from "./tempalist-transfer";
 
 export function createEmptySnapshot(params: {
   appVersion: string;
@@ -7,7 +8,7 @@ export function createEmptySnapshot(params: {
   now: string;
 }): AppSnapshot {
   return {
-    schemaVersion: 10,
+    schemaVersion: 11,
     appVersion: params.appVersion,
     device: {
       localDeviceId: params.localDeviceId,
@@ -33,6 +34,7 @@ export function createEmptySnapshot(params: {
     actionHistory: [],
     notificationOutbox: [],
     reminderMap: [],
+    tempalist: emptyTempalistState(),
     savedAt: params.now,
   };
 }
@@ -41,7 +43,7 @@ export interface AppRepository {
   /** Observe committed snapshot changes, never draft edits or failed writes. */
   subscribe?(listener: () => void): () => void;
   load(): Promise<AppSnapshot>;
-  save(next: AppSnapshot): Promise<void>;
+  save(next: AppSnapshot, options?: { replaceTempalist?: boolean }): Promise<void>;
   loadDraft(): Promise<string>;
   saveDraft(value: string): Promise<void>;
   clearDraft(): Promise<void>;

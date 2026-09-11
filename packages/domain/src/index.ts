@@ -1,4 +1,4 @@
-export const DOMAIN_SCHEMA_VERSION = 9 as const;
+export const DOMAIN_SCHEMA_VERSION = 11 as const;
 
 export * from "./errors";
 export * from "./backup";
@@ -20,3 +20,4 @@ export * from "./task-actions";
 export * from "./task-categories";
 export * from "./task-query";
 export * from "./tempalist-link";
+export * from "./tempalist-transfer";

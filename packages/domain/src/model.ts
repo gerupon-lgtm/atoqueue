@@ -1,5 +1,7 @@
+import type { TempalistState } from "./tempalist-transfer";
+
 export interface AppSnapshot {
-  schemaVersion: 10;
+  schemaVersion: 11;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -9,6 +11,7 @@ export interface AppSnapshot {
   actionHistory: ActionEvent[];
   notificationOutbox: NotificationOutboxItem[];
   reminderMap: ReminderMapEntry[];
+  tempalist: TempalistState;
   savedAt: string;
 }
 

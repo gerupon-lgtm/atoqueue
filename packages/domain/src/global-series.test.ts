@@ -36,7 +36,7 @@ describe("F-014 persistent global reminder series", () => {
     const original = fixture();
     const legacy = { ...original, schemaVersion: 9, reminderMap: [{ reminderId: "registered", scope: "inbox", kind: "capture_initial", taskRevision: 0, createdAt: now }] };
     const migrated = migrateSnapshot(legacy);
-    expect(migrated.schemaVersion).toBe(10);
+    expect(migrated.schemaVersion).toBe(11);
     expect(migrated.captures).toEqual(original.captures);
     expect(migrated.settings).toEqual(original.settings);
     const next = rebuildGlobalNotificationSchedules({ snapshot: migrated, now: "2026-09-01T10:00:00.000Z" });

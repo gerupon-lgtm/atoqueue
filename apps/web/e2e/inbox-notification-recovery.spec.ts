@@ -23,7 +23,7 @@ test("v9 registered inbox reminders survive migration, unchanged settings saves,
     await page.getByRole("button", { name: "通知タイミングを保存", exact: true }).click();
     await expect(page.getByText("通知タイミングを保存しました。", { exact: true })).toBeVisible();
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("atoqueue:data:v1")!));
-    expect(saved.schemaVersion).toBe(10);
+    expect(saved.schemaVersion).toBe(11);
     expect(saved.captures).toEqual(original.captures);
     expect(saved.settings.initialReminderDelayMinutes).toBe(60);
     expect(saved.notificationOutbox).toEqual([]);

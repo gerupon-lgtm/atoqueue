@@ -2,6 +2,7 @@ import { CorruptDataError, UnsupportedSchemaVersionError } from "./errors";
 import { validateCustomTaskCategories } from "./task-categories";
 import { globalNotificationSeriesKey } from "./global-notification-series";
 import type { AppSnapshot } from "./model";
+import { emptyTempalistState, validateTempalistState } from "./tempalist-transfer";
 
 type RecordValue = Record<string, unknown>;
 
@@ -68,13 +69,13 @@ export function migrateSnapshot(input: unknown): AppSnapshot {
     validateSnapshot(snapshot, true, true, true);
     return normalizeSnapshot(upgradeV8ToV9(snapshot));
   }
-  if (version === 9 || version === 10) {
+  if (version === 9 || version === 10 || version === 11) {
     validateSnapshot(snapshot, true, true, true, true);
     return normalizeSnapshot(snapshot);
   }
   if (typeof version === "number")
     throw new UnsupportedSchemaVersionError(version);
-  throw corrupt("schemaVersion must be 1, 2, 3, 4, 5, 6, 7, 8, 9, or 10");
+  throw corrupt("schemaVersion must be 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, or 11");
 }
 
 function validateSnapshot(
@@ -253,7 +254,10 @@ function normalizeSnapshot(snapshot: RecordValue): AppSnapshot {
       return seriesKey ? { ...entry, seriesKey } : entry;
     });
   }
-  result.schemaVersion = 10;
+  result.tempalist = snapshot.schemaVersion === 11
+    ? validateTempalistState(snapshot.tempalist)
+    : emptyTempalistState();
+  result.schemaVersion = 11;
   return result;
 }
 

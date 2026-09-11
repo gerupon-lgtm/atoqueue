@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { prepareTempalistRequest } from "./tempalist-transfer";
 import {
   createBackup,
   createEmptySnapshot,
@@ -96,6 +97,41 @@ function snapshot(): AppSnapshot {
 }
 
 describe("local backup", () => {
+  it("F-020 exports only markers and clears retry data on restore", async () => {
+    const original = snapshot();
+    const request = prepareTempalistRequest({ snapshot: original, draft: { title: "買い物", tasks: original.tasks.map(({ id, title, revision }) => ({ id, title, revision })) }, requestId: captureId, now });
+    original.tempalist = { lastRequest: request, markers: [{ taskId, requestId: captureId, lastOpenedAt: now }] };
+    const json = await createBackup(original);
+    expect(JSON.parse(json).payload.tempalist).toEqual({ markers: original.tempalist.markers });
+    expect(json).not.toContain("lastRequest");
+    expect(json).not.toContain(request.url);
+    const restored = await restoreBackup({ current: original, serialized: json, now });
+    expect(restored.tempalist).toEqual({ lastRequest: null, markers: original.tempalist.markers });
+    expect(original.tempalist.lastRequest).toEqual(request);
+  });
+
+  it.each(["missing", "foreign-task", "invalid-date", "duplicate", "retry-injected"])("F-020 rejects backup metadata: %s", async reason => {
+    const original = snapshot();
+    const marker = { taskId, requestId: captureId, lastOpenedAt: now };
+    original.tempalist = { lastRequest: null, markers: [marker] };
+    const document = JSON.parse(await createBackup(original));
+    if (reason === "missing") delete document.payload.tempalist;
+    if (reason === "foreign-task") document.payload.tempalist.markers[0].taskId = localDeviceId;
+    if (reason === "invalid-date") document.payload.tempalist.markers[0].lastOpenedAt = "bad";
+    if (reason === "duplicate") document.payload.tempalist.markers.push(marker);
+    if (reason === "retry-injected") document.payload.tempalist.lastRequest = { url: "bad" };
+    await expect(inspectBackup(await signedBackup(document))).rejects.toThrow();
+  });
+
+  it("F-020 restores schema 10 backups with no transfer history or retry data", async () => {
+    const original = snapshot();
+    const document = JSON.parse(await createBackup(original));
+    document.payload.schemaVersion = 10;
+    delete document.payload.tempalist;
+    const restored = await restoreBackup({ current: original, serialized: await signedBackup(document), now });
+    expect(restored.schemaVersion).toBe(11);
+    expect(restored.tempalist).toEqual({ lastRequest: null, markers: [] });
+  });
   it("F-017 round-trips user data while excluding push credentials and notification delivery state", async () => {
     const original = snapshot();
     const backup = await createBackup(original, "2026-08-04T10:00:00.000Z");
@@ -414,3 +450,19 @@ describe("local backup", () => {
     ).toHaveLength(1);
   });
 });
+
+async function signedBackup(document: Record<string, unknown>): Promise<string> {
+  const unsigned = { ...document };
+  delete unsigned.checksum;
+  const canonical = (value: unknown): string => {
+    if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+    if (value !== null && typeof value === "object") {
+      const record = value as Record<string, unknown>;
+      return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${canonical(record[key])}`).join(",")}}`;
+    }
+    return JSON.stringify(value);
+  };
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical(unsigned)));
+  const checksum = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+  return JSON.stringify({ ...unsigned, checksum });
+}

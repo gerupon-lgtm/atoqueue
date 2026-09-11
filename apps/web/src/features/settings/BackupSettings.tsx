@@ -121,7 +121,7 @@ export function BackupSettings({
         serialized,
         now: now(),
       });
-      await repository.save(restored);
+      await repository.save(restored, { replaceTempalist: true });
       setCurrent(restored);
       setInspection(undefined);
       setSerialized(undefined);

@@ -2,12 +2,19 @@ import {
   CorruptDataError,
   createEmptySnapshot,
   migrateSnapshot,
+  validateTempalistState,
   PersistenceError,
   UnsupportedSchemaVersionError,
   type AppRepository,
   type AppSnapshot,
+  type TempalistState,
 } from "../../../../../packages/domain/src/index";
 import { APP_VERSION } from "../../app-version";
+import type { TempalistRepository } from "../../application/tempalist-repository";
+import {
+  BrowserSnapshotWriteLock,
+  type SnapshotWriteLock,
+} from "./snapshot-write-lock";
 
 const DATA_KEY = "atoqueue:data:v1";
 const DRAFT_KEY = "atoqueue:draft:v1";
@@ -17,14 +24,19 @@ export interface LocalStorageRepositoryOptions {
   localDeviceId?: string;
   now?: () => string;
   timeZone?: string;
+  writeLock?: SnapshotWriteLock;
 }
 
-export class LocalStorageRepository implements AppRepository {
+export class LocalStorageRepository
+  implements AppRepository, TempalistRepository
+{
   private readonly listeners = new Set<() => void>();
   private readonly appVersion: string;
   private readonly localDeviceId: string;
   private readonly now: () => string;
   private readonly timeZone: string;
+  private readonly writeLock: SnapshotWriteLock;
+  private readonly hasInjectedLock: boolean;
 
   constructor(
     private readonly storage: Storage,
@@ -33,10 +45,17 @@ export class LocalStorageRepository implements AppRepository {
     this.appVersion = options.appVersion ?? APP_VERSION;
     this.localDeviceId = options.localDeviceId ?? createDeviceId();
     this.now = options.now ?? (() => new Date().toISOString());
-    this.timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    this.timeZone =
+      options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    this.writeLock = options.writeLock ?? new BrowserSnapshotWriteLock();
+    this.hasInjectedLock = options.writeLock !== undefined;
   }
 
   async load(): Promise<AppSnapshot> {
+    return this.readCurrentSnapshot();
+  }
+
+  private readCurrentSnapshot(): AppSnapshot {
     const stored = this.storage.getItem(DATA_KEY);
     if (stored === null) {
       return createEmptySnapshot({
@@ -63,30 +82,89 @@ export class LocalStorageRepository implements AppRepository {
     }
   }
 
-  async save(next: AppSnapshot): Promise<void> {
+  async save(
+    next: AppSnapshot,
+    options?: { replaceTempalist?: boolean },
+  ): Promise<void> {
+    await this.runSnapshotWrite(() => {
+      const latest = this.readCurrentSnapshot();
+      const tempalist = options?.replaceTempalist
+        ? next.tempalist
+        : latest.tempalist;
+      const taskIds = new Set(next.tasks.map((task) => task.id));
+      this.writeValidatedSnapshot({
+        ...next,
+        tempalist: {
+          ...tempalist,
+          markers: tempalist.markers.filter((marker) =>
+            taskIds.has(marker.taskId),
+          ),
+        },
+      });
+    });
+  }
+
+  async updateTempalist(
+    update: (latest: AppSnapshot) => TempalistState,
+  ): Promise<TempalistState> {
+    return this.runSnapshotWrite(() => {
+      const latest = this.readCurrentSnapshot();
+      const tempalist = validateTempalistState(update(structuredClone(latest)));
+      const taskIds = new Set(latest.tasks.map((task) => task.id));
+      if (tempalist.markers.some((marker) => !taskIds.has(marker.taskId))) {
+        throw new CorruptDataError(
+          "Tempalist marker references an unknown task.",
+        );
+      }
+      this.writeValidatedSnapshot({
+        ...latest,
+        tempalist,
+        savedAt: this.now(),
+      });
+      return structuredClone(tempalist);
+    }, true);
+  }
+
+  private writeValidatedSnapshot(next: AppSnapshot): void {
+    const serialized = JSON.stringify(migrateSnapshot(next));
+    this.storage.setItem(DATA_KEY, serialized);
+  }
+
+  private async runSnapshotWrite<T>(
+    operation: () => T,
+    requireLock = false,
+  ): Promise<T> {
     try {
-      const existing = this.storage.getItem(DATA_KEY);
-      if (existing !== null) this.parseStoredSnapshot(existing);
-      const serialized = JSON.stringify(migrateSnapshot(next));
-      this.storage.setItem(DATA_KEY, serialized);
+      const commit = () => {
+        const result = operation();
+        this.notifyCommittedChange();
+        return result;
+      };
+      // Legacy task saves remain available when cross-tab exclusion is unsupported.
+      if (!requireLock && !this.hasInjectedLock && !globalThis.navigator?.locks)
+        return commit();
+      return await this.writeLock.run(commit);
     } catch (error) {
       if (
         error instanceof CorruptDataError ||
-        error instanceof UnsupportedSchemaVersionError
-      ) {
+        error instanceof UnsupportedSchemaVersionError ||
+        error instanceof PersistenceError
+      )
         throw error;
-      }
       throw new PersistenceError("Unable to persist application data.", {
         cause: error,
       });
     }
-    this.notifyCommittedChange();
   }
 
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     const onStorage = (event: StorageEvent) => {
-      if (event.storageArea === this.storage && (event.key === DATA_KEY || event.key === null)) listener();
+      if (
+        event.storageArea === this.storage &&
+        (event.key === DATA_KEY || event.key === null)
+      )
+        listener();
     };
     window.addEventListener("storage", onStorage);
     return () => {
@@ -113,7 +191,9 @@ export class LocalStorageRepository implements AppRepository {
     try {
       this.storage.setItem(DRAFT_KEY, value);
     } catch (error) {
-      throw new PersistenceError("Unable to persist draft data.", { cause: error });
+      throw new PersistenceError("Unable to persist draft data.", {
+        cause: error,
+      });
     }
   }
 
@@ -121,21 +201,18 @@ export class LocalStorageRepository implements AppRepository {
     try {
       this.storage.removeItem(DRAFT_KEY);
     } catch (error) {
-      throw new PersistenceError("Unable to clear draft data.", { cause: error });
+      throw new PersistenceError("Unable to clear draft data.", {
+        cause: error,
+      });
     }
   }
 
   /** Removes every key owned by this application; unrelated site storage survives. */
   async clearAppData(): Promise<void> {
-    try {
+    await this.runSnapshotWrite(() => {
       this.storage.removeItem(DATA_KEY);
       this.storage.removeItem(DRAFT_KEY);
-    } catch (error) {
-      throw new PersistenceError("Unable to clear application data.", {
-        cause: error,
-      });
-    }
-    this.notifyCommittedChange();
+    });
   }
 
   private backUpCorruptValue(value: string): void {

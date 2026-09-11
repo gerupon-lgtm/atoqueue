@@ -215,6 +215,8 @@ export function buildTempalistUrl(value: unknown): string {
 
 ## Task 2: 確定内容・連携履歴とschema移行
 
+実行時補足（2026-09-11）: Task 2とTask 3は同じ保存処理の実装・レビュー単位で進める。schema 11だけを先に必須化すると、連携領域を含めない既存バックアップの復元処理が不整合になるため。機能範囲と確認項目は両Taskの記載どおり維持する。
+
 **Files:**
 
 - Create: `packages/domain/src/tempalist-transfer.ts`

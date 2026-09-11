@@ -1,6 +1,8 @@
 import { CorruptDataError } from "./errors";
 import { createLocalCalendar } from "./due-date";
 import { migrateSnapshot } from "./migrations";
+import type { TempalistMarker, TempalistState } from "./tempalist-transfer";
+import { emptyTempalistState, validateTempalistState } from "./tempalist-transfer";
 import { calculateNextReview } from "./reminder-policy";
 import {
   rebuildGlobalNotificationSchedules,
@@ -28,6 +30,7 @@ export interface BackupData {
   tasks: AppSnapshot["tasks"];
   reviewSessions: AppSnapshot["reviewSessions"];
   actionHistory: AppSnapshot["actionHistory"];
+  tempalist: { markers: TempalistMarker[] };
   savedAt: string;
 }
 
@@ -73,6 +76,7 @@ export async function createBackup(
     tasks: snapshot.tasks,
     reviewSessions: snapshot.reviewSessions,
     actionHistory: snapshot.actionHistory,
+    tempalist: { markers: snapshot.tempalist.markers },
     savedAt: snapshot.savedAt,
   };
   const unsigned = {
@@ -202,6 +206,7 @@ function validateData(data: BackupData): void {
   // Reuse the storage schema validator, with intentionally blank non-portable state.
   const snapshot = migrateSnapshot({
     ...data,
+    tempalist: transferStateFromBackup(data),
     device: {
       localDeviceId: "backup-validation",
       pushSubscriptionStatus: "not_requested",
@@ -227,10 +232,19 @@ function snapshotFromData(
 ): AppSnapshot {
   return migrateSnapshot({
     ...data,
+    tempalist: transferStateFromBackup(data),
     device,
     notificationOutbox: [],
     reminderMap: [],
   });
+}
+
+function transferStateFromBackup(data: BackupData): TempalistState {
+  if (data.schemaVersion !== 11) return emptyTempalistState();
+  if (!isRecord(data.tempalist) || Object.keys(data.tempalist).length !== 1 || !Object.hasOwn(data.tempalist, "markers")) {
+    throw new CorruptDataError("Backup transfer data must contain only markers.");
+  }
+  return validateTempalistState({ lastRequest: null, markers: data.tempalist.markers });
 }
 
 function validateReferences(snapshot: AppSnapshot): void {
@@ -241,6 +255,9 @@ function validateReferences(snapshot: AppSnapshot): void {
   validateUtcTimestamp(snapshot.savedAt, "Backup saved time");
   const captureIds = new Set(snapshot.captures.map((capture) => capture.id));
   const taskIds = new Set(snapshot.tasks.map((task) => task.id));
+  for (const marker of snapshot.tempalist.markers) {
+    if (!taskIds.has(marker.taskId)) throw new CorruptDataError("Backup transfer marker references an unknown task.");
+  }
   const actionIds = new Set(snapshot.actionHistory.map((event) => event.id));
   snapshot.captures.forEach((capture) => assertUuid(capture.id, "Capture ID"));
   snapshot.tasks.forEach((task) => assertUuid(task.id, "Task ID"));

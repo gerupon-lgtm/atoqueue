@@ -72,6 +72,10 @@ describe("BackupSettings", () => {
       }),
     );
     await waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1));
+    expect(repository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ tempalist: { lastRequest: null, markers: [] } }),
+      { replaceTempalist: true },
+    );
     expect(screen.getByRole("status").textContent).toBe(
       "データを復元しました。通知への反映も完了しました。",
     );

@@ -15,7 +15,7 @@
 
 | キー                | 内容               | 更新単位              | 対応要件                                                                            |
 | ------------------- | ------------------ | --------------------- | ----------------------------------------------------------------------------------- |
-| `atoqueue:data:v1`  | `AppSnapshot` 全体 | 1操作ごとの一括保存   | F-003,F-004,F-005,F-006,F-007,F-008,F-009,F-010,F-011,F-012,F-014,F-015,F-016,F-017 |
+| `atoqueue:data:v1`  | `AppSnapshot` 全体 | 1操作ごとの一括保存   | F-003,F-004,F-005,F-006,F-007,F-008,F-009,F-010,F-011,F-012,F-014,F-015,F-016,F-017,F-020 |
 | `atoqueue:draft:v1` | 入力途中の一文     | 入力後300msの遅延保存 | F-002,F-003                                                                         |
 
 1つのスナップショットとして保存し、関連データ間の不整合を避ける。保存前にメモリ上で次状態を完成させ、`localStorage.setItem` を1回だけ呼ぶ。保存失敗時は旧状態を保持し、画面に復旧可能なエラーを表示する。
@@ -40,7 +40,7 @@
 
 ```ts
 export interface AppSnapshot {
-  schemaVersion: 10;
+  schemaVersion: 11;
   appVersion: string;
   device: DeviceState;
   settings: Settings;
@@ -50,9 +50,18 @@ export interface AppSnapshot {
   actionHistory: ActionEvent[];
   notificationOutbox: NotificationOutboxItem[];
   reminderMap: ReminderMapEntry[];
+  tempalist: TempalistState;
   savedAt: string;
 }
 ```
+
+### 3.1.1 テンパリスト連携状態（F-020）
+
+`tempalist` は `{ lastRequest, markers }` とする。`lastRequest` は直前1操作の確定payload・完成URL・UTC確定日時（`preparedAt`）、または `null`。`markers` は `{ taskId, requestId, lastOpenedAt }` の配列で、Task IDごとに1件だけ保持する。`requestId` は小文字UUID v4、日時は正規のISO 8601 UTC表記とする。確定URLは固定Origin・契約・8000文字以内・payloadから生成したURLとの完全一致を保存時と読込時に検証する。
+
+確定内容は元TaskのID・タイトル・revisionを最新Snapshotと照合してコピーする。以後のTask編集では直前payloadを書き換えず、再試行は同じURLを使う。開く操作の記録は対象の現存Taskだけを更新し、古い操作で新しい `lastRequest` を巻き戻さない。これは受信成功を意味せず、Task・Capture・通知Outbox・reminderMap・通知資格情報は変更しない。
+
+通常保存、連携更新、明示復元、端末データ削除は同一OriginのWeb Lock `atoqueue:snapshot-write` を使う。ロック内の読込→検証→変換→書込は同期処理とし、通常保存は保存済みの最新連携領域を保持する。連携専用更新は最新Snapshotを読み直して連携領域だけを書き換える。Taskの完全削除では表示マーカーだけを整理し、直前の確定内容は維持する。Web Locks非対応では連携更新を明示的なエラーにし、既存のタスク保存は継続可能とする。
 
 ### 3.2 DeviceState / Settings
 
@@ -400,15 +409,17 @@ export interface BackupEnvelopeV1 {
   appVersion: string;
   payload: Omit<
     AppSnapshot,
-    "device" | "notificationOutbox" | "reminderMap"
+    "device" | "notificationOutbox" | "reminderMap" | "tempalist"
   > & {
     device: Pick<DeviceState, "localDeviceId">;
+    tempalist: { markers: TempalistMarker[] };
   };
   checksum: string;
 }
 ```
 
 - Push購読情報、端末シークレット、通知送信待ちは出力しない。
+- テンパリスト連携はTaskごとの開く操作履歴（`markers`）だけを含める。直前payload・URLは出力せず、復元時は `lastRequest: null` へ戻す。schema 11の履歴領域欠落、不正日時、Task ID重複、存在しないTaskへのマーカーは拒否する。schema 10以前のバックアップだけは空履歴で移行する。明示復元は `save(restored, { replaceTempalist: true })` で連携履歴を置換する。
 - 復元前に形式、バージョン、チェックサム、各エンティティの制約を検証する。
 - 復元は既存データを置き換えるため、件数差分を表示して明示確認を取る。
 - 追加カテゴリを含む設定はバックアップ対象とする。
@@ -427,6 +438,7 @@ export interface BackupEnvelopeV1 {
    - v7 → v8: `customTaskCategories` を空配列で補い、Taskのカテゴリをプリセット限定型から文字列へ拡張する。既存Taskのカテゴリ値は保持する。
    - v8 → v9: `overdueTaskReminderFrequency` を `gentle` で補う。既存の繰り返しOutboxにある `repeatCadence` は保持する。
    - v9 → v10: 既存の全体予約に、現在の最古Capture作成日時・関連する通知設定から `seriesKey` を付ける。予約ID・Outbox・利用者データは変更しない。Outbox送信成功後もこの識別情報を保持し、無変更の再計算による予約の再作成を防ぐ。
+   - v10 → v11: `tempalist: { lastRequest: null, markers: [] }` を追加する。v1〜v10に混入した未検証の連携フィールドは引き継がない。v11では連携領域を必須検証し、破損値を空状態へ置換しない。
 2. 新しい未知バージョンは上書きせず、読み取り停止とJSON退避を案内する。
 3. JSON解析失敗時は破損値を別キー `atoqueue:corrupt:<timestamp>` へ退避して初期化可否を確認する。
 4. 破損復旧や復元では元データを直ちに削除しない。
@@ -440,6 +452,7 @@ export interface BackupEnvelopeV1 {
 | 期限、再確認       | F-006,F-007,F-008,F-009,F-010,F-011                    |
 | 今日の確認         | F-012,F-013,F-014,F-015                                |
 | 履歴、バックアップ | F-016,F-017,NF-006,NF-008                              |
+| テンパリスト連携履歴・再試行 | F-020,F-003,F-017,NF-006,NF-013 |
 | 通知サーバー       | F-013,NF-003,NF-004,NF-005,NF-007,NF-009,NF-010,NF-013 |
 
 ## 9. 要確認事項
