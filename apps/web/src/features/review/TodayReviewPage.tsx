@@ -68,6 +68,7 @@ export function TodayReviewPage({
     void (async () => {
       try {
         const loaded = await repository.load();
+        if (!active) return;
         const selectedCalendar =
           reviewCalendar ?? createReviewCalendar(loaded.settings.timeZone);
         const timestamp = now();

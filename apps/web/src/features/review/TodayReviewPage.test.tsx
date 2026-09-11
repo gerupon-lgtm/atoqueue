@@ -7,7 +7,8 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { StrictMode } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   answerReview,
   createEmptySnapshot,
@@ -19,6 +20,8 @@ import {
   type Task,
 } from "../../../../../packages/domain/src";
 import { TodayReviewPage } from "./TodayReviewPage";
+import { LocalStorageRepository } from "../../infrastructure/local-storage/local-storage-repository";
+import type { SnapshotWriteLock } from "../../infrastructure/local-storage/snapshot-write-lock";
 
 const now = "2026-08-03T09:00:00.000Z";
 const calendar: ReviewCalendar = {
@@ -101,6 +104,46 @@ function repositoryWithSnapshot(initial: AppSnapshot): AppRepository {
 
 describe("TodayReviewPage", () => {
   afterEach(cleanup);
+
+  it("F-003 F-009 initializes one durable session under StrictMode with asynchronous serialized writes", async () => {
+    const storage = window.sessionStorage;
+    storage.clear();
+    let queue = Promise.resolve();
+    const writeLock: SnapshotWriteLock = {
+      run<T>(operation: () => T): Promise<T> {
+        const result = queue.then(operation);
+        queue = result.then(() => undefined, () => undefined);
+        return result;
+      },
+    };
+    const repository = new LocalStorageRepository(storage, {
+      writeLock,
+      now: () => now,
+      localDeviceId: "device-1",
+      timeZone: "UTC",
+    });
+    await repository.save({ ...(await repository.load()), tasks: [task("one")] });
+    const save = vi.spyOn(repository, "save");
+    const createId = vi.fn(() => "strict-session");
+    try {
+      render(
+        <StrictMode>
+          <TodayReviewPage calendar={calendar} now={() => now} repository={repository} createId={createId} />
+        </StrictMode>,
+      );
+      await screen.findByText("タスク one");
+      expect(screen.queryByRole("alert")).toBeNull();
+      const stored = await repository.load();
+      expect(stored.reviewSessions).toHaveLength(1);
+      expect(stored.reviewSessions[0]?.id).toBe("strict-session");
+      expect(stored.reviewSessions[0]?.orderedTaskIds).toEqual(["one"]);
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(createId).toHaveBeenCalledTimes(1);
+    } finally {
+      save.mockRestore();
+      storage.clear();
+    }
+  });
 
   it.each(["complete", "archive"] as const)("F-010 shows the current active state after a reviewed %s is reopened elsewhere", async (answer) => {
     const repository = repositoryWithSession([task("one"), task("two")]);

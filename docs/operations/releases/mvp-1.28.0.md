@@ -17,7 +17,7 @@ Windows / Node.js 24.18.0 / pnpm 10.20.0 / Chromium。分離worktree `task/tempa
 
 | ゲート | 結果 | 終了コード |
 | --- | --- | --- |
-| 単体・結合（全5プロジェクト、18バッチ） | 80ファイル・751件成功、skip 0 | 全バッチ0 |
+| 単体・結合（全5プロジェクト、18バッチ） | 最終修正後80ファイル・752件成功、skip 0 | 全バッチ0 |
 | Chromium E2E（4バッチ） | 17ファイル・55件成功、skip 0 | 最終各バッチ0 |
 | ESLint | 全体成功 | 0 |
 | 型検査 | 全5ワークスペース成功 | 0 |
@@ -48,6 +48,16 @@ E2Eは `ATOQUEUE_E2E_PORT=4189` と既存の `PLAYWRIGHT_BROWSERS_PATH` を指�
 - `dist/task-7-targeted-bottom/tempalist-transfer-NF-006--5b983-mation-by-keyboard-at-320px/tempalist-keyboard-320x450.png`
 
 全バッチの実コマンド・ファイル一覧・終了コード・ログはローカルの `dist/task-7-gates/{unit,e2e,e2e-retry}/results.json` と同階層のログへ保存。作業報告は `.superpowers/sdd/2026-09-11-tempalist-checklist-link/task-7-report.md`。これらと画像はGit管理外のローカル成果物。
+
+## 最終レビュー修正と再検証（2026-09-11）
+
+対象要件: F-003、F-009、F-020。StrictModeによる「今日の確認」の初期effect再実行で、キャンセル済みeffectが保存し、後続の有効なeffectの保存が競合エラーになる回帰を修正した。`repository.load()` の直後にキャンセル判定を置き、共通Web Lock・通常保存の競合検出は維持した。
+
+実際の `LocalStorageRepository` とブラウザStorage、非同期に直列化するテスト用ロックを使うStrictMode回帰テストを追加した。修正前は18件中1件が読込エラー表示で失敗（終了1）。修正後はタスク表示、エラーなし、永続化セッション1件、初期化の保存1回を確認し、関連5ファイル62件が成功（終了0）した。要件書の版数を既存改訂履歴の2.1に揃え、T-016の状態をローカル自動検証済みへ更新した。同じ未公開機能の修正として1.28.0を維持する。
+
+修正後に全5ワークスペース型検査・build、全体ESLint、単体・結合80ファイル752件（18バッチ）、E2E17ファイル55件（4バッチ、今日の確認・連携を含む全件）、配置成果物検査、配置スクリプト2件を再実行し、すべて終了0。今回の全件実行は再試行なし・skip 0。API95件はメモリ/SQL fixtureであり実PostgreSQL試験は未実施。新しいWeb bundleは507.68 kBで既存のサイズ警告が継続する。
+
+全件コマンドは `node dist/task-7-verify.mjs unit 1 final-fix-unit` と `node dist/task-7-verify.mjs e2e 1 final-fix-e2e`。最大5ファイル・1workerの直列実行で、展開済みコマンド・件数・終了コードは `dist/task-7-gates/final-fix-unit/` と `dist/task-7-gates/final-fix-e2e/` のログとresults.jsonへ保存した。E2Eは再build後の専用4189 previewに対して実行し、終了後はそのPIDだけを停止した。詳細はGit管理外の `.superpowers/sdd/2026-09-11-tempalist-checklist-link/final-fix-report.md`。
 
 ## 完了範囲と公開前に必要な確認
 
