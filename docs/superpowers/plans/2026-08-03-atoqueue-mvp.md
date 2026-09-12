@@ -1603,3 +1603,10 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 - 通知設定未処理の既存ガードを維持し、初回案内中にはキーボードを自動表示しない。
 - 未解決の `repository.load()` と `repository.loadDraft()` を使う `QuickCapturePage` 公開UIテストで、同期判定が処理済みならマウント直後にフォーカスとVirtual Keyboard APIの一回の表示要求が行われるREDを確認してから実装する。型検査、単体・結合、E2E、lint、全buildを実行する。
 - ロジック変更として `mvp-1.26.0` / `1.26.0` へ更新する。schemaVersion、通知API、DB migration、通知内容は変更しない。PixelでのOSキーボード表示は公開後の実機確認に残す。
+
+## 2026-09-12追補: テンパリスト連携入口の等幅ボタン（F-020 / NF-008 / NF-009）
+
+- 画像承認に従い、濃緑の「テンパリストへ」・白地の「直前の連携を確認」・小さなⓘを1行へ配置する。主操作左端を状態プルダウンに揃え、2ボタンの幅・高さを統一、間隔6pxとする。
+- 画像再照合では左端・ボタン間隔・ⓘの表示位置を固定し、両ボタンを各6.5px拡幅する。ⓘの44px押下領域は右余白へ確保し、見た目の隙間を6pxへ整える。
+- 配置のRED/GREEN、全単体・結合・E2E、型検査・lint・全buildとStandards/Specレビューを記録する。単一画面・ロジック変更なしのためmvp-1.30.1。保存・通知API・DBは変更しない。
+- 公開は画像差の指摘後いったん保留中。検証画像と公開状況は `docs/operations/releases/mvp-1.30.1.md` に記録する。

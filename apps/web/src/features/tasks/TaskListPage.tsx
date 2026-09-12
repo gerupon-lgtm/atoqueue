@@ -231,7 +231,10 @@ function TaskListView({
       <h1 id="task-list-title">タスク</h1>
       {tempalist && !selecting && (
         <div className="tempalist-selection">
-          <div className="tempalist-selection__entry">
+          <div
+            className="tempalist-selection__entry"
+            data-has-retry={!blocked && Boolean(lastRequest)}
+          >
             <button
               type="button"
               className="tempalist-selection__start"
@@ -246,8 +249,20 @@ function TaskListView({
               }}
             >
               <img src={tempalistIcon} alt="" width={22} height={22} />
-              テンパリストへ
+              <span>テンパリストへ</span>
             </button>
+            {!blocked && lastRequest && (
+              <button
+                type="button"
+                className="tempalist-selection__retry"
+                onClick={() => {
+                  setRetryMessage("");
+                  setMode("retry");
+                }}
+              >
+                直前の連携を確認
+              </button>
+            )}
             <TempalistHelp environment={launchEnvironment} />
           </div>
           {blocked && (
@@ -257,18 +272,6 @@ function TaskListView({
             >
               ブラウザから利用できます
             </p>
-          )}
-          {!blocked && lastRequest && (
-            <button
-              type="button"
-              className="tempalist-selection__retry"
-              onClick={() => {
-                setRetryMessage("");
-                setMode("retry");
-              }}
-            >
-              直前の連携を確認
-            </button>
           )}
           {!blocked && lastRequestError && (
             <p role="status">{lastRequestError}</p>

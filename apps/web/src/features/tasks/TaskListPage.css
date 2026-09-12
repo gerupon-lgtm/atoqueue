@@ -125,45 +125,79 @@
   align-items: flex-start;
   gap: 0;
   margin-bottom: 0.75rem;
+  width: min(100%, 46rem);
 }
 .tempalist-selection__entry {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: min(20rem, calc(100vw - 3rem));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 31px;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
   max-width: 100%;
+  /* Match the filter card's border + inner padding, not its outer edge. */
+  padding-left: calc(0.875rem + 1px);
+}
+.tempalist-selection__entry[data-has-retry="false"] {
+  grid-template-columns: minmax(0, 12rem) 44px;
 }
 .tempalist-selection__entry .tempalist-help {
   position: static;
+  align-self: center;
 }
-.app-shell__content .tempalist-selection__start {
+.app-shell__content .tempalist-selection__start,
+.app-shell__content .tempalist-selection__retry {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.5rem 0.125rem;
   margin: 0;
-  white-space: nowrap;
+  font-size: clamp(0.75rem, 3.33vw, 0.875rem);
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  align-self: stretch;
 }
 .tempalist-selection__start img {
   flex: none;
+  width: 18px;
+  height: 18px;
+}
+.app-shell__content .tempalist-selection__retry {
+  background: #fffdf8;
+  border: 1px solid #1d5a4b;
+  color: #1d5a4b;
+  text-decoration: none;
+}
+/* Small visual icon; the independent, non-overlapping hit area stays 44px. */
+.app-shell__content .tempalist-selection__entry .tempalist-help__trigger {
+  border: 0;
+  background: transparent;
+  font-size: 18px;
+}
+/* Give the former 13px icon inset to the equal buttons. Keep the icon's
+   position and extend its 44px hit area into the unused right margin. */
+.app-shell__content
+  .tempalist-selection__entry[data-has-retry="true"]
+  .tempalist-help__trigger {
+  justify-content: flex-start;
+  padding: 0;
+}
+.tempalist-selection__entry .tempalist-help__trigger span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  line-height: 1;
 }
 .tempalist-selection__hint {
   margin: 0.25rem 0 0;
   color: #526a60;
-  font-size: 0.8125rem;
-}
-.app-shell__content .tempalist-selection__retry {
-  display: block;
-  width: fit-content;
-  min-height: 44px;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  color: #1d5a4b;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
   font-size: 0.8125rem;
 }
 

@@ -54,8 +54,8 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
   await expect(retry).toBeVisible();
   expect(
     await retry.evaluate((element) => getComputedStyle(element).borderTopWidth),
-  ).toBe("0px");
-  for (const width of [320, 390, 414, 1024]) {
+  ).toBe("1px");
+  for (const width of [320, 360, 390, 414, 1024]) {
     await page.setViewportSize({ width, height: 640 });
     const start = page.getByRole("button", {
       name: "テンパリストへ",
@@ -69,9 +69,36 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
       .boundingBox())!;
     const startBox = (await start.boundingBox())!;
     const infoBox = (await info.boundingBox())!;
-    expect((await retry.boundingBox())!.y).toBeGreaterThanOrEqual(
-      startBox.y + startBox.height,
+    const retryBox = (await retry.boundingBox())!;
+    const stateBox = (await page
+      .getByRole("combobox", { name: "状態", exact: true })
+      .boundingBox())!;
+    expect(startBox.x).toBeCloseTo(stateBox.x, 0);
+    expect(startBox.width).toBeCloseTo(retryBox.width, 0);
+    expect(startBox.height).toBeCloseTo(retryBox.height, 0);
+    expect(startBox.y).toBeCloseTo(retryBox.y, 0);
+    expect(startBox.height).toBeGreaterThanOrEqual(44);
+    expect(retryBox.x - startBox.x - startBox.width).toBeCloseTo(6, 0);
+    expect(infoBox.x).toBeGreaterThanOrEqual(retryBox.x + retryBox.width);
+    expect(infoBox.x + infoBox.width).toBeLessThanOrEqual(width);
+    expect(infoBox.width).toBeGreaterThanOrEqual(44);
+    const infoIconBox = (await info.locator("span").boundingBox())!;
+    // Keep the approved icon center anchored 22px inside the filter's right edge.
+    expect(infoIconBox.x + infoIconBox.width / 2).toBeCloseTo(
+      before.x + before.width - 22,
+      0,
     );
+    expect(infoIconBox.x - retryBox.x - retryBox.width).toBeCloseTo(6, 0);
+    expect(
+      (await info.locator("span").boundingBox())!.width,
+    ).toBeLessThanOrEqual(20);
+    for (const button of [start, retry]) {
+      expect(
+        await button.evaluate(
+          (element) => element.scrollWidth <= element.clientWidth,
+        ),
+      ).toBe(true);
+    }
     expect(
       Math.abs(
         startBox.y + startBox.height / 2 - infoBox.y - infoBox.height / 2,
@@ -96,7 +123,9 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
     await info.click();
     await page.keyboard.press("Tab");
     await expect(dialog).toHaveCount(0);
-    await expect(retry).toBeFocused();
+    await expect(
+      page.getByRole("combobox", { name: "状態", exact: true }),
+    ).toBeFocused();
     await page.getByRole("heading", { name: "タスク", exact: true }).click();
     await page.screenshot({ path: testInfo.outputPath(`entry-${width}.png`) });
   }
