@@ -1,6 +1,6 @@
 # mvp-1.30.1 テンパリスト連携入口の等幅ボタン
 
-対象: F-020 / NF-008 / NF-009。画像差の指摘後、等幅・等間隔とコンパクトな高さの最終ブラウザ画像を利用者が承認。ボタン高さ36px・下のカードまで12pxを実装し、保留していたPWA公開に向けて最終検証中。
+対象: F-020 / NF-008 / NF-009。等幅・等間隔とコンパクトな高さの最終ブラウザ画像を利用者が承認。ボタン高さ36px・下のカードまで12pxを実装し、2026-09-12にPWA公開・公開後検証まで完了。
 
 ## 承認済み仕様
 
@@ -49,3 +49,14 @@
 - 最終実装画像: `dist/tempalist-compact-height-green/tempalist-transfer-F-020-c-bef27-om-actions-at-mobile-widths/entry-390.png`。PCブラウザ画像であり、OS実機確認ではない。
 - `44bcad3`基点の追加差分を2軸でレビュー。Standards指摘0件、Spec指摘0件。全単体・結合・E2E・静的検査の再実行後、PWAのみ固定SHAで公開する。
 - 最終全体ゲート: 単体・結合80ファイル757件（18バッチ）、E2E17ファイル61件（4バッチ）が再試行なしですべて成功。全5workspace型検査・lint・正式build・配置成果物検査・配置補助2テストも終了0。記録: `dist/tempalist-1301-final/{unit,e2e,static}`。
+
+## 本番公開と公開後検証（2026-09-12）
+
+- 既存ブランチ `task/atoqueue-mvp` の固定SHA `6a44435862ab3bc33c862e88b51f46b520c50bbe` を `target=pwa` で公開。mainへのマージは実施しない。
+- [Deploy run 34671390352](https://github.com/gerupon-lgtm/atoqueue/actions/runs/34671390352) 成功。品質ゲート・CI用PostgreSQL検証・GitHub Pages公開が成功し、通知API配置はskip。本番DBの操作は行っていない。
+- 公開先: <https://atoqueue.sikumilab.com/>。03:53:53 UTCに公開後の確認完了。設定画面は `mvp-1.30.1`。
+- 公開JS `/assets/index-CO5ofJ4V.js` のSHA-256は `5a0ef7fccf99766ffa0cbb24c5dd16a179491c2968a0bf6038bf626bdf519452`。CSS `/assets/index-VhYuHjPZ.css` と併せてローカルbuildとの一致を確認し、Service Workerが新版JSを参照している。
+- 隔離Chromium・合成タスクでAndroidホーム画面版／iOSブラウザ版／iOSホーム画面版の模擬3条件が成功。390pxで等幅145px・外観高さ36px・両隙間6px・主操作x=39・ⓘ中心x=350・カードとの隙間12pxを実測。上下透明押下領域、説明開閉と一覧の位置維持、直前の連携表示、iOSホーム画面版の無効化も確認。実OSの実機検証ではない。
+- 検証ブラウザでは本アプリ以外への通信を遮断し、テンパリスト受信先や利用者の既存タスクへ書き込まない。別途read-onlyで確認した通知APIは `status=ok`、`version=mvp-1.27.0` のまま。
+- 証跡: `dist/deploy-1301-verify.mjs`、`dist/deploy-1301-result.json`、`dist/deploy-1301-entry-android-standalone.png`。公開直前のpushは環境の外部送信チェックで一度停止したが、既存origin・ADMIN権限・前回公開runの同一宛先を読み取り確認後、許可された再実行で成功した。
+- 利用者の既存未コミット3文書と無関係な未追跡ファイルは保全し、公開に含めていない。
