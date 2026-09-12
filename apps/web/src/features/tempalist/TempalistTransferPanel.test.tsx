@@ -155,6 +155,10 @@ it("NF-006 reaches and edits the name using the keyboard", async () => {
   setup();
   const user = userEvent.setup();
   await user.tab();
+  expect(
+    screen.getByRole("button", { name: "テンパリストとの連携について" }),
+  ).toHaveFocus();
+  await user.tab();
   expect(screen.getByRole("textbox", { name: "リスト名" })).toHaveFocus();
   await user.clear(screen.getByRole("textbox", { name: "リスト名" }));
   await user.keyboard("週末");

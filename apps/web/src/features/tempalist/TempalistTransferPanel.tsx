@@ -6,10 +6,8 @@ import type {
 } from "../../../../../packages/domain/src";
 import type { TempalistTransferService } from "../../application/tempalist-transfer-service";
 import "./TempalistTransferPanel.css";
-import {
-  iosTempalistBrowserMessage,
-  type TempalistEnvironment,
-} from "../../application/tempalist-environment";
+import type { TempalistEnvironment } from "../../application/tempalist-environment";
+import { TempalistHelp } from "./TempalistHelp";
 
 export function TempalistTransferPanel({
   draft,
@@ -106,14 +104,16 @@ export function TempalistTransferPanel({
       aria-labelledby="tempalist-title"
       aria-busy={busy}
     >
-      <h1 ref={heading} tabIndex={-1} id="tempalist-title">
-        チェックリストの確認
-      </h1>
+      <div className="tempalist-transfer__heading">
+        <h1 ref={heading} tabIndex={-1} id="tempalist-title">
+          チェックリストの確認
+        </h1>
+        <TempalistHelp environment={environment} />
+      </div>
       <p>
         URLには選択したタスク名が含まれます。URLの共有やブラウザ履歴から内容が見える場合があります。
       </p>
       <p>元のタスクと通知はあとキューに残ります。</p>
-      {environment === "ios-browser" && <p>{iosTempalistBrowserMessage}</p>}
       <fieldset disabled={busy}>
         {prepared ? (
           <>

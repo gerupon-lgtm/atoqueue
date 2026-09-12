@@ -16,7 +16,10 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
   await seed(page);
   const fixture = makeTempalistFixture();
   const handoff = markTempalistOpened({
-    state: fixture.snapshot.tempalist,
+    state: {
+      ...fixture.snapshot.tempalist,
+      lastRequest: prepareTempalistRequest(fixture),
+    },
     request: prepareTempalistRequest(fixture),
     existingTaskIds: fixture.snapshot.tasks.map((task) => task.id),
     now: fixture.now,
@@ -44,8 +47,66 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
     { key: storageKey, handoff },
   );
   await page.reload();
+  const retry = page.getByRole("button", {
+    name: "直前の連携を確認",
+    exact: true,
+  });
+  await expect(retry).toBeVisible();
+  expect(
+    await retry.evaluate((element) => getComputedStyle(element).borderTopWidth),
+  ).toBe("0px");
+  for (const width of [320, 390, 414, 1024]) {
+    await page.setViewportSize({ width, height: 640 });
+    const start = page.getByRole("button", {
+      name: "テンパリストへ",
+      exact: true,
+    });
+    const info = page.getByRole("button", {
+      name: "テンパリストとの連携について",
+    });
+    const before = (await page
+      .getByRole("region", { name: "タスクを絞り込む" })
+      .boundingBox())!;
+    const startBox = (await start.boundingBox())!;
+    const infoBox = (await info.boundingBox())!;
+    expect((await retry.boundingBox())!.y).toBeGreaterThanOrEqual(
+      startBox.y + startBox.height,
+    );
+    expect(
+      Math.abs(
+        startBox.y + startBox.height / 2 - infoBox.y - infoBox.height / 2,
+      ),
+    ).toBeLessThan(2);
+    expect(infoBox.height).toBeGreaterThanOrEqual(44);
+    await info.click();
+    const dialog = page.getByRole("dialog", { name: "テンパリストとの連携" });
+    await expect(dialog).toBeVisible();
+    const box = (await dialog.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(
+      (await page
+        .getByRole("region", { name: "タスクを絞り込む" })
+        .boundingBox())!.y,
+    ).toBe(before.y);
+    await page.screenshot({ path: testInfo.outputPath(`help-${width}.png`) });
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(info).toBeFocused();
+    await info.click();
+    await page.keyboard.press("Tab");
+    await expect(dialog).toHaveCount(0);
+    await expect(retry).toBeFocused();
+    await page.getByRole("heading", { name: "タスク", exact: true }).click();
+    await page.screenshot({ path: testInfo.outputPath(`entry-${width}.png`) });
+  }
+  await retry.click();
+  await expect(
+    page.getByRole("heading", { name: "直前の連携", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "タスクに戻る" }).click();
   await page
-    .getByRole("button", { name: "チェックリストにする", exact: true })
+    .getByRole("button", { name: "テンパリストへ", exact: true })
     .click();
   await page.getByRole("checkbox", { name: "牛乳を買うを選択" }).check();
   await page.getByRole("checkbox", { name: "電池を買うを選択" }).check();
@@ -159,7 +220,10 @@ for (const scenario of [
     blocked: false,
   },
 ]) {
-  test(`F-020 sender availability: ${scenario.name}`, async ({ page }) => {
+  test(`F-020 sender availability: ${scenario.name}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 320, height: 450 });
     await page.addInitScript((scenario) => {
       Object.defineProperty(navigator, "userAgent", { value: scenario.agent });
       Object.defineProperty(navigator, "platform", {
@@ -177,14 +241,24 @@ for (const scenario of [
     }, scenario);
     const state = await seed(page);
     const start = page.getByRole("button", {
-      name: "チェックリストにする",
+      name: "テンパリストへ",
       exact: true,
     });
     if (scenario.blocked) {
       await expect(start).toBeDisabled();
-      await expect(
-        page.getByText(/ホーム画面版では連携を利用できません/),
-      ).toBeVisible();
+      await expect(page.getByText(/ブラウザから利用できます/)).toBeVisible();
+      await page
+        .getByRole("button", { name: "テンパリストとの連携について" })
+        .click();
+      await expect(page.getByRole("dialog")).toContainText(
+        "ホーム画面版とはデータが別です。",
+      );
+      const explanation = (await page.getByRole("dialog").boundingBox())!;
+      expect(explanation.x).toBeGreaterThanOrEqual(0);
+      expect(explanation.x + explanation.width).toBeLessThanOrEqual(320);
+      expect(explanation.y + explanation.height).toBeLessThanOrEqual(450);
+      await page.screenshot({ path: testInfo.outputPath("ios-help-320.png") });
+      await page.getByRole("button", { name: "説明を閉じる" }).click();
       await expect(
         page.getByRole("button", { name: "直前の連携を確認" }),
       ).toHaveCount(0);
@@ -273,7 +347,7 @@ async function readSnapshot(page: Page): Promise<AppSnapshot> {
 
 async function review(page: Page) {
   await page
-    .getByRole("button", { name: "チェックリストにする", exact: true })
+    .getByRole("button", { name: "テンパリストへ", exact: true })
     .click();
   for (const title of ["牛乳を買う", "電池を買う"]) {
     await page.getByRole("checkbox", { name: `${title}を選択` }).check();
@@ -476,7 +550,7 @@ test("NF-006 operates selection, reordering and confirmation by keyboard at 320p
 }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 450 });
   await seed(page);
-  await page.getByRole("button", { name: "チェックリストにする" }).focus();
+  await page.getByRole("button", { name: "テンパリストへ" }).focus();
   await page.keyboard.press("Enter");
   for (const title of ["牛乳を買う", "電池を買う"]) {
     const checkbox = page.getByRole("checkbox", { name: `${title}を選択` });

@@ -1,1 +1,1 @@
-export const APP_VERSION = "mvp-1.29.0";
+export const APP_VERSION = "mvp-1.30.0";

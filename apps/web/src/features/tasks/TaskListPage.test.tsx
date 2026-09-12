@@ -86,6 +86,77 @@ function repository(): AppRepository {
 describe("TaskListPage", () => {
   afterEach(cleanup);
 
+  it("F-020 keeps guidance out of the list until requested and closes it without changing tasks", async () => {
+    render(
+      <MemoryRouter>
+        <TaskListPage
+          repository={repository()}
+          environment={() => "ios-browser"}
+          tempalist={{
+            prepare: vi.fn(),
+            open: vi.fn(),
+            lastRequest: async () => null,
+          }}
+        />
+      </MemoryRouter>,
+    );
+    const help = await screen.findByRole("button", {
+      name: "テンパリストとの連携について",
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(help);
+    const dialog = screen.getByRole("dialog", { name: "テンパリストとの連携" });
+    expect(
+      within(dialog).getByText(/ホーム画面版とはデータが別/),
+    ).toBeVisible();
+    const close = within(dialog).getByRole("button", { name: "説明を閉じる" });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(close, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(help).toHaveFocus();
+    fireEvent.click(help);
+    fireEvent.click(screen.getByRole("button", { name: "説明を閉じる" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(help);
+    fireEvent.pointerDown(screen.getByRole("heading", { name: "タスク" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "テンパリストへ" }),
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "期限切れを選択" }),
+    ).not.toBeChecked();
+  });
+
+  it("F-020 keeps the explanation usable beside the blocked iOS entry", async () => {
+    render(
+      <MemoryRouter>
+        <TaskListPage
+          repository={repository()}
+          environment={() => "ios-standalone"}
+          tempalist={{
+            prepare: vi.fn(),
+            open: vi.fn(),
+            lastRequest: async () => null,
+          }}
+        />
+      </MemoryRouter>,
+    );
+    const help = await screen.findByRole("button", {
+      name: "テンパリストとの連携について",
+    });
+    expect(
+      screen.getByRole("button", { name: "テンパリストへ" }),
+    ).toBeDisabled();
+    expect(help).toBeEnabled();
+    expect(screen.getByText("ブラウザから利用できます")).toBeVisible();
+    expect(screen.queryByText(/ホーム画面版とはデータが別/)).toBeNull();
+    fireEvent.click(help);
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "あとキューとテンパリストを同じブラウザで開いてください。",
+    );
+  });
+
   it("F-020 disables new handoffs and stored retries in iOS standalone without hiding tasks", async () => {
     const fixture = makeTempalistFixture();
     const service = {
@@ -103,12 +174,12 @@ describe("TaskListPage", () => {
       </MemoryRouter>,
     );
     expect(
-      await screen.findByRole("button", { name: "チェックリストにする" }),
+      await screen.findByRole("button", { name: "テンパリストへ" }),
     ).toBeDisabled();
     expect(
       screen.queryByRole("button", { name: "直前の連携を確認" }),
     ).toBeNull();
-    expect(screen.getByText(/通常のブラウザ/)).toBeTruthy();
+    expect(screen.getByText("ブラウザから利用できます")).toBeVisible();
     expect(screen.getByRole("link", { name: "牛乳を買う" })).toBeTruthy();
     expect(service.prepare).not.toHaveBeenCalled();
     expect(service.open).not.toHaveBeenCalled();
@@ -128,7 +199,7 @@ describe("TaskListPage", () => {
       </MemoryRouter>,
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: "チェックリストにする" }),
+      await screen.findByRole("button", { name: "テンパリストへ" }),
     );
     expect(screen.queryByRole("combobox", { name: "カテゴリ" })).toBeNull();
     const search = screen.getByRole("textbox", { name: "検索" });
@@ -179,9 +250,7 @@ describe("TaskListPage", () => {
     expect(
       await screen.findByText(/直前の連携を読み込めませんでした/),
     ).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "チェックリストにする" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "テンパリストへ" }));
     await waitFor(() => expect(lastRequest).toHaveBeenCalledTimes(2));
     // Returning to the list triggers a failed read after a successful read in selection mode.
     fireEvent.click(screen.getByRole("button", { name: "選択をやめる" }));
@@ -191,9 +260,7 @@ describe("TaskListPage", () => {
     expect(
       screen.queryByRole("button", { name: "直前の連携を確認" }),
     ).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: "チェックリストにする" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "テンパリストへ" }));
     await waitFor(() => expect(lastRequest).toHaveBeenCalledTimes(4));
     lastRequest.mockResolvedValue(request);
     fireEvent.click(screen.getByRole("button", { name: "選択をやめる" }));
@@ -227,7 +294,7 @@ describe("TaskListPage", () => {
       </MemoryRouter>,
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: "チェックリストにする" }),
+      await screen.findByRole("button", { name: "テンパリストへ" }),
     );
     for (const name of ["牛乳を買う", "電池を買う", "牛乳を買う", "牛乳を買う"])
       fireEvent.click(screen.getByRole("checkbox", { name: `${name}を選択` }));
@@ -290,7 +357,7 @@ describe("TaskListPage", () => {
       </MemoryRouter>,
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: "チェックリストにする" }),
+      await screen.findByRole("button", { name: "テンパリストへ" }),
     );
     expect(screen.getByRole("button", { name: "内容を確認" })).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox", { name: "牛乳を買うを選択" }));

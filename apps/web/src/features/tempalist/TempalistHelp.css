@@ -1,0 +1,70 @@
+.tempalist-help {
+  position: relative;
+  flex: none;
+}
+.app-shell__content .tempalist-help__trigger,
+.app-shell__content .tempalist-help__heading button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  margin: 0;
+  background: #fffdf8;
+  color: #1d5a4b;
+  border: 1px solid #78988d;
+  border-radius: 50%;
+  font-size: 1.5rem;
+}
+.tempalist-help__popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: min(20rem, calc(100vw - 3rem));
+  box-sizing: border-box;
+  max-height: max(8rem, calc(100dvh - 15rem));
+  overflow-y: auto;
+  padding: 0.75rem;
+  border: 1px solid #78988d;
+  border-radius: 0.75rem;
+  background: #fffdf8;
+  color: #173b33;
+  box-shadow: 0 4px 16px #173b3326;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.tempalist-help__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.tempalist-help__heading h2 {
+  margin: 0;
+  font-size: 1rem;
+  flex: 1;
+}
+.app-shell__content .tempalist-help__heading button {
+  border: 0;
+  flex: none;
+}
+.tempalist-help__popover p {
+  margin: 0.5rem 0 0;
+}
+.tempalist-help__ios {
+  border-top: 1px solid #c6d0c8;
+  margin-top: 0.75rem;
+  padding-top: 0.25rem;
+}
+.tempalist-transfer__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.tempalist-transfer__heading h1 {
+  min-width: 0;
+}

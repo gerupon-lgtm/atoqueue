@@ -15,11 +15,9 @@ import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 import type { TempalistTransferService } from "../../application/tempalist-transfer-service";
 import { TempalistTransferPanel } from "../tempalist/TempalistTransferPanel";
 import { TempalistLinkedBadge } from "../../presentation/TempalistLinkedBadge";
-import {
-  iosTempalistBlockedMessage,
-  iosTempalistBrowserMessage,
-  type TempalistEnvironment,
-} from "../../application/tempalist-environment";
+import type { TempalistEnvironment } from "../../application/tempalist-environment";
+import { TempalistHelp } from "../tempalist/TempalistHelp";
+import tempalistIcon from "../../assets/tempalist-icon.svg";
 import "./TaskListPage.css";
 import {
   taskCategoryDisplayLabel,
@@ -171,7 +169,10 @@ function TaskListView({
   if (tempalist && !blocked && mode === "retry" && lastRequest)
     return (
       <section className="tempalist-transfer" aria-busy={retryBusy}>
-        <h1>直前の連携</h1>
+        <div className="tempalist-transfer__heading">
+          <h1>直前の連携</h1>
+          <TempalistHelp environment={launchEnvironment} />
+        </div>
         <h2>{lastRequest.payload.title}</h2>
         <ol>
           {lastRequest.payload.items.map((item) => (
@@ -182,9 +183,6 @@ function TaskListView({
           保存済みの確定内容をもう一度開きます。元のタスクと通知はあとキューに残ります。
         </p>
         <p>URLには選択したタスク名が含まれます。</p>
-        {launchEnvironment === "ios-browser" && (
-          <p>{iosTempalistBrowserMessage}</p>
-        )}
         <button
           type="button"
           disabled={retryBusy}
@@ -233,23 +231,37 @@ function TaskListView({
       <h1 id="task-list-title">タスク</h1>
       {tempalist && !selecting && (
         <div className="tempalist-selection">
-          <button
-            type="button"
-            disabled={blocked}
-            aria-describedby={
-              blocked ? "tempalist-environment-note" : undefined
-            }
-            onClick={() => {
-              setDraft({ title: "あとキューのチェックリスト", tasks: [] });
-              setFiltersOpen(false);
-              setMode("select");
-            }}
-          >
-            チェックリストにする
-          </button>
+          <div className="tempalist-selection__entry">
+            <button
+              type="button"
+              className="tempalist-selection__start"
+              disabled={blocked}
+              aria-describedby={
+                blocked ? "tempalist-environment-note" : undefined
+              }
+              onClick={() => {
+                setDraft({ title: "あとキューのチェックリスト", tasks: [] });
+                setFiltersOpen(false);
+                setMode("select");
+              }}
+            >
+              <img src={tempalistIcon} alt="" width={22} height={22} />
+              テンパリストへ
+            </button>
+            <TempalistHelp environment={launchEnvironment} />
+          </div>
+          {blocked && (
+            <p
+              id="tempalist-environment-note"
+              className="tempalist-selection__hint"
+            >
+              ブラウザから利用できます
+            </p>
+          )}
           {!blocked && lastRequest && (
             <button
               type="button"
+              className="tempalist-selection__retry"
               onClick={() => {
                 setRetryMessage("");
                 setMode("retry");
@@ -260,21 +272,6 @@ function TaskListView({
           )}
           {!blocked && lastRequestError && (
             <p role="status">{lastRequestError}</p>
-          )}
-        </div>
-      )}
-      {tempalist && launchEnvironment !== "supported" && (
-        <div
-          id="tempalist-environment-note"
-          className="tempalist-environment-note"
-        >
-          <p>
-            {blocked ? iosTempalistBlockedMessage : iosTempalistBrowserMessage}
-          </p>
-          {blocked && (
-            <p>
-              ホーム画面版のタスクはブラウザ版へ自動では移りません。既存データはそのまま残ります。
-            </p>
           )}
         </div>
       )}
