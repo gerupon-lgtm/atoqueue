@@ -1,7 +1,7 @@
 # mvp-1.29.0 選択UI・iOS連携制限
 
 日付: 2026-09-12。対象要件: F-020、F-016、NF-008、NF-009、NF-013。
-状態: ローカル実装・自動検証済み。本番デプロイ、push、通知API再配置は行っていない。
+状態: 2026-09-12に利用者承認のうえPWA 1.29.0を本番公開済み。通知API再配置は行っていない。
 
 ## 承認内容
 
@@ -55,3 +55,16 @@ Windows / Node.js 24.18.0 / pnpm 10.20.0 / Chromium。最大5ファイルずつ�
 ## 実機の境界
 
 Androidでの連携成功とiOS通常ブラウザ内での保存維持は利用者報告。自動試験でのnavigator/display-mode模擬は実OSによるPWA捕捉や保存領域の実機証跡ではない。修正版公開後に実機再確認が必要。
+
+## 承認後の本番公開（2026-09-12）
+
+- 利用者が送信先・32ファイルのコミット送信・Web限定更新を明示承認。`task/atoqueue-mvp` をpushし、既存Deploy workflowを `target=pwa` で実行。mainへのマージや通知API配置はしない。
+- 配置SHA: `833966eabdc4b490f088e70ca39dab4f0baf5546`。公開先: <https://atoqueue.sikumilab.com/>。
+- [Deploy run 34660764640](https://github.com/gerupon-lgtm/atoqueue/actions/runs/34660764640) は成功。品質ゲート、CI専用PostgreSQL検証、Pages公開の各step成功、API配置はskip。push/PRのCIも成功。ログ一括取得は権限エラーのため、Actionsのジョブ・step結果で確認し、CIのテスト件数は推定していない。
+- 配置前にWeb build・配置成果物契約検査・配置補助2テストを再実行し成功。ソースや依存関係は前回の全体検証から変更なし。
+- 公開JS `/assets/index-Bj7IqemR.js` のSHA-256は `66f6db07a0d9f984ef67fd20e16945d15a245ad484af0416ed98fbe2f598152a`。ローカルbuildと完全一致。版数1.29.0、DEV試験画面の除外を確認。
+- 2026-09-12 00:18 UTC、新規隔離Chromiumで合成2Taskを使い、設定の版表示、選択チェック22px、2件の正式SVGバッジ右端揃え、下部操作欄とナビの非重複、確認画面への遷移を確認。Android standalone・iOS通常ブラウザは利用可能、iOS standaloneは無効＋説明表示。UA/standaloneの模擬であり実OS検証ではない。
+- ブラウザ内試験は本アプリ以外への通信を遮断し、テンパリストへの確定・実起動・保存は行わない。利用者の保存領域も使わない。公開画像を主担当が目視確認した。
+- 補助検証の初回は待機が続き停止。依存探索を無効にして再実行後、版表示の検索場所・折りたたみ展開を修正し、最終3シナリオが終了0。これらは検証スクリプトの修正であり公開コードは変更なし。
+- `/healthz` はHTTP 200、`status=ok`、`version=mvp-1.27.0`。通知API・本番DB・VAPID・v2設定は変更していない。
+- ローカル証跡（Git管理外）: `dist/deploy-129-verify.mjs`、`dist/deploy-129-result.json`、`dist/deploy-129-android-standalone.png`、`dist/deploy-129-ios-browser.png`。既存未コミット3文書・未追跡ファイルは公開コミットへ含めず保持。
