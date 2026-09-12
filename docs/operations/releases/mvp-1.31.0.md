@@ -1,6 +1,6 @@
 # mvp-1.31.0 !=テンパリスト正式名と連携操作のサイズ調整
 
-対象: F-020 / NF-008 / NF-009。承認画像 `dist/preview-wide-tempalist-height-40.png` と、直前の連携画面のⓘ・戻るボタンを同じサイズ感にする依頼に対応。実装・全体検証完了、未公開。
+対象: F-020 / NF-008 / NF-009。承認画像 `dist/preview-wide-tempalist-height-40.png` と、直前の連携画面のⓘ・戻るボタンを同じサイズ感にする依頼に対応。実装・全体検証と、2026-09-12のPWA公開・公開後検証まで完了。
 
 ## 承認仕様と実装方針
 
@@ -28,3 +28,14 @@
 - 今回は実装確認までとし、push・デプロイは行っていない。公開版は1.30.1のまま。
 - 最終E2E17ファイル61件、4バッチすべて終了0。全5workspace型検査・全体lint・正式build・配置成果物検査・配置補助2件も終了0（`dist/tempalist-1310/{e2e,static}`）。単体・結合と合わせ再試行なしで成功。既存のVitest workspace非推奨・500kB bundle・inlineDynamicImports非推奨警告は継続。
 - 最終画像: `dist/tempalist-1310/e2e/batch-3/tempalist-transfer-F-020-c-bef27-om-actions-at-mobile-widths/entry-390.png` と `retry-390.png`。一覧と直前の連携画面は主担当が目視確認。ツールチップのtitleは単体テストでも正式名を確認した。
+
+## 承認後の本番公開（2026-09-12）
+
+- 利用者の明示的なデプロイ依頼により、既存ブランチ `task/atoqueue-mvp` のSHA `9bce5e164aabf6ce67fe59806c71b4c88bf7541c` を固定し、`target=pwa` で公開した。mainへのマージは行っていない。
+- [Deploy run 34673218606](https://github.com/gerupon-lgtm/atoqueue/actions/runs/34673218606) 成功。テスト・build・CI専用PostgreSQL検証・GitHub Pages公開が成功し、通知API配置はskip。本番DBへの操作は実施しない。
+- 公開前の型検査・lint・全build・配置成果物検査・配置補助2件を再実行して終了0（`dist/tempalist-1310-deploy/static`）。前回の全単体・結合・E2E検証から実装ソースに追加変更なし。
+- 公開先: <https://atoqueue.sikumilab.com/>。04:36:15 UTCに公開後検証完了。設定の版表示は `mvp-1.31.0`。
+- 配信JS `/assets/index-e1G2UqHF.js` のSHA-256は `f20a7e32bbe4f9050937729e91651f7123d85fd07d69ae522904e4decfe48b07`。CSS `/assets/index-C_vykYyd.css` とともにローカルbuildと一致し、Service Workerも新版JSを参照する。
+- 隔離ChromiumのAndroidホーム画面版／iOSブラウザ版／iOSホーム画面版の模擬3条件が成功。390pxで一覧160px／130px・高さ40px・両隙間6px・ⓘ中心350px・カードまで12px、遷移先の戻る130×40pxとⓘ18px表示を実測。透明な上下押下領域、戻る処理、正式名のツールチップ、ヘルプ開閉、iOSホーム画面版での連携無効化を確認。実OSの実機検証ではない。
+- 合成タスクだけを使い、本アプリ以外へのブラウザ通信を遮断。実際の利用者タスクや!=テンパリストへの書き込みは行わない。別途read-onlyで確認した通知APIは `status=ok`、`version=mvp-1.27.0` のまま。
+- 証跡: `dist/deploy-1310-verify.mjs`、`dist/deploy-1310-result.json`、`dist/deploy-1310-entry-android-standalone.png`、`dist/deploy-1310-retry-android-standalone.png`。作業中の利用者所有3文書と無関係な未追跡ファイルは公開対象に含めていない。
