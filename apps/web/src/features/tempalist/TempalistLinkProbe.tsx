@@ -15,8 +15,8 @@ const probeUrl = buildTempalistUrl({
 export function TempalistLinkProbe() {
   return (
     <section aria-labelledby="tempalist-link-probe-title">
-      <h1 id="tempalist-link-probe-title">テンパリスト連携の実機試験</h1>
-      <p>固定の合成データ2件だけをテンパリストへ渡します。</p>
+      <h1 id="tempalist-link-probe-title">!=テンパリスト連携の実機試験</h1>
+      <p>固定の合成データ2件だけを!=テンパリストへ渡します。</p>
       <p>受信先で作成前の内容確認画面が表示されます。</p>
       <a href={probeUrl}>試験用リストを開く</a>
     </section>

@@ -101,11 +101,11 @@ describe("TaskListPage", () => {
       </MemoryRouter>,
     );
     const help = await screen.findByRole("button", {
-      name: "テンパリストとの連携について",
+      name: "!=テンパリストとの連携について",
     });
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(help);
-    const dialog = screen.getByRole("dialog", { name: "テンパリストとの連携" });
+    const dialog = screen.getByRole("dialog", { name: "!=テンパリストとの連携" });
     expect(
       within(dialog).getByText(/ホーム画面版とはデータが別/),
     ).toBeVisible();
@@ -121,7 +121,7 @@ describe("TaskListPage", () => {
     fireEvent.pointerDown(screen.getByRole("heading", { name: "タスク" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(
-      screen.getByRole("button", { name: "テンパリストへ" }),
+      screen.getByRole("button", { name: "!=テンパリストへ" }),
     );
     expect(
       screen.getByRole("checkbox", { name: "期限切れを選択" }),
@@ -143,17 +143,17 @@ describe("TaskListPage", () => {
       </MemoryRouter>,
     );
     const help = await screen.findByRole("button", {
-      name: "テンパリストとの連携について",
+      name: "!=テンパリストとの連携について",
     });
     expect(
-      screen.getByRole("button", { name: "テンパリストへ" }),
+      screen.getByRole("button", { name: "!=テンパリストへ" }),
     ).toBeDisabled();
     expect(help).toBeEnabled();
     expect(screen.getByText("ブラウザから利用できます")).toBeVisible();
     expect(screen.queryByText(/ホーム画面版とはデータが別/)).toBeNull();
     fireEvent.click(help);
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      "あとキューとテンパリストを同じブラウザで開いてください。",
+      "あとキューと!=テンパリストを同じブラウザで開いてください。",
     );
   });
 
@@ -174,7 +174,7 @@ describe("TaskListPage", () => {
       </MemoryRouter>,
     );
     expect(
-      await screen.findByRole("button", { name: "テンパリストへ" }),
+      await screen.findByRole("button", { name: "!=テンパリストへ" }),
     ).toBeDisabled();
     expect(
       screen.queryByRole("button", { name: "直前の連携を確認" }),
@@ -199,7 +199,7 @@ describe("TaskListPage", () => {
       </MemoryRouter>,
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: "テンパリストへ" }),
+      await screen.findByRole("button", { name: "!=テンパリストへ" }),
     );
     expect(screen.queryByRole("combobox", { name: "カテゴリ" })).toBeNull();
     const search = screen.getByRole("textbox", { name: "検索" });
@@ -250,7 +250,7 @@ describe("TaskListPage", () => {
     expect(
       await screen.findByText(/直前の連携を読み込めませんでした/),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "テンパリストへ" }));
+    fireEvent.click(screen.getByRole("button", { name: "!=テンパリストへ" }));
     await waitFor(() => expect(lastRequest).toHaveBeenCalledTimes(2));
     // Returning to the list triggers a failed read after a successful read in selection mode.
     fireEvent.click(screen.getByRole("button", { name: "選択をやめる" }));
@@ -260,7 +260,7 @@ describe("TaskListPage", () => {
     expect(
       screen.queryByRole("button", { name: "直前の連携を確認" }),
     ).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "テンパリストへ" }));
+    fireEvent.click(screen.getByRole("button", { name: "!=テンパリストへ" }));
     await waitFor(() => expect(lastRequest).toHaveBeenCalledTimes(4));
     lastRequest.mockResolvedValue(request);
     fireEvent.click(screen.getByRole("button", { name: "選択をやめる" }));
@@ -294,7 +294,7 @@ describe("TaskListPage", () => {
       </MemoryRouter>,
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: "テンパリストへ" }),
+      await screen.findByRole("button", { name: "!=テンパリストへ" }),
     );
     for (const name of ["牛乳を買う", "電池を買う", "牛乳を買う", "牛乳を買う"])
       fireEvent.click(screen.getByRole("checkbox", { name: `${name}を選択` }));
@@ -357,7 +357,7 @@ describe("TaskListPage", () => {
       </MemoryRouter>,
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: "テンパリストへ" }),
+      await screen.findByRole("button", { name: "!=テンパリストへ" }),
     );
     expect(screen.getByRole("button", { name: "内容を確認" })).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox", { name: "牛乳を買うを選択" }));

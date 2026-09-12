@@ -58,11 +58,11 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
   for (const width of [320, 360, 390, 414, 1024]) {
     await page.setViewportSize({ width, height: 640 });
     const start = page.getByRole("button", {
-      name: "テンパリストへ",
+      name: "!=テンパリストへ",
       exact: true,
     });
     const info = page.getByRole("button", {
-      name: "テンパリストとの連携について",
+      name: "!=テンパリストとの連携について",
     });
     const before = (await page
       .getByRole("region", { name: "タスクを絞り込む" })
@@ -74,11 +74,11 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
       .getByRole("combobox", { name: "状態", exact: true })
       .boundingBox())!;
     expect(startBox.x).toBeCloseTo(stateBox.x, 0);
-    expect(startBox.width).toBeCloseTo(retryBox.width, 0);
+    expect(startBox.width / retryBox.width).toBeCloseTo(16 / 13, 2);
     expect(startBox.height).toBeCloseTo(retryBox.height, 0);
     expect(startBox.y).toBeCloseTo(retryBox.y, 0);
-    expect(startBox.height).toBeGreaterThanOrEqual(36);
-    if (width >= 360) expect(startBox.height).toBeCloseTo(36, 0);
+    expect(startBox.height).toBeGreaterThanOrEqual(40);
+    if (width >= 360) expect(startBox.height).toBeCloseTo(40, 0);
     expect(before.y - startBox.y - startBox.height).toBeCloseTo(12, 0);
     expect(retryBox.x - startBox.x - startBox.width).toBeCloseTo(6, 0);
     expect(infoBox.x).toBeGreaterThanOrEqual(retryBox.x + retryBox.width);
@@ -106,7 +106,7 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
         startBox.y + startBox.height / 2 - infoBox.y - infoBox.height / 2,
       ),
     ).toBeLessThan(2);
-    expect(infoBox.height).toBeCloseTo(36, 0);
+    expect(infoBox.height).toBeCloseTo(40, 0);
     // The visible controls are compact, but their top/bottom hit areas stay 44px.
     for (const button of [start, retry, info]) {
       const rect = (await button.boundingBox())!;
@@ -123,7 +123,7 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
       }
     }
     await info.click();
-    const dialog = page.getByRole("dialog", { name: "テンパリストとの連携" });
+    const dialog = page.getByRole("dialog", { name: "!=テンパリストとの連携" });
     await expect(dialog).toBeVisible();
     const box = (await dialog.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
@@ -150,9 +150,48 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
   await expect(
     page.getByRole("heading", { name: "直前の連携", exact: true }),
   ).toBeVisible();
+  for (const width of [320, 390, 414]) {
+    await page.setViewportSize({ width, height: 640 });
+    const back = page.getByRole("button", {
+      name: "タスクに戻る",
+      exact: true,
+    });
+    const info = page.getByRole("button", {
+      name: "!=テンパリストとの連携について",
+      exact: true,
+    });
+    await back.scrollIntoViewIfNeeded();
+    const backBox = (await back.boundingBox())!;
+    expect(backBox.width).toBeCloseTo(130, 0);
+    expect(backBox.height).toBeCloseTo(40, 0);
+    expect((await info.locator("span").boundingBox())!.width).toBe(18);
+    expect(
+      await info.evaluate((el) => getComputedStyle(el).borderTopWidth),
+    ).toBe("0px");
+    for (const button of [back, info]) {
+      await button.scrollIntoViewIfNeeded();
+      const rect = (await button.boundingBox())!;
+      for (const y of [rect.y - 1, rect.y + rect.height + 1]) {
+        expect(
+          await button.evaluate(
+            (el, p) =>
+              document.elementFromPoint(p.x, p.y)?.closest("button") === el,
+            { x: rect.x + rect.width / 2, y },
+          ),
+        ).toBe(true);
+      }
+    }
+    await info.click();
+    await expect(page.getByRole("dialog")).toContainText("!=テンパリスト");
+    await page.keyboard.press("Escape");
+    await page
+      .getByRole("heading", { name: "直前の連携", exact: true })
+      .click();
+    await page.screenshot({ path: testInfo.outputPath(`retry-${width}.png`) });
+  }
   await page.getByRole("button", { name: "タスクに戻る" }).click();
   await page
-    .getByRole("button", { name: "テンパリストへ", exact: true })
+    .getByRole("button", { name: "!=テンパリストへ", exact: true })
     .click();
   await page.getByRole("checkbox", { name: "牛乳を買うを選択" }).check();
   await page.getByRole("checkbox", { name: "電池を買うを選択" }).check();
@@ -172,7 +211,7 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
       Math.abs(text.y + text.height / 2 - checkBox.y - checkBox.height / 2),
     ).toBeLessThan(2);
     const badges = await page
-      .getByLabel("テンパリストへ開く操作済み", { exact: true })
+      .getByLabel("!=テンパリストへ開く操作済み", { exact: true })
       .all();
     const boxes = await Promise.all(badges.map((badge) => badge.boundingBox()));
     expect(
@@ -287,14 +326,14 @@ for (const scenario of [
     }, scenario);
     const state = await seed(page);
     const start = page.getByRole("button", {
-      name: "テンパリストへ",
+      name: "!=テンパリストへ",
       exact: true,
     });
     if (scenario.blocked) {
       await expect(start).toBeDisabled();
       await expect(page.getByText(/ブラウザから利用できます/)).toBeVisible();
       await page
-        .getByRole("button", { name: "テンパリストとの連携について" })
+        .getByRole("button", { name: "!=テンパリストとの連携について" })
         .click();
       await expect(page.getByRole("dialog")).toContainText(
         "ホーム画面版とはデータが別です。",
@@ -393,7 +432,7 @@ async function readSnapshot(page: Page): Promise<AppSnapshot> {
 
 async function review(page: Page) {
   await page
-    .getByRole("button", { name: "テンパリストへ", exact: true })
+    .getByRole("button", { name: "!=テンパリストへ", exact: true })
     .click();
   for (const title of ["牛乳を買う", "電池を買う"]) {
     await page.getByRole("checkbox", { name: `${title}を選択` }).check();
@@ -404,7 +443,7 @@ async function review(page: Page) {
     .fill("買い物");
 }
 
-async function open(page: Page, name = "テンパリストで開く") {
+async function open(page: Page, name = "!=テンパリストで開く") {
   await Promise.all([
     page.waitForURL(receiver),
     page.getByRole("button", { name, exact: true }).click(),
@@ -456,7 +495,7 @@ test("F-020 persists only handoff state, reopens the stored URL after return/rel
   });
   await page.getByRole("button", { name: "内容を確定", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "テンパリストで開く", exact: true }),
+    page.getByRole("button", { name: "!=テンパリストで開く", exact: true }),
   ).toBeVisible();
   const prepared = await readSnapshot(page);
   expectUnchanged(prepared, state.snapshot);
@@ -481,7 +520,7 @@ test("F-020 persists only handoff state, reopens the stored URL after return/rel
   await page.goBack();
   await page.reload();
   await expect(
-    page.getByLabel("テンパリストへ開く操作済み", { exact: true }),
+    page.getByLabel("!=テンパリストへ開く操作済み", { exact: true }),
   ).toHaveCount(2);
   await page.screenshot({
     path: testInfo.outputPath("tempalist-linked-320.png"),
@@ -511,7 +550,7 @@ test("F-020 persists only handoff state, reopens the stored URL after return/rel
   await page.getByRole("button", { name: "電池を買うを上へ" }).click();
   await page.getByRole("button", { name: "内容を確定", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "テンパリストで開く", exact: true }),
+    page.getByRole("button", { name: "!=テンパリストで開く", exact: true }),
   ).toBeVisible();
   const edited = (await readSnapshot(page)).tempalist.lastRequest!;
   expect(edited.payload.requestId).not.toBe(beforeEdit.payload.requestId);
@@ -573,12 +612,12 @@ test("F-020 never opens on storage exhaustion before prepare or before marker sa
   await page.evaluate(() => sessionStorage.removeItem("test:quota"));
   await page.getByRole("button", { name: "内容を確定", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "テンパリストで開く", exact: true }),
+    page.getByRole("button", { name: "!=テンパリストで開く", exact: true }),
   ).toBeVisible();
   const saved = await readSnapshot(page);
   await page.evaluate(() => sessionStorage.setItem("test:quota", "full"));
   await page
-    .getByRole("button", { name: "テンパリストで開く", exact: true })
+    .getByRole("button", { name: "!=テンパリストで開く", exact: true })
     .click();
   await expect(page.getByRole("alert")).toContainText(
     "同じ内容でもう一度開いてください",
@@ -596,7 +635,7 @@ test("NF-006 operates selection, reordering and confirmation by keyboard at 320p
 }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 450 });
   await seed(page);
-  await page.getByRole("button", { name: "テンパリストへ" }).focus();
+  await page.getByRole("button", { name: "!=テンパリストへ" }).focus();
   await page.keyboard.press("Enter");
   for (const title of ["牛乳を買う", "電池を買う"]) {
     const checkbox = page.getByRole("checkbox", { name: `${title}を選択` });
@@ -626,14 +665,14 @@ test("NF-006 operates selection, reordering and confirmation by keyboard at 320p
   await page.getByRole("button", { name: "内容を確定", exact: true }).focus();
   await page.keyboard.press("Enter");
   const launch = page.getByRole("button", {
-    name: "テンパリストで開く",
+    name: "!=テンパリストで開く",
     exact: true,
   });
   await expect(launch).toBeVisible();
   await launch.focus();
   await expect(launch).toBeFocused();
   await expectBottomControlsVisible(page, [
-    "テンパリストで開く",
+    "!=テンパリストで開く",
     "編集に戻る",
     "選択に戻る",
   ]);

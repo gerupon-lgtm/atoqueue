@@ -25,13 +25,13 @@ it("F-020 retries an open failure with the identical prepared request and clears
   const { service, request } = setup({ open });
   fireEvent.click(screen.getByRole("button", { name: "内容を確定" }));
   fireEvent.click(
-    await screen.findByRole("button", { name: "テンパリストで開く" }),
+    await screen.findByRole("button", { name: "!=テンパリストで開く" }),
   );
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "同じ内容でもう一度開いてください",
   );
   expect(document.body.textContent).not.toContain("private payload");
-  fireEvent.click(screen.getByRole("button", { name: "テンパリストで開く" }));
+  fireEvent.click(screen.getByRole("button", { name: "!=テンパリストで開く" }));
   expect(
     await screen.findByText(
       "開く操作を受け付けました。同じ内容でもう一度開けます。",
@@ -80,11 +80,11 @@ it("F-020 edits ordered readonly items and title before explicit prepare and rep
   });
   fireEvent.click(screen.getByRole("button", { name: "内容を確定" }));
   fireEvent.click(
-    await screen.findByRole("button", { name: "テンパリストで開く" }),
+    await screen.findByRole("button", { name: "!=テンパリストで開く" }),
   );
   await waitFor(() => expect(service.open).toHaveBeenCalledWith(request));
   fireEvent.click(
-    await screen.findByRole("button", { name: "テンパリストで開く" }),
+    await screen.findByRole("button", { name: "!=テンパリストで開く" }),
   );
   await waitFor(() => expect(service.open).toHaveBeenCalledTimes(2));
   expect(service.prepare).toHaveBeenCalledTimes(1);
@@ -94,7 +94,7 @@ it("F-020 edits ordered readonly items and title before explicit prepare and rep
   });
   fireEvent.click(screen.getByRole("button", { name: "編集に戻る" }));
   expect(
-    screen.queryByRole("button", { name: "テンパリストで開く" }),
+    screen.queryByRole("button", { name: "!=テンパリストで開く" }),
   ).toBeNull();
 });
 
@@ -156,7 +156,7 @@ it("NF-006 reaches and edits the name using the keyboard", async () => {
   const user = userEvent.setup();
   await user.tab();
   expect(
-    screen.getByRole("button", { name: "テンパリストとの連携について" }),
+    screen.getByRole("button", { name: "!=テンパリストとの連携について" }),
   ).toHaveFocus();
   await user.tab();
   expect(screen.getByRole("textbox", { name: "リスト名" })).toHaveFocus();

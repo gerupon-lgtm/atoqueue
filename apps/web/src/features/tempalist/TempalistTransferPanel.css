@@ -54,3 +54,45 @@
   gap: 0.5rem;
   min-height: 44px;
 }
+
+.app-shell__content .tempalist-retry__return {
+  position: relative;
+  justify-self: start;
+  width: min(130px, 100%);
+  min-height: 40px;
+  padding: 0.25rem 0.5rem;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.app-shell__content .tempalist-retry .tempalist-help__trigger {
+  position: relative;
+  min-height: 40px;
+  height: 40px;
+  border: 0;
+  background: transparent;
+  font-size: 18px;
+}
+
+.tempalist-retry .tempalist-help__trigger span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+}
+
+/* Include the surrounding space in the hit area without enlarging the visuals. */
+.tempalist-retry__return::after,
+.tempalist-retry .tempalist-help__trigger::after {
+  content: "";
+  position: absolute;
+  inset: -2px 0;
+}
+.tempalist-retry__return::after {
+  /* The positioning box is inside the return button's 1px border. */
+  top: -3px;
+  bottom: -3px;
+}

@@ -21,7 +21,7 @@ import { TaskListPage } from "../features/tasks/TaskListPage";
 import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
 import { TodayReviewPage } from "../features/review/TodayReviewPage";
 
-const label = "テンパリストへ開く操作済み";
+const label = "!=テンパリストへ開く操作済み";
 afterEach(cleanup);
 function setup() {
   const fixture = makeTempalistFixture();

@@ -20,7 +20,7 @@ export function createBrowserTempalistLauncher(
         );
         if (buildTempalistUrl(payload) !== url) throw new Error();
       } catch {
-        throw new Error("テンパリストの起動URLが不正です。");
+        throw new Error("!=テンパリストの起動URLが不正です。");
       }
       location.assign(url);
     },

@@ -44,7 +44,7 @@ export function TempalistHelp({
         type="button"
         className="tempalist-help__trigger"
         ref={trigger}
-        aria-label="テンパリストとの連携について"
+        aria-label="!=テンパリストとの連携について"
         aria-expanded={open}
         aria-controls={id}
         aria-haspopup="dialog"
@@ -60,7 +60,7 @@ export function TempalistHelp({
           className="tempalist-help__popover"
         >
           <div className="tempalist-help__heading">
-            <h2 id={`${id}-title`}>テンパリストとの連携</h2>
+            <h2 id={`${id}-title`}>!=テンパリストとの連携</h2>
             <button
               type="button"
               ref={closeButton}
@@ -70,12 +70,12 @@ export function TempalistHelp({
               ×
             </button>
           </div>
-          <p>選んだタスクをテンパリストのチェックリストにします。</p>
+          <p>選んだタスクを!=テンパリストのチェックリストにします。</p>
           {environment !== "supported" && (
             <div className="tempalist-help__ios">
               <p>iPhone・iPadの場合</p>
               <p>
-                あとキューとテンパリストを同じブラウザで開いてください。ホーム画面版とはデータが別です。
+                あとキューと!=テンパリストを同じブラウザで開いてください。ホーム画面版とはデータが別です。
               </p>
             </div>
           )}

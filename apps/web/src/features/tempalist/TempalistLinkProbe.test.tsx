@@ -19,11 +19,11 @@ it("F-020 keeps the development route and fixed synthetic link copy", async () =
     render(<RouterProvider router={router} />);
     expect(
       await screen.findByRole("heading", {
-        name: "テンパリスト連携の実機試験",
+        name: "!=テンパリスト連携の実機試験",
       }),
     ).toBeVisible();
     expect(
-      screen.getByText("固定の合成データ2件だけをテンパリストへ渡します。"),
+      screen.getByText("固定の合成データ2件だけを!=テンパリストへ渡します。"),
     ).toBeVisible();
     expect(
       screen.getByText("受信先で作成前の内容確認画面が表示されます。"),

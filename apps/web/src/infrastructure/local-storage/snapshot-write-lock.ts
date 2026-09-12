@@ -9,7 +9,7 @@ export class BrowserSnapshotWriteLock implements SnapshotWriteLock {
     const locks = globalThis.navigator?.locks;
     if (!locks) {
       throw new PersistenceError(
-        "このブラウザでは保存ロックを利用できないため、テンパリスト連携を実行できません。",
+        "このブラウザでは保存ロックを利用できないため、!=テンパリスト連携を実行できません。",
       );
     }
     return locks.request("atoqueue:snapshot-write", operation);

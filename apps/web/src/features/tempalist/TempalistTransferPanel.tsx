@@ -127,7 +127,7 @@ export function TempalistTransferPanel({
               確定内容を保存しました。開く操作は受信・保存の成功を示すものではありません。
             </p>
             <button type="button" onClick={() => void run("open")}>
-              テンパリストで開く
+              !=テンパリストで開く
             </button>
             <button
               type="button"

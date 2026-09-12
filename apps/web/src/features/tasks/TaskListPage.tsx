@@ -168,7 +168,10 @@ function TaskListView({
     );
   if (tempalist && !blocked && mode === "retry" && lastRequest)
     return (
-      <section className="tempalist-transfer" aria-busy={retryBusy}>
+      <section
+        className="tempalist-transfer tempalist-retry"
+        aria-busy={retryBusy}
+      >
         <div className="tempalist-transfer__heading">
           <h1>直前の連携</h1>
           <TempalistHelp environment={launchEnvironment} />
@@ -215,6 +218,7 @@ function TaskListView({
           type="button"
           disabled={retryBusy}
           onClick={() => setMode("list")}
+          className="tempalist-retry__return"
         >
           タスクに戻る
         </button>
@@ -249,7 +253,7 @@ function TaskListView({
               }}
             >
               <img src={tempalistIcon} alt="" width={22} height={22} />
-              <span>テンパリストへ</span>
+              <span>!=テンパリストへ</span>
             </button>
             {!blocked && lastRequest && (
               <button
