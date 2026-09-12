@@ -1,6 +1,6 @@
 # mvp-1.30.0 テンパリスト連携説明の省スペース化
 
-対象: F-020 / NF-008 / NF-009。2026-09-12。ローカル実装・検証済み、未公開。今回push・デプロイは行わない。
+対象: F-020 / NF-008 / NF-009。2026-09-12。利用者の追加承認を受けてPWA 1.30.0を本番公開済み。通知API・本番DBは変更しない。
 
 ## 承認済み仕様
 
@@ -38,3 +38,15 @@
 - 全5ワークスペース型検査・build、全体ESLint、配置成果物契約検査、配置補助2テストを実施。最終Web bundleは `index-CGsnnsP1.js`、512.40 kB。既存の500kB警告とService Worker/Vitest非推奨警告は継続。実PostgreSQL・CI・本番配置は実施しない。
 - ログと終了コードはGit管理外 `dist/tempalist-compact-gates/unit`、`dist/tempalist-compact-final-gates/e2e`。初回E2Eの失敗は `dist/tempalist-compact-gates/e2e`。最終ビルドは `dist/tempalist-compact-web-build-final.log`。
 - 画面画像は最終E2E `batch-3/tempalist-transfer-F-020-c-bef27-om-actions-at-mobile-widths/{entry,help}-390.png`。ブラウザ模擬は実機のPWA起動先・保存領域の保証ではない。
+
+## 承認後の本番公開（2026-09-12）
+
+- 利用者のデプロイ依頼に従い、既存 `task/atoqueue-mvp` へpushし、SHA `0aa7cbb6aea8d9bb9b952cc98c6294fcb9042b79` を `target=pwa` で公開した。mainへのマージは行わない。
+- [Deploy run 34663683573](https://github.com/gerupon-lgtm/atoqueue/actions/runs/34663683573) 成功。品質チェック・CI専用PostgreSQL検証・GitHub Pages公開成功、API配置はskip。push/PRのCIも成功。本番DBへの接続・移行は行っていない。
+- 配置前のWeb再ビルド、配置成果物契約検査、配置補助2件はすべて成功。前回の全体検証から実装ソースの変更なし。
+- 公開先: <https://atoqueue.sikumilab.com/>。2026-09-12 01:09 UTCに公開後の確認完了。
+- 配信JS `/assets/index-CGsnnsP1.js` のSHA-256は `f5139214ac7ad9f1bd40670b953d493e1131bc9481c137fe73c980ba06f7e0bb`。JS・CSSともローカルbuildと一致し、Service Workerが新版JSを参照していることを確認。DEV試験画面は含まない。
+- 新規隔離Chromium（390×844、合成2Task）で設定の1.30.0表示、ⓘでの説明開閉、説明を開いても絞り込み位置不変、再確認操作の下配置・枠なし表示・保存済み内容表示を確認。22pxチェック・右端バッジ・下部固定操作とナビの非重複・確認画面への遷移も成功。
+- Android standalone、iOS通常ブラウザ、iOS standaloneの模擬3条件が終了0。iOSにはⓘ内の保存領域の説明を表示し、ホーム画面版は主操作無効＋短文、再確認なし。画像を主担当が目視確認。実OSや利用者の保存領域での実機試験ではない。
+- ブラウザ試験では本アプリ以外への通信を遮断し、テンパリストへの確定・実起動・保存は行っていない。通知APIの別途read-only `/healthz` はHTTP 200、`status=ok`、`version=mvp-1.27.0`。
+- Git管理外証跡: `dist/deploy-130-verify.mjs`、`dist/deploy-130-result.json`、`dist/deploy-130-build.log`、`dist/deploy-130-entry-android-standalone.png`、`dist/deploy-130-help-ios-browser.png`。既存の未コミット3文書・未追跡ファイルはそのまま保持し、公開に含めない。
