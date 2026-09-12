@@ -83,9 +83,9 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
     expect(infoBox.x + infoBox.width).toBeLessThanOrEqual(width);
     expect(infoBox.width).toBeGreaterThanOrEqual(44);
     const infoIconBox = (await info.locator("span").boundingBox())!;
-    // Keep the approved icon center anchored 22px inside the filter's right edge.
+    // Keep the right-shifted icon position while giving both visible gaps 6px.
     expect(infoIconBox.x + infoIconBox.width / 2).toBeCloseTo(
-      before.x + before.width - 22,
+      before.x + before.width - 16,
       0,
     );
     expect(infoIconBox.x - retryBox.x - retryBox.width).toBeCloseTo(6, 0);

@@ -130,7 +130,7 @@
 .tempalist-selection__entry {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 31px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 25px;
   align-items: stretch;
   gap: 6px;
   width: 100%;
@@ -179,8 +179,8 @@
   background: transparent;
   font-size: 18px;
 }
-/* Give the former 13px icon inset to the equal buttons. Keep the icon's
-   position and extend its 44px hit area into the unused right margin. */
+/* Keep both visible gaps equal; use the outer margin for the icon's 44px
+   hit area so the two text buttons can share the remaining width equally. */
 .app-shell__content
   .tempalist-selection__entry[data-has-retry="true"]
   .tempalist-help__trigger {
