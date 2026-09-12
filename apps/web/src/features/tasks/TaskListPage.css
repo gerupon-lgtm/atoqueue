@@ -124,7 +124,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 0;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0;
   width: min(100%, 46rem);
 }
 .tempalist-selection__entry {
@@ -147,14 +147,15 @@
 }
 .app-shell__content .tempalist-selection__start,
 .app-shell__content .tempalist-selection__retry {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
   width: 100%;
   min-width: 0;
-  min-height: 44px;
-  padding: 0.5rem 0.125rem;
+  min-height: 36px;
+  padding: 0.25rem 0.125rem;
   margin: 0;
   font-size: clamp(0.75rem, 3.33vw, 0.875rem);
   line-height: 1.4;
@@ -173,11 +174,27 @@
   color: #1d5a4b;
   text-decoration: none;
 }
-/* Small visual icon; the independent, non-overlapping hit area stays 44px. */
+/* Compact visuals; the pseudo-elements below retain 44px-tall hit areas. */
 .app-shell__content .tempalist-selection__entry .tempalist-help__trigger {
+  position: relative;
+  min-height: 36px;
+  height: 36px;
   border: 0;
   background: transparent;
   font-size: 18px;
+}
+.tempalist-selection__start::after,
+.tempalist-selection__retry::after,
+.tempalist-selection__entry .tempalist-help__trigger::after {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
+}
+/* Account for the text buttons' 1px borders around the positioning box. */
+.tempalist-selection__start::after,
+.tempalist-selection__retry::after {
+  top: -5px;
+  bottom: -5px;
 }
 /* Keep both visible gaps equal; use the outer margin for the icon's 44px
    hit area so the two text buttons can share the remaining width equally. */

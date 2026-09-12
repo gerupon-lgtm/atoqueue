@@ -77,7 +77,9 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
     expect(startBox.width).toBeCloseTo(retryBox.width, 0);
     expect(startBox.height).toBeCloseTo(retryBox.height, 0);
     expect(startBox.y).toBeCloseTo(retryBox.y, 0);
-    expect(startBox.height).toBeGreaterThanOrEqual(44);
+    expect(startBox.height).toBeGreaterThanOrEqual(36);
+    if (width >= 360) expect(startBox.height).toBeCloseTo(36, 0);
+    expect(before.y - startBox.y - startBox.height).toBeCloseTo(12, 0);
     expect(retryBox.x - startBox.x - startBox.width).toBeCloseTo(6, 0);
     expect(infoBox.x).toBeGreaterThanOrEqual(retryBox.x + retryBox.width);
     expect(infoBox.x + infoBox.width).toBeLessThanOrEqual(width);
@@ -104,7 +106,22 @@ test("F-020 compact selection keeps aligned badges and reachable bottom actions 
         startBox.y + startBox.height / 2 - infoBox.y - infoBox.height / 2,
       ),
     ).toBeLessThan(2);
-    expect(infoBox.height).toBeGreaterThanOrEqual(44);
+    expect(infoBox.height).toBeCloseTo(36, 0);
+    // The visible controls are compact, but their top/bottom hit areas stay 44px.
+    for (const button of [start, retry, info]) {
+      const rect = (await button.boundingBox())!;
+      expect(rect.height + 8).toBeGreaterThanOrEqual(44);
+      for (const y of [rect.y - 3, rect.y + rect.height + 3]) {
+        expect(
+          await button.evaluate(
+            (element, point) =>
+              document.elementFromPoint(point.x, point.y)?.closest("button") ===
+              element,
+            { x: rect.x + rect.width / 2, y },
+          ),
+        ).toBe(true);
+      }
+    }
     await info.click();
     const dialog = page.getByRole("dialog", { name: "テンパリストとの連携" });
     await expect(dialog).toBeVisible();

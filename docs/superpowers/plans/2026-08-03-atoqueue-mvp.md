@@ -1609,4 +1609,4 @@ Expected: no unresolved production placeholders, skipped tests, or focused tests
 - 画像承認に従い、濃緑の「テンパリストへ」・白地の「直前の連携を確認」・小さなⓘを1行へ配置する。主操作左端を状態プルダウンに揃え、2ボタンの幅・高さを統一、間隔6pxとする。
 - 最終画像調整では左端・ボタン間隔6pxを固定し、右へ6px寄せたⓘの位置に合わせ両ボタンを等幅で拡幅する。390px時は各145px、ⓘ中心350px。ⓘの44px押下領域は右余白へ確保し、2か所の見た目の隙間を6pxへ揃える。
 - 配置のRED/GREEN、全単体・結合・E2E、型検査・lint・全buildとStandards/Specレビューを記録する。単一画面・ロジック変更なしのためmvp-1.30.1。保存・通知API・DBは変更しない。
-- 公開は画像差の指摘後いったん保留中。検証画像と公開状況は `docs/operations/releases/mvp-1.30.1.md` に記録する。
+- ボタン外観高さ36px・下の絞り込みカードとの間隔12pxの最終画像を承認。透明な上下押下領域で縦44pxを保ち、全体検証後に保留していたPWA公開へ進む。検証画像と公開状況は `docs/operations/releases/mvp-1.30.1.md` に記録する。
