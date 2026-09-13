@@ -50,7 +50,9 @@ test("a user-triggered denied permission shows browser-settings guidance", async
     });
     Object.defineProperty(navigator, "serviceWorker", {
       configurable: true,
-      value: {},
+      // ServiceWorkerContainer is an EventTarget; retain its message-listener
+      // contract while simulating a denied permission without a real worker.
+      value: new EventTarget(),
     });
     Object.defineProperty(window, "PushManager", {
       configurable: true,
@@ -112,7 +114,7 @@ test("mobile settings keeps notification help actionable and app information on 
 
   await page.getByText("アプリ情報", { exact: true }).click();
   const information = page.getByLabel("アプリ情報");
-  await expect(information.getByText("mvp-1.31.0")).toBeVisible();
+  await expect(information.getByText("mvp-1.32.0")).toBeVisible();
   await expect(
     information.locator("dt").filter({ hasText: "バージョン" }),
   ).toHaveCSS("white-space", "nowrap");

@@ -45,6 +45,23 @@ function snapshotWithCapture() {
 }
 
 describe("classification", () => {
+  it("F-014 starts memo reminders at classification time, not an old capture's creation time", () => {
+    const createdAt = "2026-08-26T00:00:00.000Z";
+    const classifiedAt = "2026-09-13T09:56:52.488Z";
+    const initial = createEmptySnapshot({ appVersion: "test", localDeviceId: "local", timeZone: "Asia/Tokyo", now: createdAt });
+    initial.settings.notificationEnabled = true;
+    const snapshot = createCapture(initial, "古い未整理の記録", createdAt, "old-capture");
+    snapshot.notificationOutbox = [];
+
+    const next = markAsNote({ snapshot, captureId: "old-capture", now: classifiedAt });
+
+    expect(next.captures[0]).toMatchObject({ classification: "note", createdAt, classifiedAt });
+    expect(next.notificationOutbox.filter(item => item.operation === "upsert").map(item => ({ scheduledAt: item.scheduledAt, repeatCadence: item.repeatCadence }))).toEqual([
+      { scheduledAt: "2026-09-20T09:56:52.488Z", repeatCadence: undefined },
+      { scheduledAt: "2026-09-27T09:56:52.488Z", repeatCadence: "weekly" },
+    ]);
+  });
+
   it("F-005 suggests a task without changing the capture classification", () => {
     const snapshot = snapshotWithCapture();
 

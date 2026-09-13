@@ -1,6 +1,6 @@
 import type { AppSnapshot, Capture, NotificationOutboxItem, ReminderMapEntry, RepeatCadence, Task } from "./model";
 import { planNotificationSchedules, type ReminderScheduleKind } from "./notification-schedule";
-import { globalNotificationSeriesAnchor, globalNotificationSeriesKey } from "./global-notification-series";
+import { globalNotificationSeriesAnchor, globalNotificationSeriesKey, memoReviewAnchorAt } from "./global-notification-series";
 
 export type CaptureReminderScheduleKind = "capture_initial";
 export type NotificationIdFactory = (kind: "outbox" | "reminder", scheduleKind?: ReminderScheduleKind | CaptureReminderScheduleKind) => string;
@@ -213,7 +213,7 @@ export function rebuildMemoReviewNotifications(input: GlobalRebuildInput): Pick<
   const cadence = input.snapshot.settings.memoReviewFrequency === "weekly" ? "weekly"
     : input.snapshot.settings.memoReviewFrequency === "monthly" ? "monthly" : undefined;
   const first = oldest && cadence
-    ? addDays(oldest.createdAt, cadence === "monthly" ? 14 : 7)
+    ? addDays(memoReviewAnchorAt(oldest), cadence === "monthly" ? 14 : 7)
     : undefined;
   const schedules: GlobalSchedule[] = !first || !cadence ? []
     : first < input.now

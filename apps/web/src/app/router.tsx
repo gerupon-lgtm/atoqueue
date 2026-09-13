@@ -147,8 +147,11 @@ function Page({ title }: { title: string }) {
 
 function InboxRoute() {
   const navigate = useNavigate();
+  const location = useLocation();
   return (
     <InboxPage
+      preferredReminderId={new URLSearchParams(location.search).get("reminder") ?? undefined}
+      notificationNavigationKey={location.key}
       onTaskCandidate={(captureId) => navigate(`/inbox/${captureId}`)}
       repository={applicationRepository}
       sync={() => notificationSync.flush()}

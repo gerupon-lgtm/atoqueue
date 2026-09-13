@@ -1,3 +1,5 @@
+import { validReminderUrl } from "./notification-link";
+
 export const genericNotification = {
   title: "あとキュー",
   body: "確認したい項目があります",
@@ -17,7 +19,12 @@ export interface PushPayload {
   groupId?: string;
 }
 type WebNotificationOptions = NotificationOptions & { vibrate?: number[] };
-export interface WorkerClients { matchAll(options?: ClientQueryOptions): Promise<Array<{ url: string; focus(): Promise<unknown> | unknown }>>; openWindow(url: string): Promise<unknown> | unknown; }
+interface WorkerWindow {
+  url: string;
+  focus(): Promise<unknown> | unknown;
+  postMessage?(message: unknown, transfer: Transferable[]): void;
+}
+export interface WorkerClients { matchAll(options?: ClientQueryOptions): Promise<WorkerWindow[]>; openWindow(url: string): Promise<unknown> | unknown; }
 
 /** Ignores malformed or private payload fields before rendering OS-visible text. */
 export async function handlePush(raw: string, showNotification: (title: string, options: WebNotificationOptions) => Promise<unknown> | unknown): Promise<void> {
@@ -37,8 +44,40 @@ export async function handlePush(raw: string, showNotification: (title: string, 
 export async function handleNotificationClick(data: Partial<Pick<PushPayload, "url" | "reminderId">>, clients: WorkerClients): Promise<void> {
   const url = validReminderUrl(data.url, data.reminderId) ? data.url : "/today";
   const existing = (await clients.matchAll({ type: "window", includeUncontrolled: true })).find((client) => sameOriginPath(client.url, url));
-  if (existing) { await existing.focus(); return; }
+  if (existing) {
+    if (url.startsWith("/inbox?")) {
+      // SPA navigation preserves body drafts; focus alone would drop the reminder.
+      if (await notifyOpenInbox(existing, url, data.reminderId!)) {
+        try {
+          await existing.focus();
+          return;
+        } catch {
+          // The window may close after acknowledging; open the link normally.
+        }
+      }
+    } else {
+      await existing.focus();
+      return;
+    }
+  }
   await clients.openWindow(url);
+}
+
+async function notifyOpenInbox(client: WorkerWindow, url: string, reminderId: string): Promise<boolean> {
+  if (!client.postMessage) return false;
+  const channel = new MessageChannel();
+  return new Promise(resolve => {
+    const finish = (handled: boolean) => {
+      clearTimeout(timeout);
+      channel.port1.close();
+      channel.port2.close();
+      resolve(handled);
+    };
+    const timeout = setTimeout(() => finish(false), 1000);
+    channel.port1.onmessage = event => { if (event.data === "handled") finish(true); };
+    try { client.postMessage!({ type: "atoqueue:notification-click", url, reminderId }, [channel.port2]); }
+    catch { finish(false); }
+  });
 }
 
 function parsePayload(raw: string): PushPayload | undefined {
@@ -60,20 +99,9 @@ function parsePayload(raw: string): PushPayload | undefined {
   } catch { return undefined; }
 }
 
-function validReminderUrl(url: unknown, reminderId: unknown): url is string {
-  if (typeof url !== "string" || typeof reminderId !== "string" || !isUuid(reminderId)) return false;
-  try {
-    const parsed = new URL(url, "https://atoqueue.invalid");
-    return parsed.origin === "https://atoqueue.invalid"
-      && (parsed.pathname === "/today" || parsed.pathname === "/inbox")
-      && parsed.searchParams.size === 1
-      && parsed.searchParams.get("reminder") === reminderId;
-  } catch { return false; }
-}
 function validGroupId(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{16}$/.test(value);
 }
-function isUuid(value: string): boolean { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
 function sameOriginPath(clientUrl: string, target: string): boolean {
   try {
     const client = new URL(clientUrl);

@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { genericNotification, handleNotificationClick, handlePush } from "./service-worker";
 
 describe("service worker notification behavior", () => {
+  afterEach(() => vi.useRealTimers());
   it("accepts the real dispatcher payload while retaining only its anonymous reminder context", async () => {
     const showNotification = vi.fn();
     const reminderId = "22222222-2222-4222-8222-222222222222";
@@ -98,11 +99,55 @@ describe("service worker notification behavior", () => {
     expect(openWindow).toHaveBeenCalledWith(`/inbox?reminder=${reminderId}`);
   });
 
+  it("F-015 carries the clicked reminder into an already open inbox instead of only focusing it", async () => {
+    const reminderId = "22222222-2222-4222-8222-222222222222";
+    const url = `/inbox?reminder=${reminderId}`;
+    const focus = vi.fn();
+    const postMessage = vi.fn((_message: unknown, ports: Transferable[]) => (ports[0] as MessagePort).postMessage("handled"));
+    const openWindow = vi.fn();
+    await handleNotificationClick({ url, reminderId }, {
+      matchAll: async () => [{ url: `${window.location.origin}/inbox`, focus, postMessage }],
+      openWindow,
+    });
+    expect(postMessage).toHaveBeenCalledWith({ type: "atoqueue:notification-click", url, reminderId }, expect.any(Array));
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(openWindow).not.toHaveBeenCalled();
+  });
+
+  it("F-015 opens the reminder link if the inbox closes after acknowledging navigation", async () => {
+    const reminderId = "22222222-2222-4222-8222-222222222222";
+    const url = `/inbox?reminder=${reminderId}`;
+    const focus = vi.fn().mockRejectedValue(new Error("window closed"));
+    const postMessage = (_message: unknown, ports: Transferable[]) => (ports[0] as MessagePort).postMessage("handled");
+    const openWindow = vi.fn();
+    await handleNotificationClick({ url, reminderId }, {
+      matchAll: async () => [{ url: `${window.location.origin}/inbox`, focus, postMessage }], openWindow,
+    });
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(openWindow).toHaveBeenCalledWith(url);
+  });
+
   it("rejects extra URL parameters so push data cannot carry task content", async () => {
     const showNotification = vi.fn();
     const reminderId = "22222222-2222-4222-8222-222222222222";
     await handlePush(JSON.stringify({ type: "review_due", reminderId, url: `/today?reminder=${reminderId}&title=private-task` }), showNotification);
 
     expect(showNotification).toHaveBeenCalledWith(genericNotification.title, expect.objectContaining({ data: { url: "/today" } }));
+  });
+
+  it.each(["closed", "unsupported", "failed"])("F-015 opens the reminder link when an existing inbox is %s", async (reason) => {
+    const reminderId = "22222222-2222-4222-8222-222222222222";
+    const url = `/inbox?reminder=${reminderId}`;
+    const openWindow = vi.fn();
+    vi.useFakeTimers();
+    const postMessage = reason === "unsupported" ? undefined : () => {
+      if (reason === "failed") throw new Error("window closed");
+    };
+    const clicked = handleNotificationClick({ url, reminderId }, {
+      matchAll: async () => [{ url: `${window.location.origin}/inbox`, focus: vi.fn(), postMessage }], openWindow,
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    await clicked;
+    expect(openWindow).toHaveBeenCalledWith(url);
   });
 });

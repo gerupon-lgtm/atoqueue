@@ -1,6 +1,11 @@
 import type { AppSnapshot, Capture } from "./model";
 
-/** Capture that owns a global notification series: newest inbox item, oldest memo. */
+/** Existing legacy notes without classification timestamps keep their original anchor. */
+export function memoReviewAnchorAt(capture: Capture): string {
+  return capture.classifiedAt ?? capture.createdAt;
+}
+
+/** Newest inbox creation, or oldest memo classification, owns the shared series. */
 export function globalNotificationSeriesAnchor(
   captures: Capture[],
   scope: "inbox" | "memo",
@@ -11,7 +16,7 @@ export function globalNotificationSeriesAnchor(
     .sort((left, right) =>
       scope === "inbox"
         ? right.createdAt.localeCompare(left.createdAt)
-        : left.createdAt.localeCompare(right.createdAt),
+        : memoReviewAnchorAt(left).localeCompare(memoReviewAnchorAt(right)),
     )[0];
 }
 
@@ -21,5 +26,5 @@ export function globalNotificationSeriesKey(snapshot: Pick<AppSnapshot, "capture
   if (!anchor || (scope === "memo" && snapshot.settings.memoReviewFrequency === "none")) return undefined;
   return JSON.stringify(scope === "inbox"
     ? [scope, anchor.createdAt, snapshot.settings.initialReminderDelayMinutes, snapshot.settings.inboxReminderFrequency]
-    : [scope, anchor.createdAt, snapshot.settings.memoReviewFrequency]);
+    : [scope, memoReviewAnchorAt(anchor), snapshot.settings.memoReviewFrequency]);
 }

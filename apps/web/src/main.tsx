@@ -1,6 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
+import { router } from "./app/router";
+import { installNotificationNavigation } from "./infrastructure/notifications/notification-navigation";
 import { NotificationApi } from "./infrastructure/notifications/notification-api";
 import {
   reconcileMissingNotifications,
@@ -10,6 +12,10 @@ import { flushOutbox } from "./infrastructure/notifications/outbox-sync";
 import { LocalStorageRepository } from "./infrastructure/local-storage/local-storage-repository";
 
 const rootElement = document.getElementById("root");
+
+if ("serviceWorker" in navigator) {
+  installNotificationNavigation(navigator.serviceWorker, url => router.navigate(url));
+}
 
 if (rootElement === null) {
   throw new Error("Root element was not found.");

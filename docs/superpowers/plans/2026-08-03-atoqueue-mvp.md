@@ -12,6 +12,8 @@
 
 ## Plan conventions
 
+2026-09-13のメモ通知修正（F-004 / F-006 / F-014 / F-015 / F-017）は [mvp-1.32.0の実装・検証計画](../../operations/releases/mvp-1.32.0.md) に記録する。分類日時の起点・通知からのメモタブ起動を修正し、保存schema・通知API・本番設定は変更しない。公開は別承認。
+
 2026-09-09の通知共通基盤v2追補は[専用実装計画](2026-09-09-notification-platform-v2.md)で管理する。対象はF-013〜F-015、F-019、NF-004〜NF-007、NF-012〜NF-014。あとキューWebのv1契約と端末schemaVersion=10は維持し、追加的DB移行とapp別のv2を実装する。リリース対象版はmvp-1.27.0。検証と本番未配置/配置済みの状態は`docs/operations/releases/mvp-1.27.0.md`を参照。
 
 - Working directory: repository root.

@@ -17,12 +17,15 @@ import {
   type CaptureHistoryTab,
 } from "../../../../../packages/domain/src";
 import "./InboxPage.css";
+import { resolveReminderInboxTab } from "../../infrastructure/notifications/reminder-navigation";
 
 export interface InboxPageProps {
   repository: AppRepository;
   now?: () => string;
   onTaskCandidate?: (captureId: string) => void;
   sync?: () => Promise<unknown>;
+  preferredReminderId?: string;
+  notificationNavigationKey?: string;
 }
 
 export function InboxPage({
@@ -30,6 +33,8 @@ export function InboxPage({
   now = () => new Date().toISOString(),
   onTaskCandidate,
   sync,
+  preferredReminderId,
+  notificationNavigationKey,
 }: InboxPageProps) {
   const [snapshot, setSnapshot] = useState<AppSnapshot>();
   const [tab, setTab] = useState<CaptureHistoryTab>("unclassified");
@@ -50,10 +55,18 @@ export function InboxPage({
   }
 
   useEffect(() => {
-    void reload().catch(() =>
-      setError("受信箱を読み込めませんでした。もう一度お試しください。"),
-    );
-  }, [repository]);
+    let active = true;
+    void repository.load().then(loaded => {
+      if (!active) return;
+      setSnapshot(loaded);
+      setTab(resolveReminderInboxTab(loaded, preferredReminderId ?? null));
+      setSelectionMode(false);
+      setSelectedIds(new Set());
+    }).catch(() => {
+      if (active) setError("受信箱を読み込めませんでした。もう一度お試しください。");
+    });
+    return () => { active = false; };
+  }, [repository, preferredReminderId, notificationNavigationKey]);
 
   function enqueueMutation(operation: () => Promise<void>): void {
     pendingMutations.current += 1;

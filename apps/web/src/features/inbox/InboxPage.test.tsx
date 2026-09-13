@@ -20,6 +20,36 @@ import { InboxPage } from "./InboxPage";
 
 const now = "2026-08-03T09:00:00.000Z";
 
+afterEach(cleanup);
+
+it("F-015 opens the memo tab for a locally mapped notification and lets the user switch tabs", async () => {
+  const repository = repositoryWithNotes();
+  const snapshot = await repository.load();
+  const reminderId = snapshot.reminderMap.find(entry => entry.scope === "memo")!.reminderId;
+  render(<InboxPage repository={repository} preferredReminderId={reminderId} />);
+
+  await waitFor(() => expect(screen.getByRole("tab", { name: /メモ/ }).getAttribute("aria-selected")).toBe("true"));
+  fireEvent.click(screen.getByRole("tab", { name: /未整理/ }));
+  expect(screen.getByRole("tab", { name: /未整理/ }).getAttribute("aria-selected")).toBe("true");
+  expect(repository.save).not.toHaveBeenCalled();
+});
+
+it("F-015 resolves a new reminder while mounted and falls back safely for missing mappings", async () => {
+  const repository = repositoryWithAllClassifications();
+  const snapshot = await repository.load();
+  const memo = snapshot.reminderMap.find(entry => entry.scope === "memo")!.reminderId;
+  const inbox = snapshot.reminderMap.find(entry => entry.scope === "inbox")!.reminderId;
+  const { rerender } = render(<InboxPage repository={repository} preferredReminderId={memo} />);
+  await waitFor(() => expect(screen.getByRole("tab", { name: /メモ/ }).getAttribute("aria-selected")).toBe("true"));
+  rerender(<InboxPage repository={repository} preferredReminderId={inbox} />);
+  await waitFor(() => expect(screen.getByRole("tab", { name: /未整理/ }).getAttribute("aria-selected")).toBe("true"));
+  rerender(<InboxPage repository={repository} preferredReminderId={memo} />);
+  await waitFor(() => expect(screen.getByRole("tab", { name: /メモ/ }).getAttribute("aria-selected")).toBe("true"));
+  rerender(<InboxPage repository={repository} preferredReminderId="missing" />);
+  await waitFor(() => expect(screen.getByRole("tab", { name: /未整理/ }).getAttribute("aria-selected")).toBe("true"));
+  expect(repository.save).not.toHaveBeenCalled();
+});
+
 function repositoryWithCaptures(): AppRepository {
   let snapshot = createEmptySnapshot({
     appVersion: "0.1.0",
