@@ -110,6 +110,8 @@ atoqueue-deploy ALL=(root) NOPASSWD: ATOQUEUE_ACTIVATE
 
 ## リリース前の確認
 
+リリース対象の手入れでは、`mvp-MAJOR.MINOR.PATCH`を必ず更新する。単一画面だけの見た目修正でロジック変更がない場合はパッチ、複数画面またはロジック変更はマイナーとしてパッチを`0`へ戻す。メジャー変更は事前に発案者と合意する。設定画面、Web/APIの実行バージョン、各ワークスペースのpackage version、要件・画面・API設計の表示が一致していることを確認する。
+
 ローカルまたは CI で次を実行する。最初の二つは Web/API のビルドを明示的に確認する。
 
 ```powershell

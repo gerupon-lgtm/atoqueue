@@ -24,6 +24,7 @@ describe("initial migration", () => {
       "idx_reminder_jobs_idempotency",
       "reminder_idempotency_operations",
       "device_idempotency_operations",
+      "idx_device_subscriptions_app",
     ]));
   });
 });

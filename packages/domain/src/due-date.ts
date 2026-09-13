@@ -26,6 +26,7 @@ export interface ResolveDueChoiceInput {
   now: string;
   calendar: LocalCalendar;
   weeklyReviewDay?: number;
+  defaultDeadlineTime?: string;
 }
 
 export interface DueResolution {
@@ -39,21 +40,23 @@ export function resolveDueChoice(input: ResolveDueChoiceInput): DueResolution {
 
   switch (input.choice.type) {
     case "today":
-      return scheduledOn(input.calendar, today, input.choice.time);
+      return scheduledOn(input.calendar, today, input.choice.time, input.defaultDeadlineTime);
     case "tomorrow":
       return scheduledOn(
         input.calendar,
         input.calendar.addDays(today, 1),
         input.choice.time,
+        input.defaultDeadlineTime,
       );
     case "this_sunday":
       return scheduledOn(
         input.calendar,
         input.calendar.nextSunday(today),
         input.choice.time,
+        input.defaultDeadlineTime,
       );
     case "custom":
-      return scheduledOn(input.calendar, input.choice.date, input.choice.time);
+      return scheduledOn(input.calendar, input.choice.date, input.choice.time, input.defaultDeadlineTime);
     case "none": {
       const weeklyReviewDate = input.calendar.nextWeekday(
         today,
@@ -140,9 +143,10 @@ function scheduledOn(
   calendar: LocalCalendar,
   date: string,
   time: string | undefined,
+  defaultDeadlineTime: string | undefined,
 ): DueResolution {
-  if (!time) return scheduled(calendar.endOfDay(date));
-  const [hour, minute] = parseTime(time);
+  if (!time && !defaultDeadlineTime) return scheduled(calendar.endOfDay(date));
+  const [hour, minute] = parseTime(time ?? defaultDeadlineTime!);
   return scheduled(calendar.atTime(date, hour, minute));
 }
 

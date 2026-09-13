@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   answerReview,
   createEmptySnapshot,
-  findNextReviewIndex,
+  findNextUnansweredReviewIndex,
   modifyTask,
   startReviewSession,
   type AppSnapshot,
@@ -67,12 +67,12 @@ function answer(snapshot: AppSnapshot, action: "complete" | "do_today" | "resche
 describe("review task actions", () => {
   it.each([
     ["complete", {}, { status: "completed", completedAt: now }, "task_completed", "cancel"],
-    ["reopen", {}, { status: "active" }, "task_reopened", "upsert"],
+    ["reopen", {}, { status: "active" }, "task_reopened", "cancel"],
     ["reschedule", { due: { dueMode: "scheduled", dueAt: "2026-08-10T23:59:00.000Z", nextReviewAt: "2026-08-10T23:59:00.000Z" } }, { status: "active", dueAt: "2026-08-10T23:59:00.000Z" }, "task_rescheduled", "upsert"],
     ["no_due", {}, { dueMode: "none" }, "task_marked_no_due", "upsert"],
     ["dismiss", {}, { status: "active", dismissCount: 1 }, "task_dismissed", "upsert"],
     ["archive", {}, { status: "archived", archivedAt: now }, "task_archived", "cancel"],
-    ["edit", { title: "new title", category: "home" }, { title: "new title", category: "home" }, "task_edited", "upsert"],
+    ["edit", { title: "new title", category: "home" }, { title: "new title", category: "home" }, "task_edited", "cancel"],
   ] as const)("F-015 changes a task directly with %s and keeps its anonymous sync record", (change, extra, expected, action, operation) => {
     const initial = {
       ...snapshotWithSession([task("task-1", { status: change === "reopen" ? "completed" : "active", completedAt: change === "reopen" ? now : undefined })]),
@@ -185,11 +185,11 @@ describe("review task actions", () => {
     expect(next.reminderMap).toEqual([expect.objectContaining({ reminderId: "reminder-id", taskId: "task-1", taskRevision: 2 })]);
   });
 
-  it("F-009 completes a resumed session when every remaining task became stale", () => {
+  it("F-009 never applies an answer to another task when the selected task is missing", () => {
     const initial = snapshotWithSession([task("task-1")]);
     const stale = {
       ...initial,
-      tasks: [task("task-1", { status: "completed", completedAt: now })],
+      tasks: [task("unrelated")],
       reviewSessions: [
         initial.reviewSessions[0]!,
         { ...initial.reviewSessions[0]!, id: "other-session" },
@@ -198,7 +198,8 @@ describe("review task actions", () => {
 
     const next = answer(stale, "dismiss");
 
-    expect(next.reviewSessions[0]).toMatchObject({ currentIndex: 1, completedAt: now });
+    expect(next.reviewSessions[0]).toMatchObject({ completedAt: now });
+    expect(next.tasks).toEqual(stale.tasks);
     expect(next.actionHistory).toEqual([]);
     expect(next.notificationOutbox).toEqual([]);
   });
@@ -227,7 +228,19 @@ describe("review task actions", () => {
   it("F-009 returns the terminal index when no review tasks remain", () => {
     const session = startReviewSession({ sessionId: "session-1", now, calendar, tasks: [task("task-1")] });
 
-    expect(findNextReviewIndex(session, [task("task-1", { status: "archived", archivedAt: now })], 0)).toBe(1);
+    expect(findNextUnansweredReviewIndex(session, [task("task-1", { status: "archived", archivedAt: now })], 0)).toBe(1);
+  });
+
+  it.each(["complete", "archive"] as const)("F-010 corrects the selected task after direct %s without changing the next task", (type) => {
+    const initial = snapshotWithSession([task("first"), task("second"), task("third")]);
+    const direct = modifyTask({ snapshot: initial, taskId: "first", change: { type }, now, calendar, idFactory: (kind) => `direct-${kind}` });
+    const next = answer(direct, "no_due");
+    expect(next.tasks[0]).toMatchObject({ id: "first", status: "active", dueMode: "none" });
+    expect(next.tasks[1]).toEqual(initial.tasks[1]);
+    expect(next.tasks[2]).toEqual(initial.tasks[2]);
+    expect(next.actionHistory.at(-1)?.entityId).toBe("first");
+    expect(next.reviewSessions[0]).toMatchObject({ currentIndex: 1, answeredTaskIds: ["first"] });
+    expect(next.reviewSessions[0]?.actionEventIds).not.toContain("direct-action");
   });
 
   it("F-012 uses a local random ID generator when no test ID factory is supplied", () => {
@@ -271,6 +284,29 @@ describe("review task actions", () => {
     const next = answer(snapshotWithSession([unset]), "dismiss");
 
     expect(next.notificationOutbox[0]).toMatchObject({ notificationType: "unset_due_review" });
+  });
+
+  it("keeps an earlier skipped task open when the last visible task is answered", () => {
+    const initial = snapshotWithSession([task("first"), task("second")]);
+    const skipped = {
+      ...initial,
+      reviewSessions: [{ ...initial.reviewSessions[0]!, currentIndex: 1 }],
+    };
+
+    const next = answerReview({
+      snapshot: skipped,
+      sessionId: "session-1",
+      answer: "dismiss",
+      now,
+      calendar,
+      idFactory: (kind) => `${kind}-id`,
+    });
+
+    expect(next.reviewSessions[0]).toMatchObject({
+      currentIndex: 0,
+      answeredTaskIds: ["second"],
+    });
+    expect(next.reviewSessions[0]?.completedAt).toBeUndefined();
   });
 
   it("F-014 cancels every anonymous reminder for a completed task without exposing task data", () => {

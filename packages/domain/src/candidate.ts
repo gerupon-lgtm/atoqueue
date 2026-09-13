@@ -1,5 +1,6 @@
 import type { DueChoice } from "./due-date";
 import type { Task } from "./model";
+import { suggestTaskCategory } from "./task-categories";
 
 export interface TaskCandidateSuggestion {
   title: string;
@@ -11,9 +12,13 @@ export interface TaskCandidateSuggestion {
  * A deliberately small, local-only rule set. It supports only the exact
  * Japanese date expressions below; calendar dates remain a user choice.
  */
-export function generateTaskCandidate(body: string): TaskCandidateSuggestion {
+export function generateTaskCandidate(
+  body: string,
+  customCategories: readonly string[] = [],
+): TaskCandidateSuggestion {
   const dueChoice = dueChoiceFromBody(body);
-  const category = categoryFromBody(body);
+  const category =
+    suggestTaskCategory(body, customCategories) ?? categoryFromBody(body);
   const title = stripDateExpression(body).trim() || body.trim();
 
   return {

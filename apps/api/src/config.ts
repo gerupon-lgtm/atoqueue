@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { ApplicationRegistry } from "./applications/registry.js";
+import { validateVapidDetails } from "./push/vapid-validation.js";
 
 export const PWA_ORIGIN = "https://atoqueue.sikumilab.com";
 export const API_ORIGIN = "https://api.atoqueue.sikumilab.com";
@@ -11,12 +13,21 @@ const ConfigSchema = z
     VAPID_PRIVATE_KEY: z.string().min(1),
     VAPID_SUBJECT: z.literal("mailto:gerupon@gmail.com"),
     ALLOWED_ORIGIN: z.literal(PWA_ORIGIN),
-    LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
-    DEADLINE_DELIVERY_LEAD_SECONDS: z.coerce.number().int().min(0).max(3_600).default(300),
+    LOG_LEVEL: z
+      .enum(["fatal", "error", "warn", "info", "debug", "trace"])
+      .default("info"),
+    DEADLINE_DELIVERY_LEAD_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(3_600)
+      .default(300),
   })
   .strict();
 
 export type ApiConfig = {
+  applications: ApplicationRegistry;
+  v2Enabled: boolean;
   port: number;
   databaseUrl: string;
   vapidPublicKey: string;
@@ -29,7 +40,26 @@ export type ApiConfig = {
   deadlineDeliveryLeadSeconds: number;
 };
 
-export function loadConfig(environment: NodeJS.ProcessEnv = process.env): ApiConfig {
+export function loadConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+): ApiConfig {
+  if (
+    environment.NOTIFICATION_V2_ENABLED !== undefined &&
+    !["true", "false"].includes(environment.NOTIFICATION_V2_ENABLED)
+  )
+    throw new Error("Invalid notification v2 switch.");
+  let registryInput: unknown;
+  try {
+    registryInput = JSON.parse(
+      environment.NOTIFICATION_APPLICATIONS_JSON ?? "[]",
+    );
+  } catch {
+    throw new Error("Invalid notification application registry.");
+  }
+  const applications = new ApplicationRegistry(
+    registryInput,
+    environment.NODE_ENV === "development",
+  );
   const parsed = ConfigSchema.parse({
     PORT: environment.PORT,
     DATABASE_URL: environment.DATABASE_URL,
@@ -40,7 +70,14 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): ApiCon
     LOG_LEVEL: environment.LOG_LEVEL,
     DEADLINE_DELIVERY_LEAD_SECONDS: environment.DEADLINE_DELIVERY_LEAD_SECONDS,
   });
+  validateVapidDetails({
+    publicKey: parsed.VAPID_PUBLIC_KEY,
+    privateKey: parsed.VAPID_PRIVATE_KEY,
+    subject: parsed.VAPID_SUBJECT,
+  });
   return {
+    applications,
+    v2Enabled: environment.NOTIFICATION_V2_ENABLED === "true",
     port: parsed.PORT,
     databaseUrl: parsed.DATABASE_URL,
     vapidPublicKey: parsed.VAPID_PUBLIC_KEY,

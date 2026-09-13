@@ -73,6 +73,17 @@ export class NotificationApi {
     );
   }
 
+  async deactivate(
+    credentials: DeviceCredentials,
+    idempotencyKey: string,
+  ): Promise<void> {
+    await this.request(`/v1/devices/${credentials.deviceId}`, {
+      method: "DELETE",
+      credentials,
+      idempotencyKey,
+    });
+  }
+
   async upsert(
     item: NotificationOutboxItem,
     credentials: DeviceCredentials,
@@ -89,6 +100,7 @@ export class NotificationApi {
       deviceId: credentials.deviceId,
       scheduledAt: item.scheduledAt,
       notificationType: item.notificationType,
+      ...(item.repeatCadence ? { repeatCadence: item.repeatCadence } : {}),
     });
     ReminderResponseSchema.parse(
       await this.request(`/v1/reminders/${item.reminderId}`, {

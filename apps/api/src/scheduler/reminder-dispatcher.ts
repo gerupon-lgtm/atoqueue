@@ -1,7 +1,19 @@
+import { createHash } from "node:crypto";
+
 import type { PushClient } from "../push/push-client.js";
 import type { ReminderRepository } from "../reminders/reminder-repository.js";
+import type { ApplicationRegistry } from "../applications/registry.js";
+import { NotificationPushPayloadV2Schema } from "@atoqueue/contracts";
 
 const RETRY_MINUTES = [5, 15, 60] as const;
+export interface DeliveryObservation {
+  appId: string;
+  protocolVersion: 1 | 2 | null;
+  outcome: "sent" | "retry" | "expired" | "failed";
+  errorCode: string | null;
+  attemptCount: number;
+  count: 1;
+}
 
 export class ReminderDispatcher {
   constructor(
@@ -9,38 +21,230 @@ export class ReminderDispatcher {
     private readonly push: PushClient,
     private readonly clock = () => new Date(),
     private readonly deliveryLeadSeconds = 0,
+    private readonly applications?: ApplicationRegistry,
+    private readonly observe?: (event: DeliveryObservation) => void,
   ) {}
 
   async recoverStaleClaims(): Promise<void> {
     const now = this.clock();
-    await this.repository.recoverStaleClaims(new Date(now.getTime() - 15 * 60_000).toISOString(), now.toISOString());
+    await this.repository.recoverStaleClaims(
+      new Date(now.getTime() - 15 * 60_000).toISOString(),
+      now.toISOString(),
+    );
   }
 
   async dispatchDue(): Promise<void> {
     const now = this.clock();
     const claimedAt = now.toISOString();
-    const dueBefore = new Date(now.getTime() + this.deliveryLeadSeconds * 1_000).toISOString();
+    const dueBefore = new Date(
+      now.getTime() + this.deliveryLeadSeconds * 1_000,
+    ).toISOString();
     const jobs = await this.repository.claimDue(claimedAt, 100, dueBefore);
     await Promise.all(jobs.map((job) => this.send(job, now)));
   }
 
-  private async send(job: Awaited<ReturnType<ReminderRepository["claimDue"]>>[number], now: Date): Promise<void> {
+  private async send(
+    job: Awaited<ReturnType<ReminderRepository["claimDue"]>>[number],
+    now: Date,
+  ): Promise<void> {
     const claimedAt = job.claimedAt;
     if (!claimedAt) return;
+    const occurrenceAt = job.repeatAnchorAt ?? job.scheduledAt;
     try {
-      const result = await this.push.send({ subscription: job.subscription, payload: { type: "review_due", reminderId: job.id, url: `/today?reminder=${job.id}` } });
-      if (result.statusCode >= 200 && result.statusCode < 300) { await this.repository.markSent(job.id, claimedAt, now.toISOString()); return; }
-      if (result.statusCode === 404 || result.statusCode === 410) { await this.repository.disableDeviceAndFailPending(job.deviceId, job.id, claimedAt, now.toISOString(), `push_${result.statusCode}`); return; }
-      await this.handleTemporary(job.id, claimedAt, job.attemptCount, now, `push_${result.statusCode}`);
+      const appId = job.appId ?? "atoqueue";
+      const protocol = job.protocolVersion ?? 1;
+      const application = this.applications?.get(appId);
+      if (
+        protocol === 2 &&
+        (!application ||
+          !job.routeKey ||
+          !application.notificationKeys.includes(job.notificationType) ||
+          !application.routeKeys.includes(job.routeKey))
+      )
+        throw new Error("Invalid application delivery configuration.");
+      if (
+        (protocol !== 1 && protocol !== 2) ||
+        (protocol === 1 && appId !== "atoqueue")
+      )
+        throw new Error("Invalid delivery protocol.");
+      const path =
+        job.notificationType === "inbox_review" ? "/inbox" : "/today";
+      const result = await this.push.send({
+        ...(protocol === 2 ? { appId } : {}),
+        subscription: job.subscription,
+        payload:
+          protocol === 2
+            ? NotificationPushPayloadV2Schema.parse({
+                version: 2,
+                appId,
+                type: "reminder_due",
+                reminderId: job.id,
+                notificationKey: job.notificationType,
+                routeKey: job.routeKey,
+                groupId: notificationGroupId(
+                  `${appId}\0${job.notificationType}`,
+                  occurrenceAt,
+                ),
+              })
+            : {
+                type: "review_due",
+                reminderId: job.id,
+                url: `${path}?reminder=${job.id}`,
+                groupId: notificationGroupId(
+                  job.notificationType,
+                  occurrenceAt,
+                ),
+              },
+      });
+      if (result.statusCode >= 200 && result.statusCode < 300) {
+        if (job.repeatCadence)
+          await this.repository.rescheduleAfterSend(
+            job.id,
+            claimedAt,
+            nextScheduledAt(new Date(occurrenceAt), job.repeatCadence),
+            now.toISOString(),
+          );
+        else
+          await this.repository.markSent(job.id, claimedAt, now.toISOString());
+        this.recordOutcome(job, "sent", null, job.attemptCount);
+        return;
+      }
+      if (result.statusCode === 404 || result.statusCode === 410) {
+        await this.repository.disableDeviceAndFailPending(
+          job.deviceId,
+          job.id,
+          claimedAt,
+          now.toISOString(),
+          `push_${result.statusCode}`,
+        );
+        this.recordOutcome(
+          job,
+          "expired",
+          `push_${result.statusCode}`,
+          job.attemptCount,
+        );
+        return;
+      }
+      const code = [400, 401, 403, 429, 500, 502, 503, 504].includes(
+        result.statusCode,
+      )
+        ? `push_${result.statusCode}`
+        : "push_other";
+      await this.handleTemporary(
+        job.id,
+        claimedAt,
+        job.attemptCount,
+        now,
+        code,
+      );
+      this.recordOutcome(
+        job,
+        job.attemptCount >= 3 ? "failed" : "retry",
+        code,
+        job.attemptCount + 1,
+      );
     } catch {
-      await this.handleTemporary(job.id, claimedAt, job.attemptCount, now, "push_error");
+      await this.handleTemporary(
+        job.id,
+        claimedAt,
+        job.attemptCount,
+        now,
+        "push_error",
+      );
+      this.recordOutcome(
+        job,
+        job.attemptCount >= 3 ? "failed" : "retry",
+        "push_error",
+        job.attemptCount + 1,
+      );
     }
   }
 
-  private async handleTemporary(id: string, claimedAt: string, currentAttempts: number, now: Date, code: string): Promise<void> {
-    const attemptCount = currentAttempts + 1;
-    if (attemptCount > 3) { await this.repository.fail(id, claimedAt, attemptCount, now.toISOString(), code); return; }
-    const minutes = RETRY_MINUTES[currentAttempts]!;
-    await this.repository.retry(id, claimedAt, new Date(now.getTime() + minutes * 60_000).toISOString(), attemptCount, now.toISOString(), code);
+  private recordOutcome(
+    job: Awaited<ReturnType<ReminderRepository["claimDue"]>>[number],
+    outcome: DeliveryObservation["outcome"],
+    errorCode: string | null,
+    attemptCount: number,
+  ): void {
+    const appId = job.appId ?? "atoqueue";
+    const protocolVersion = job.protocolVersion ?? 1;
+    try {
+      this.observe?.({
+        appId: /^[a-z][a-z0-9-]{0,31}$/.test(appId) ? appId : "unknown",
+        protocolVersion:
+          protocolVersion === 1 || protocolVersion === 2
+            ? protocolVersion
+            : null,
+        outcome,
+        errorCode,
+        attemptCount: Math.min(4, Math.max(0, attemptCount)),
+        count: 1,
+      });
+    } catch {
+      // Observability failures must not replay a successful delivery.
+    }
   }
+
+  private async handleTemporary(
+    id: string,
+    claimedAt: string,
+    currentAttempts: number,
+    now: Date,
+    code: string,
+  ): Promise<void> {
+    const attemptCount = currentAttempts + 1;
+    if (attemptCount > 3) {
+      await this.repository.fail(
+        id,
+        claimedAt,
+        attemptCount,
+        now.toISOString(),
+        code,
+      );
+      return;
+    }
+    const minutes = RETRY_MINUTES[currentAttempts]!;
+    await this.repository.retry(
+      id,
+      claimedAt,
+      new Date(now.getTime() + minutes * 60_000).toISOString(),
+      attemptCount,
+      now.toISOString(),
+      code,
+    );
+  }
+}
+
+function notificationGroupId(
+  notificationType: string,
+  scheduledAt: string,
+): string {
+  return createHash("sha256")
+    .update(`${notificationType}\0${scheduledAt}`)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+function nextScheduledAt(
+  scheduledAt: Date,
+  cadence: "daily" | "weekly" | "monthly",
+): string {
+  if (cadence === "daily")
+    return new Date(scheduledAt.getTime() + 24 * 60 * 60_000).toISOString();
+  if (cadence === "weekly")
+    return new Date(scheduledAt.getTime() + 7 * 24 * 60 * 60_000).toISOString();
+  const year = scheduledAt.getUTCFullYear();
+  const month = scheduledAt.getUTCMonth() + 1;
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(
+    Date.UTC(
+      year,
+      month,
+      Math.min(scheduledAt.getUTCDate(), lastDay),
+      scheduledAt.getUTCHours(),
+      scheduledAt.getUTCMinutes(),
+      scheduledAt.getUTCSeconds(),
+      scheduledAt.getUTCMilliseconds(),
+    ),
+  ).toISOString();
 }

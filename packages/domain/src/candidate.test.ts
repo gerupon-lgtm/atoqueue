@@ -35,4 +35,13 @@ describe("generateTaskCandidate", () => {
     expect(snapshot.captures[0]!.classification).toBe("unclassified");
     expect(snapshot.tasks).toEqual([]);
   });
+
+  it("prefers an exact custom-category substring over a preset heuristic", () => {
+    expect(generateTaskCandidate("冷蔵庫の牛乳を買う", ["冷蔵庫"])).toMatchObject({
+      category: "冷蔵庫",
+    });
+    expect(generateTaskCandidate("れいぞうこの牛乳を買う", ["冷蔵庫"])).toMatchObject({
+      category: "shopping",
+    });
+  });
 });

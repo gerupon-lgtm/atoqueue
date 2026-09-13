@@ -12,7 +12,8 @@ const promptByLevel: Record<NeglectLevel, PromptCopy> = {
   2: { message: "少し時間が経っています。今日やるか、日付を変えましょう" },
   3: { message: "このまま残すより、残すかどうかを決めましょう" },
   4: {
-    message: "このまま残すより、完了・新しい期限・不要のどれかを決めましょう",
+    message:
+      "このまま残すより、完了・新しい期限・アーカイブのどれかを決めましょう",
   },
 };
 

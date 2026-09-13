@@ -11,6 +11,7 @@ export class WebPushClient implements PushClient {
       const result = await webpush.sendNotification(
         { endpoint: input.subscription.endpoint, keys: { p256dh: input.subscription.p256dh, auth: input.subscription.auth } },
         JSON.stringify(input.payload),
+        { TTL: 24 * 60 * 60, urgency: "high" },
       );
       return { statusCode: result.statusCode };
     } catch (error) {

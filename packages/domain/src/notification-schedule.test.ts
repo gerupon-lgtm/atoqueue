@@ -11,6 +11,11 @@ const settings: Settings = {
   initialReminderDelayMinutes: 60,
   deadlineReminderLeadMinutes: 60,
   weeklyReviewDay: 0,
+  inboxReminderFrequency: "none",
+  overdueTaskReminderFrequency: "none",
+  memoReviewFrequency: "none",
+  enterSavesCapture: true,
+  customTaskCategories: [],
 };
 
 function scheduledTask(overrides: Partial<Task> = {}): Task {
@@ -33,13 +38,71 @@ function scheduledTask(overrides: Partial<Task> = {}): Task {
 }
 
 describe("notification scheduling policy", () => {
-  it("creates anonymous initial, deadline-before, and deadline-time schedules without task content", () => {
-    const schedules = planNotificationSchedules({ task: scheduledTask(), settings, now });
+  it("F-014 plans prompt overdue reminders four hours after the deadline and then daily at the deadline time", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask(),
+      settings: { ...settings, overdueTaskReminderFrequency: "prompt" },
+      now,
+    });
 
     expect(schedules).toEqual([
-      { kind: "initial", scheduledAt: "2026-08-08T10:00:00.000Z", notificationType: "task_review" },
       { kind: "deadline_before", scheduledAt: "2026-08-08T14:00:00.000Z", notificationType: "deadline_review" },
       { kind: "review", scheduledAt: "2026-08-08T15:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "overdue_first", scheduledAt: "2026-08-08T19:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "overdue_repeat", scheduledAt: "2026-08-09T15:00:00.000Z", notificationType: "deadline_review", repeatCadence: "daily" },
+    ]);
+  });
+
+  it("F-014 plans gentle overdue reminders at one, three, and seven days before weekly reminders", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask(),
+      settings: { ...settings, overdueTaskReminderFrequency: "gentle" },
+      now,
+    });
+
+    expect(schedules).toEqual([
+      { kind: "deadline_before", scheduledAt: "2026-08-08T14:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "review", scheduledAt: "2026-08-08T15:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "overdue_first", scheduledAt: "2026-08-09T15:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "overdue_second", scheduledAt: "2026-08-11T15:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "overdue_third", scheduledAt: "2026-08-15T15:00:00.000Z", notificationType: "deadline_review" },
+      { kind: "overdue_repeat", scheduledAt: "2026-08-22T15:00:00.000Z", notificationType: "deadline_review", repeatCadence: "weekly" },
+    ]);
+  });
+
+  it("F-014 keeps an overdue prompt task on its next original deadline time without reviving elapsed notifications", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask({
+        dueAt: "2026-08-06T15:00:00.000Z",
+        nextReviewAt: "2026-08-06T15:00:00.000Z",
+      }),
+      settings: { ...settings, overdueTaskReminderFrequency: "prompt" },
+      now,
+    });
+
+    expect(schedules).toEqual([
+      { kind: "overdue_repeat", scheduledAt: "2026-08-08T15:00:00.000Z", notificationType: "deadline_review", repeatCadence: "daily" },
+    ]);
+  });
+
+  it("creates anonymous deadline-before and deadline-time schedules without task content", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask(),
+      settings,
+      now,
+    });
+
+    expect(schedules).toEqual([
+      {
+        kind: "deadline_before",
+        scheduledAt: "2026-08-08T14:00:00.000Z",
+        notificationType: "deadline_review",
+      },
+      {
+        kind: "review",
+        scheduledAt: "2026-08-08T15:00:00.000Z",
+        notificationType: "deadline_review",
+      },
     ]);
     expect(JSON.stringify(schedules)).not.toContain("SECRET_TASK_CANARY");
     expect(JSON.stringify(schedules)).not.toContain("task-local-only");
@@ -47,25 +110,122 @@ describe("notification scheduling policy", () => {
 
   it("never creates an already-past early reminder and retains the actual deadline for server-side lead delivery", () => {
     const schedules = planNotificationSchedules({
-      task: scheduledTask({ createdAt: "2026-08-08T07:00:00.000Z", dueAt: "2026-08-08T09:30:00.000Z", nextReviewAt: "2026-08-08T09:30:00.000Z" }),
+      task: scheduledTask({
+        createdAt: "2026-08-08T07:00:00.000Z",
+        dueAt: "2026-08-08T09:30:00.000Z",
+        nextReviewAt: "2026-08-08T09:30:00.000Z",
+      }),
       settings,
       now,
     });
 
     expect(schedules).toEqual([
-      { kind: "review", scheduledAt: "2026-08-08T09:30:00.000Z", notificationType: "deadline_review" },
+      {
+        kind: "review",
+        scheduledAt: "2026-08-08T09:30:00.000Z",
+        notificationType: "deadline_review",
+      },
     ]);
   });
 
   it("keeps the existing single review schedule when notifications have not been enabled", () => {
     const schedules = planNotificationSchedules({
-      task: scheduledTask({ dueMode: "none", dueAt: undefined, nextReviewAt: "2026-08-11T09:00:00.000Z" }),
+      task: scheduledTask({
+        dueMode: "none",
+        dueAt: undefined,
+        nextReviewAt: "2026-08-11T09:00:00.000Z",
+      }),
       settings: { ...settings, notificationEnabled: false },
       now,
     });
 
     expect(schedules).toEqual([
-      { kind: "review", scheduledAt: "2026-08-11T09:00:00.000Z", notificationType: "task_review" },
+      {
+        kind: "review",
+        scheduledAt: "2026-08-11T09:00:00.000Z",
+        notificationType: "task_review",
+      },
     ]);
   });
+
+  it("treats a zero-minute deadline lead as one deadline-time notification", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask({ createdAt: "2026-08-08T07:00:00.000Z" }),
+      settings: { ...settings, deadlineReminderLeadMinutes: 0 },
+      now,
+    });
+
+    expect(schedules).toEqual([
+      {
+        kind: "review",
+        scheduledAt: "2026-08-08T15:00:00.000Z",
+        notificationType: "deadline_review",
+      },
+    ]);
+  });
+
+  it("does not create a new initial reminder after the capture has become a task", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask({
+        dueAt: "2026-08-08T10:30:00.000Z",
+        nextReviewAt: "2026-08-08T10:30:00.000Z",
+      }),
+      settings,
+      now,
+    });
+
+    expect(schedules.map((schedule) => schedule.kind)).toEqual([
+      "deadline_before",
+      "review",
+    ]);
+  });
+
+  it("omits a deadline-before reminder when its calculated time is now", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask({
+        dueAt: "2026-08-08T10:00:00.000Z",
+        nextReviewAt: "2026-08-08T10:00:00.000Z",
+      }),
+      settings,
+      now,
+    });
+
+    expect(schedules).toEqual([
+      {
+        kind: "review",
+        scheduledAt: "2026-08-08T10:00:00.000Z",
+        notificationType: "deadline_review",
+      },
+    ]);
+  });
+
+  it("omits a deadline-before reminder when its calculated time has passed", () => {
+    const schedules = planNotificationSchedules({
+      task: scheduledTask({
+        dueAt: "2026-08-08T09:30:00.000Z",
+        nextReviewAt: "2026-08-08T09:30:00.000Z",
+      }),
+      settings,
+      now,
+    });
+
+    expect(schedules.map((schedule) => schedule.kind)).toEqual(["review"]);
+  });
+
+  it.each(["none", "unset"] as const)(
+    "keeps only the normal review reminder for an organized task with due mode %s",
+    (dueMode) => {
+      const schedules = planNotificationSchedules({
+        task: scheduledTask({
+          dueMode,
+          dueAt: undefined,
+          nextReviewAt: "2026-08-11T09:00:00.000Z",
+        }),
+        settings,
+        now,
+      });
+
+      expect(schedules.map((schedule) => schedule.kind)).toEqual(["review"]);
+    },
+  );
 });

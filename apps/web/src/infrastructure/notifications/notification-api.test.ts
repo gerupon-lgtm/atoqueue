@@ -18,6 +18,7 @@ describe("NotificationApi", () => {
         reminderId: "22222222-2222-4222-8222-222222222222",
         status: "pending",
         scheduledAt: "2026-08-04T09:00:00.000Z",
+        repeatCadence: null,
         updatedAt: "2026-08-04T08:00:00.000Z",
       }),
     );
@@ -53,6 +54,42 @@ describe("NotificationApi", () => {
       }),
     );
     expect(fetcher.mock.calls[0][1].body).not.toContain("task title");
+  });
+
+  it("sends only the approved cadence field for a repeating anonymous reminder", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(201, {
+        reminderId: "22222222-2222-4222-8222-222222222222",
+        status: "pending",
+        scheduledAt: "2026-08-04T09:00:00.000Z",
+        repeatCadence: "weekly",
+        updatedAt: "2026-08-04T08:00:00.000Z",
+      }),
+    );
+    const api = new NotificationApi("https://api.example.test", fetcher);
+
+    await api.upsert(
+      {
+        id: "outbox",
+        operation: "upsert",
+        reminderId: "22222222-2222-4222-8222-222222222222",
+        scheduledAt: "2026-08-04T09:00:00.000Z",
+        notificationType: "inbox_review",
+        repeatCadence: "weekly",
+        taskRevision: 0,
+        attemptCount: 0,
+        nextAttemptAt: "2026-08-04T08:00:00.000Z",
+        createdAt: "2026-08-04T08:00:00.000Z",
+      },
+      credentials,
+    );
+
+    expect(JSON.parse(fetcher.mock.calls[0][1].body as string)).toEqual({
+      deviceId: credentials.deviceId,
+      scheduledAt: "2026-08-04T09:00:00.000Z",
+      notificationType: "inbox_review",
+      repeatCadence: "weekly",
+    });
   });
 
   it("reports retry metadata for a rate-limited request", async () => {
@@ -150,6 +187,24 @@ describe("NotificationApi", () => {
         "PUT",
       ],
     ]);
+  });
+
+  it("deactivates a device with only its anonymous credentials and an idempotency key", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const api = new NotificationApi("https://api.example.test", fetcher);
+
+    await api.deactivate(credentials, "remove-device-key");
+
+    expect(fetcher).toHaveBeenCalledWith(
+      `https://api.example.test/v1/devices/${credentials.deviceId}`,
+      expect.objectContaining({
+        method: "DELETE",
+        headers: expect.objectContaining({
+          Authorization: "Bearer device-secret",
+          "Idempotency-Key": "remove-device-key",
+        }),
+      }),
+    );
   });
 
   it("calls the browser fetch function with its global receiver when no fetcher is injected", async () => {

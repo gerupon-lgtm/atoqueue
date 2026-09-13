@@ -93,6 +93,7 @@ describe("TaskCandidatePage", () => {
           element.textContent === "元の記録: 明日 牛乳を買う",
       ),
     ).toBeTruthy();
+    expect(screen.getByText("登録: 2026/8/3 18:00")).toBeTruthy();
     expect((screen.getByLabelText("タスク名") as HTMLInputElement).value).toBe(
       "牛乳を買う",
     );
@@ -128,6 +129,35 @@ describe("TaskCandidatePage", () => {
     ).toMatchObject({
       category: "shopping",
     });
+  });
+
+  it("suggests and offers a device-local exact-match category", async () => {
+    const snapshot = createCapture(
+      createEmptySnapshot({
+        appVersion: "mvp-1.5.0",
+        localDeviceId: "device-1",
+        timeZone: "Asia/Tokyo",
+        now,
+      }),
+      "冷蔵庫の豆腐",
+      now,
+      "capture-1",
+    );
+    snapshot.settings.customTaskCategories = ["冷蔵庫"];
+    const repository: AppRepository = {
+      load: vi.fn().mockResolvedValue(snapshot),
+      save: vi.fn().mockResolvedValue(undefined),
+      loadDraft: vi.fn().mockResolvedValue(""),
+      saveDraft: vi.fn().mockResolvedValue(undefined),
+      clearDraft: vi.fn().mockResolvedValue(undefined),
+    };
+
+    render(<TaskCandidatePage captureId="capture-1" repository={repository} />);
+
+    expect(await screen.findByText("カテゴリ候補: 冷蔵庫")).toBeTruthy();
+    expect((screen.getByLabelText("カテゴリ") as HTMLSelectElement).value).toBe(
+      "冷蔵庫",
+    );
   });
 
   it("F-006 changes the capture to a memo only after メモにする and returns", async () => {
@@ -189,8 +219,8 @@ describe("TaskCandidatePage", () => {
     fireEvent.change(screen.getByLabelText("期限"), {
       target: { value: "custom" },
     });
-    fireEvent.change(screen.getByLabelText("日付"), {
-      target: { value: "2026-08-02" },
+    fireEvent.change(screen.getByLabelText("期限日（8桁）"), {
+      target: { value: "20260802" },
     });
     fireEvent.change(screen.getByLabelText("タスク名"), {
       target: { value: "牛乳を買い足す" },
@@ -202,9 +232,9 @@ describe("TaskCandidatePage", () => {
     expect((screen.getByLabelText("タスク名") as HTMLInputElement).value).toBe(
       "牛乳を買い足す",
     );
-    expect((screen.getByLabelText("日付") as HTMLInputElement).value).toBe(
-      "2026-08-02",
-    );
+    expect(
+      (screen.getByLabelText("期限日（8桁）") as HTMLInputElement).value,
+    ).toBe("2026/08/02");
   });
 
   it("F-007 explains that a deadline is chosen while turning an inbox item into a task", async () => {
@@ -214,14 +244,17 @@ describe("TaskCandidatePage", () => {
     await screen.findByDisplayValue("牛乳を買う");
     expect(
       screen.getByText(
-        "期限はタスクにする時に選べます。日付と時刻を指定でき、時刻を空欄にすると23:59を期限にします。",
+        "期限はタスクにする時に選べます。日付と時刻を指定でき、時刻を指定しない場合は設定の既定時刻を使います。",
       ),
     ).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("期限"), {
       target: { value: "custom" },
     });
-    expect(screen.getByLabelText("日付")).toHaveProperty("type", "date");
+    expect(screen.getByLabelText("期限日（8桁）")).toHaveProperty(
+      "type",
+      "text",
+    );
   });
 
   it("F-007 lets the user choose a deadline time while turning a capture into a task", async () => {
@@ -239,11 +272,12 @@ describe("TaskCandidatePage", () => {
     fireEvent.change(screen.getByLabelText("期限"), {
       target: { value: "custom" },
     });
-    fireEvent.change(screen.getByLabelText("日付"), {
-      target: { value: "2026-08-05" },
+    fireEvent.change(screen.getByLabelText("期限日（8桁）"), {
+      target: { value: "20260805" },
     });
-    fireEvent.change(screen.getByLabelText("期限時刻"), {
-      target: { value: "09:30" },
+    fireEvent.click(screen.getByLabelText("期限時刻を指定する"));
+    fireEvent.change(screen.getByLabelText("期限時刻（4桁）"), {
+      target: { value: "0930" },
     });
     fireEvent.click(screen.getByRole("button", { name: "タスクにする" }));
 
@@ -251,5 +285,29 @@ describe("TaskCandidatePage", () => {
     expect(
       (repository.save as ReturnType<typeof vi.fn>).mock.calls[0]![0].tasks[0],
     ).toMatchObject({ dueAt: "2026-08-05T00:30:00.000Z" });
+  });
+
+  it("keeps the primary task action distinct from the two equally arranged alternatives", async () => {
+    render(
+      <TaskCandidatePage
+        captureId="capture-1"
+        repository={repositoryWithCapture()}
+      />,
+    );
+
+    const taskAction = await screen.findByRole("button", {
+      name: "タスクにする",
+    });
+    expect(taskAction.classList).toContain("task-candidate__save");
+    expect(
+      screen
+        .getByRole("button", { name: "メモにする" })
+        .closest(".task-candidate__secondary-actions"),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "受信箱へ戻る" })
+        .closest(".task-candidate__secondary-actions"),
+    ).not.toBeNull();
   });
 });

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   currentReviewTask,
+  goToNextTask,
   goToPreviousTask,
+  refreshReviewSession,
   startReviewSession,
   summarizeReview,
   type ReviewCalendar,
@@ -89,7 +91,64 @@ describe("review session", () => {
     expect(goToPreviousTask(session, now)).toMatchObject({ currentIndex: 0 });
   });
 
-  it("F-009 skips stale unvisited completed and archived IDs when resuming", () => {
+  it("refreshes an unfinished session with newly eligible tasks without losing progress", () => {
+    const original = {
+      ...startReviewSession({
+        sessionId: "session-1",
+        now,
+        calendar,
+        tasks: [task("first")],
+      }),
+      visitedTaskIds: ["first"],
+    };
+
+    const refreshed = refreshReviewSession({
+      session: original,
+      now,
+      calendar,
+      tasks: [task("first"), task("new-today")],
+    });
+
+    expect(refreshed).toMatchObject({
+      orderedTaskIds: ["first", "new-today"],
+      visitedTaskIds: ["first"],
+      updatedAt: now,
+    });
+  });
+
+  it("moves to the next available task and wraps so skipped items remain reachable", () => {
+    const tasks = [task("first"), task("second")];
+    const session = startReviewSession({ sessionId: "session-1", now, calendar, tasks });
+
+    expect(goToNextTask(session, tasks, now)).toMatchObject({ currentIndex: 1 });
+    expect(goToNextTask({ ...session, currentIndex: 1 }, tasks, now)).toMatchObject({
+      currentIndex: 0,
+    });
+  });
+
+  it("F-009 lets manual next navigation revisit an answered completion", () => {
+    const tasks = [
+      task("first", { status: "completed", completedAt: now }),
+      task("second"),
+    ];
+    const session = {
+      ...startReviewSession({
+        sessionId: "session-1",
+        now,
+        calendar,
+        tasks: [task("first"), task("second")],
+      }),
+      currentIndex: 1,
+      visitedTaskIds: ["first"],
+      answeredTaskIds: ["first"],
+    };
+
+    expect(goToNextTask(session, tasks, now)).toMatchObject({
+      currentIndex: 0,
+    });
+  });
+
+  it("F-009 displays the selected completed history card without substituting an active task", () => {
     const session = {
       ...startReviewSession({ sessionId: "session-1", now, calendar, tasks: [task("done"), task("archived"), task("active")] }),
       currentIndex: 0,
@@ -98,7 +157,24 @@ describe("review session", () => {
     expect(currentReviewTask({
       session,
       tasks: [task("done", { status: "completed", completedAt: now }), task("archived", { status: "archived", archivedAt: now }), task("active")],
-    })).toMatchObject({ id: "active" });
+    })).toMatchObject({ id: "done" });
+  });
+
+  it("F-009 manually reaches archived and externally completed cards after the remaining active task", () => {
+    const original = [task("done"), task("active"), task("archived"), task("last")];
+    const tasks = [task("done", { status: "completed", completedAt: now }), task("active"), task("archived", { status: "archived", archivedAt: now }), task("last", { status: "completed", completedAt: now })];
+    let session = { ...startReviewSession({ sessionId: "session-1", now, calendar, tasks: original }), currentIndex: 1 };
+    for (const [index, id] of [[2, "archived"], [3, "last"], [0, "done"], [1, "active"]] as const) {
+      session = goToNextTask(session, tasks, now);
+      expect(session.currentIndex).toBe(index);
+      expect(currentReviewTask({ session, tasks })?.id).toBe(id);
+    }
+    expect(session.answeredTaskIds).toEqual([]);
+  });
+
+  it("F-009 never substitutes another task for a missing selected card", () => {
+    const session = startReviewSession({ sessionId: "session-1", now, calendar, tasks: [task("missing"), task("active")] });
+    expect(currentReviewTask({ session, tasks: [task("active")] })).toBeNull();
   });
 
   it("F-012 suppresses a dismissed overdue task until its next review time", () => {

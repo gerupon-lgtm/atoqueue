@@ -1,11 +1,58 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createEmptySnapshot,
+  rebuildGlobalNotificationSchedules,
   type AppRepository,
 } from "../../../../../packages/domain/src";
-import { enableNotifications } from "./push-subscription";
+import {
+  enableNotifications,
+  inspectBrowserPushState,
+} from "./push-subscription";
+import { flushOutbox } from "./outbox-sync";
+
+describe("inspectBrowserPushState", () => {
+  it("requires both granted permission and a live Push subscription", async () => {
+    expect(
+      await inspectBrowserPushState({
+        isAvailable: () => true,
+        permission: () => "granted",
+        hasSubscription: async () => true,
+      }),
+    ).toBe("ready");
+    expect(
+      await inspectBrowserPushState({
+        isAvailable: () => true,
+        permission: () => "denied",
+        hasSubscription: async () => true,
+      }),
+    ).toBe("denied");
+    expect(
+      await inspectBrowserPushState({
+        isAvailable: () => true,
+        permission: () => "granted",
+        hasSubscription: async () => false,
+      }),
+    ).toBe("subscription_missing");
+  });
+});
 
 describe("enableNotifications", () => {
+  it("re-registers both global series for a new device and keeps them stable after synchronization", async () => {
+    const repository = memory();
+    const snapshot = await repository.load();
+    const now = "2026-08-04T08:00:00.000Z";
+    snapshot.captures = ["unclassified", "note"].map((classification, index) => ({ id: String(index), body: "PRIVATE", classification: classification as "unclassified" | "note", createdAt: "2026-07-01T08:00:00.000Z", updatedAt: now }));
+    const previous = rebuildGlobalNotificationSchedules({ snapshot, now });
+    await repository.save({ ...snapshot, ...previous, notificationOutbox: [] });
+    expect(await enableNotifications({ repository, browser: grantedBrowser(), now: () => now, api: { publicKey: async () => "AQID", register: async () => ({ deviceId: "new-device", deviceSecret: "new-secret", createdAt: now }), updateSubscription: async () => undefined } })).toEqual({ state: "granted" });
+    const registered = await repository.load();
+    expect(registered.reminderMap.map(entry => entry.scope)).toEqual(["inbox", "memo"]);
+    expect(registered.reminderMap.every(entry => !previous.reminderMap.some(old => old.reminderId === entry.reminderId))).toBe(true);
+    const sent: string[] = [];
+    await flushOutbox({ repository, now: () => now, api: { upsert: async (item, credentials) => { expect(credentials.deviceId).toBe("new-device"); sent.push(item.reminderId); }, cancel: async () => {} } });
+    expect(sent).toEqual(registered.reminderMap.map(entry => entry.reminderId));
+    expect(rebuildGlobalNotificationSchedules({ snapshot: await repository.load(), now: "2026-08-05T08:00:00.000Z" }).notificationOutbox).toEqual([]);
+  });
   it("persists a newly registered device only after an explicit granted permission result", async () => {
     const repository = memory();
     const register = vi.fn().mockResolvedValue({
@@ -117,27 +164,105 @@ describe("enableNotifications", () => {
     expect((await repository.load()).device.pushDeviceSecret).toBeUndefined();
   });
 
-  it("rebuilds anonymous future reminder records for active local tasks after registration", async () => {
+  it("rebuilds deadline, review, and overdue records for active local tasks after registration", async () => {
     const repository = memory();
     const snapshot = await repository.load();
-    snapshot.tasks = [{
-      id: "task-local", sourceCaptureId: "capture-local", title: "SECRET_TASK_CANARY", status: "active", dueMode: "scheduled",
-      dueAt: "2026-08-05T12:00:00.000Z", nextReviewAt: "2026-08-05T12:00:00.000Z", undecidedCount: 0,
-      dismissCount: 0, postponeCount: 0, createdAt: "2026-08-04T08:00:00.000Z", updatedAt: "2026-08-04T08:00:00.000Z", revision: 1,
-    }];
+    snapshot.tasks = [
+      {
+        id: "task-local",
+        sourceCaptureId: "capture-local",
+        title: "SECRET_TASK_CANARY",
+        status: "active",
+        dueMode: "scheduled",
+        dueAt: "2026-08-05T12:00:00.000Z",
+        nextReviewAt: "2026-08-05T12:00:00.000Z",
+        undecidedCount: 0,
+        dismissCount: 0,
+        postponeCount: 0,
+        createdAt: "2026-08-04T08:00:00.000Z",
+        updatedAt: "2026-08-04T08:00:00.000Z",
+        revision: 1,
+      },
+    ];
     await repository.save(snapshot);
 
     await enableNotifications({
       repository,
-      api: { publicKey: async () => "AQID", register: async () => ({ deviceId: "device", deviceSecret: "secret", createdAt: "2026-08-04T08:00:00.000Z" }), updateSubscription: async () => undefined },
+      api: {
+        publicKey: async () => "AQID",
+        register: async () => ({
+          deviceId: "device",
+          deviceSecret: "secret",
+          createdAt: "2026-08-04T08:00:00.000Z",
+        }),
+        updateSubscription: async () => undefined,
+      },
       browser: grantedBrowser(),
       now: () => "2026-08-04T08:00:00.000Z",
     });
 
     const saved = await repository.load();
-    expect(saved.notificationOutbox).toHaveLength(3);
-    expect(JSON.stringify(saved.notificationOutbox)).not.toContain("SECRET_TASK_CANARY");
-    expect(JSON.stringify(saved.notificationOutbox)).not.toContain("task-local");
+    expect(saved.notificationOutbox).toHaveLength(6);
+    expect(saved.reminderMap.map((entry) => entry.kind)).toEqual([
+      "deadline_before",
+      "review",
+      "overdue_first",
+      "overdue_second",
+      "overdue_third",
+      "overdue_repeat",
+    ]);
+    expect(JSON.stringify(saved.notificationOutbox)).not.toContain(
+      "SECRET_TASK_CANARY",
+    );
+    expect(JSON.stringify(saved.notificationOutbox)).not.toContain(
+      "task-local",
+    );
+  });
+
+  it("queues an immediate anonymous inbox reminder for a capture saved before notification setup", async () => {
+    const repository = memory();
+    const snapshot = await repository.load();
+    snapshot.captures = [
+      {
+        id: "capture-local",
+        body: "SECRET_CAPTURE_CANARY",
+        classification: "unclassified",
+        createdAt: "2026-08-04T06:00:00.000Z",
+        updatedAt: "2026-08-04T06:00:00.000Z",
+      },
+    ];
+    await repository.save(snapshot);
+
+    await enableNotifications({
+      repository,
+      api: {
+        publicKey: async () => "AQID",
+        register: async () => ({
+          deviceId: "device",
+          deviceSecret: "secret",
+          createdAt: "2026-08-04T08:00:00.000Z",
+        }),
+        updateSubscription: async () => undefined,
+      },
+      browser: grantedBrowser(),
+      now: () => "2026-08-04T08:00:00.000Z",
+    });
+
+    const saved = await repository.load();
+    expect(saved.notificationOutbox).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          notificationType: "inbox_review",
+          scheduledAt: "2026-08-04T08:00:00.000Z",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(saved.notificationOutbox)).not.toContain(
+      "SECRET_CAPTURE_CANARY",
+    );
+    expect(JSON.stringify(saved.notificationOutbox)).not.toContain(
+      "capture-local",
+    );
   });
 });
 
