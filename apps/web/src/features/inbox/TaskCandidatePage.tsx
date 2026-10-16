@@ -49,6 +49,7 @@ export function TaskCandidatePage({
   const [category, setCategory] = useState<Task["category"] | "">("");
   const [dueType, setDueType] = useState<DueChoice["type"]>("unset");
   const [customDate, setCustomDate] = useState("");
+  const [customDateEdited, setCustomDateEdited] = useState(false);
   const [dueTime, setDueTime] = useState("");
   const [dueTimeEnabled, setDueTimeEnabled] = useState(false);
   const [defaultDeadlineTime, setDefaultDeadlineTime] = useState("23:59");
@@ -210,9 +211,14 @@ export function TaskCandidatePage({
         </p>
         <select
           id="task-due"
-          onChange={(event) =>
-            setDueType(event.target.value as DueChoice["type"])
-          }
+          onChange={(event) => {
+            const type = event.target.value as DueChoice["type"];
+            if (type === "custom" && (!customDateEdited || !customDate))
+              setCustomDate(
+                createLocalCalendar(timeZone).today(now()).replaceAll("-", ""),
+              );
+            setDueType(type);
+          }}
           value={dueType}
         >
           <option value="today">今日</option>
@@ -227,7 +233,10 @@ export function TaskCandidatePage({
             dateDigits={customDate}
             defaultDeadlineTime={defaultDeadlineTime}
             idPrefix="task"
-            onDateDigitsChange={setCustomDate}
+            onDateDigitsChange={(value) => {
+              setCustomDate(value);
+              setCustomDateEdited(true);
+            }}
             onTimeDigitsChange={setDueTime}
             onTimeEnabledChange={(enabled) => {
               setDueTimeEnabled(enabled);
@@ -236,6 +245,7 @@ export function TaskCandidatePage({
             showDate={dueType === "custom"}
             timeDigits={dueTime}
             timeEnabled={dueTimeEnabled}
+            getTodayDate={() => createLocalCalendar(timeZone).today(now())}
           />
         ) : null}
         <button

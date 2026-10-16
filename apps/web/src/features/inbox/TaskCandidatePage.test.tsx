@@ -41,6 +41,39 @@ function repositoryWithCapture(): AppRepository {
 describe("TaskCandidatePage", () => {
   afterEach(cleanup);
 
+  it.each([
+    ["Asia/Tokyo", "2026/10/16"],
+    ["America/Los_Angeles", "2026/10/15"],
+  ])("F-007 defaults an explicitly selected date to today in %s", async (timeZone, expectedDate) => {
+    const repository = repositoryWithCapture();
+    const snapshot = await repository.load();
+    snapshot.settings.timeZone = timeZone;
+    let instant = "2026-10-15T15:30:00.000Z";
+    render(
+      <TaskCandidatePage
+        captureId="capture-1"
+        now={() => instant}
+        repository={repository}
+      />,
+    );
+
+    await screen.findByDisplayValue("牛乳を買う");
+    expect((screen.getByLabelText("期限") as HTMLSelectElement).value).toBe("unset");
+    expect(repository.save).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("期限"), { target: { value: "custom" } });
+
+    const date = screen.getByLabelText("期限日（8桁）") as HTMLInputElement;
+    expect(date.value).toBe(expectedDate);
+    expect(date.placeholder).toBe(`例: ${expectedDate}`);
+
+    fireEvent.change(date, { target: { value: "20261020" } });
+    fireEvent.change(screen.getByLabelText("期限"), { target: { value: "none" } });
+    instant = "2026-10-17T15:30:00.000Z";
+    fireEvent.change(screen.getByLabelText("期限"), { target: { value: "custom" } });
+    expect((screen.getByLabelText("期限日（8桁）") as HTMLInputElement).value).toBe("2026/10/20");
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
   it("F-005 creates no task until the user presses タスクにする", async () => {
     const repository = repositoryWithCapture();
     render(
@@ -63,6 +96,19 @@ describe("TaskCandidatePage", () => {
     ).toEqual([
       expect.objectContaining({ id: "task-1", sourceCaptureId: "capture-1" }),
     ]);
+  });
+
+  it("F-007 refreshes an untouched default when date selection is reopened after midnight", async () => {
+    const repository = repositoryWithCapture();
+    let instant = "2026-10-15T14:59:00.000Z";
+    render(<TaskCandidatePage captureId="capture-1" now={() => instant} repository={repository} />);
+    await screen.findByDisplayValue("牛乳を買う");
+    fireEvent.change(screen.getByLabelText("期限"), { target: { value: "custom" } });
+    expect(screen.getByLabelText("期限日（8桁）")).toHaveProperty("value", "2026/10/15");
+    fireEvent.change(screen.getByLabelText("期限"), { target: { value: "none" } });
+    instant = "2026-10-15T15:01:00.000Z";
+    fireEvent.change(screen.getByLabelText("期限"), { target: { value: "custom" } });
+    expect(screen.getByLabelText("期限日（8桁）")).toHaveProperty("value", "2026/10/16");
   });
 
   it("S-003 shows the original capture separately and preselects editable rule-based suggestions", async () => {

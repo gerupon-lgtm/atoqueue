@@ -390,6 +390,7 @@ export function TodayReviewPage({
         <ReviewActionSheet
           key={task.id}
           disabled={isSaving}
+          getDefaultDate={() => selectedCalendar.today(now())}
           onAnswer={(action) => void answer(action)}
           onReschedule={(date) => void answer("reschedule", date)}
         />

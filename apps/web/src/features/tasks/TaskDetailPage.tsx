@@ -415,6 +415,7 @@ export function TaskDetailPage({
           }}
           timeDigits={selectedDueTime}
           timeEnabled={dueTimeEnabled}
+          getTodayDate={() => createLocalCalendar(snapshot.settings.timeZone).today(now())}
         />
         {task.status === "active" ? (
           <div className="task-detail__actions task-detail__deadline-actions">

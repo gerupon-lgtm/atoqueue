@@ -4,6 +4,7 @@ type AnswerAction = "complete" | "do_today" | "no_due" | "dismiss" | "archive";
 
 export interface ReviewActionSheetProps {
   disabled?: boolean;
+  getDefaultDate: () => string;
   onAnswer: (
     answer: "complete" | "do_today" | "no_due" | "dismiss" | "archive",
   ) => void;
@@ -12,11 +13,13 @@ export interface ReviewActionSheetProps {
 
 export function ReviewActionSheet({
   disabled = false,
+  getDefaultDate,
   onAnswer,
   onReschedule,
 }: ReviewActionSheetProps) {
   const [isChoosingDate, setIsChoosingDate] = useState(false);
   const [date, setDate] = useState("");
+  const [hasEditedDate, setHasEditedDate] = useState(false);
   const [pressedAction, setPressedAction] = useState<AnswerAction>();
 
   function answer(action: AnswerAction): void {
@@ -39,7 +42,10 @@ export function ReviewActionSheet({
         <input
           disabled={disabled}
           id="review-reschedule-date"
-          onChange={(event) => setDate(event.target.value)}
+          onChange={(event) => {
+            setDate(event.target.value);
+            setHasEditedDate(true);
+          }}
           required
           type="date"
           value={date}
@@ -79,7 +85,10 @@ export function ReviewActionSheet({
       <button
         className="reviewActionSheet__reschedule"
         disabled={disabled}
-        onClick={() => setIsChoosingDate(true)}
+        onClick={() => {
+          if (!hasEditedDate || !date) setDate(getDefaultDate());
+          setIsChoosingDate(true);
+        }}
         type="button"
       >
         日付を変える

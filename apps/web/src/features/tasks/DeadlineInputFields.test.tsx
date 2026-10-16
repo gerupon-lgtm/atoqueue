@@ -14,10 +14,31 @@ import { DeadlineInputFields } from "./DeadlineInputFields";
 describe("DeadlineInputFields", () => {
   afterEach(cleanup);
 
+  it.each(["", "2026", "20260230"])("F-007 opens a date picker from %j using the current day only for an empty field", (initialDate) => {
+    let today = "2026-10-15";
+    function DateInput() {
+      const [date, setDate] = useState(initialDate);
+      return <DeadlineInputFields dateDigits={date} defaultDeadlineTime="23:59" getTodayDate={() => today} idPrefix="test" onDateDigitsChange={setDate} onTimeDigitsChange={vi.fn()} onTimeEnabledChange={vi.fn()} timeDigits="" timeEnabled={false} />;
+    }
+    const { container } = render(<DateInput />);
+    const date = screen.getByLabelText("期限日（8桁）") as HTMLInputElement;
+    expect(date.placeholder).toBe("例: 2026/10/15");
+    const picker = container.querySelector<HTMLInputElement>('input[type="date"]')!;
+    const showPicker = vi.fn();
+    picker.showPicker = showPicker;
+    const originalValue = date.value;
+    today = "2026-10-16";
+    fireEvent.click(screen.getByRole("button", { name: "カレンダーで期限日を選ぶ" }));
+    expect(showPicker).toHaveBeenCalledOnce();
+    expect(date.value).toBe(initialDate ? originalValue : "2026/10/16");
+    if (!initialDate) expect(picker.value).toBe("2026-10-16");
+  });
+
   it("formats typed date and time values while keeping one picker button per field", () => {
     render(
       <DeadlineInputFields
         dateDigits="20260808"
+        getTodayDate={() => "2026-10-16"}
         defaultDeadlineTime="18:30"
         idPrefix="candidate"
         onDateDigitsChange={vi.fn()}
@@ -51,6 +72,7 @@ describe("DeadlineInputFields", () => {
     const { rerender } = render(
       <DeadlineInputFields
         dateDigits="20260810"
+        getTodayDate={() => "2026-10-16"}
         defaultDeadlineTime="18:30"
         idPrefix="candidate"
         onDateDigitsChange={onDateDigitsChange}
@@ -72,6 +94,7 @@ describe("DeadlineInputFields", () => {
     rerender(
       <DeadlineInputFields
         dateDigits="20260810"
+        getTodayDate={() => "2026-10-16"}
         defaultDeadlineTime="18:30"
         idPrefix="candidate"
         onDateDigitsChange={onDateDigitsChange}
@@ -95,6 +118,7 @@ describe("DeadlineInputFields", () => {
       return (
         <DeadlineInputFields
           dateDigits={dateDigits}
+          getTodayDate={() => "2026-10-16"}
           defaultDeadlineTime="18:30"
           idPrefix="candidate"
           onDateDigitsChange={setDateDigits}

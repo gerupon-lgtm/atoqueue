@@ -105,6 +105,52 @@ function repositoryWithSnapshot(initial: AppSnapshot): AppRepository {
 describe("TodayReviewPage", () => {
   afterEach(cleanup);
 
+  it("F-007 F-009 F-010 NF-010 defaults a newly opened date choice to today in the configured zone and preserves an edited choice", async () => {
+    let timestamp = "2026-10-15T14:30:00.000Z";
+    const clock = () => timestamp;
+    const repository = repositoryWithSnapshot({
+      ...createEmptySnapshot({
+        appVersion: "0.1.0",
+        localDeviceId: "device-1",
+        timeZone: "Asia/Tokyo",
+        now: timestamp,
+      }),
+      tasks: [task("one")],
+    });
+    const save = vi.spyOn(repository, "save");
+    render(<TodayReviewPage now={clock} repository={repository} />);
+    await screen.findByText("タスク one");
+    const beforeChoosing = await repository.load();
+    save.mockClear();
+
+    timestamp = "2026-10-15T15:30:00.000Z";
+    fireEvent.click(screen.getByRole("button", { name: "日付を変える" }));
+    expect((screen.getByLabelText("新しい期限") as HTMLInputElement).value).toBe("2026-10-16");
+    expect(save).not.toHaveBeenCalled();
+    expect(await repository.load()).toEqual(beforeChoosing);
+
+    fireEvent.click(screen.getByRole("button", { name: "戻る" }));
+    timestamp = "2026-10-16T15:30:00.000Z";
+    fireEvent.click(screen.getByRole("button", { name: "日付を変える" }));
+    expect((screen.getByLabelText("新しい期限") as HTMLInputElement).value).toBe("2026-10-17");
+    fireEvent.change(screen.getByLabelText("新しい期限"), {
+      target: { value: "2026-10-21" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "戻る" }));
+    timestamp = "2026-10-17T15:30:00.000Z";
+    fireEvent.click(screen.getByRole("button", { name: "日付を変える" }));
+    expect((screen.getByLabelText("新しい期限") as HTMLInputElement).value).toBe("2026-10-21");
+    expect(save).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "この日付にする" }));
+    await waitFor(async () => {
+      expect((await repository.load()).tasks[0]).toMatchObject({
+        dueMode: "scheduled",
+        dueAt: "2026-10-21T14:59:00.000Z",
+      });
+    });
+  });
+
   it("F-003 F-009 initializes one durable session under StrictMode with asynchronous serialized writes", async () => {
     const storage = window.sessionStorage;
     storage.clear();

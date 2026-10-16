@@ -7,6 +7,7 @@ export interface DeadlineInputFieldsProps {
   timeDigits: string;
   timeEnabled: boolean;
   defaultDeadlineTime: string;
+  getTodayDate(): string;
   showDate?: boolean;
   onDateDigitsChange(value: string): void;
   onTimeDigitsChange(value: string): void;
@@ -20,6 +21,7 @@ export function DeadlineInputFields({
   timeDigits,
   timeEnabled,
   defaultDeadlineTime,
+  getTodayDate,
   showDate = true,
   onDateDigitsChange,
   onTimeDigitsChange,
@@ -30,6 +32,7 @@ export function DeadlineInputFields({
   const dateInput = useDelayedSelectInput();
   const timeInput = useDelayedSelectInput();
   const datePickerValue = dateFromDigits(dateDigits) ?? "";
+  const todayDate = getTodayDate();
   const timePickerValue = timeFromDigits(timeDigits) ?? "";
   const touchTarget = { minHeight: "44px", minWidth: "44px" };
   return (
@@ -49,14 +52,21 @@ export function DeadlineInputFields({
               }
               onFocus={dateInput.onFocus}
               pattern="[0-9/]*"
-              placeholder="例: 2026/08/10"
+              placeholder={`例: ${todayDate.replaceAll("-", "/")}`}
               style={touchTarget}
               value={formatDateDigits(dateDigits)}
             />
             <button
               aria-label="カレンダーで期限日を選ぶ"
               className="deadline-input-fields__picker-button"
-              onClick={() => openPicker(datePicker.current)}
+              onClick={() => {
+                if (!dateDigits) {
+                  const today = getTodayDate();
+                  if (datePicker.current) datePicker.current.value = today;
+                  onDateDigitsChange(today.replaceAll("-", ""));
+                }
+                openPicker(datePicker.current);
+              }}
               style={touchTarget}
               type="button"
             >
