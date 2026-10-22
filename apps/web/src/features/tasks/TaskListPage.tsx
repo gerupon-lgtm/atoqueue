@@ -15,6 +15,10 @@ import { formatLocalDateTime } from "../../presentation/format-local-date-time";
 import type { TempalistTransferService } from "../../application/tempalist-transfer-service";
 import { TempalistTransferPanel } from "../tempalist/TempalistTransferPanel";
 import { TempalistLinkedBadge } from "../../presentation/TempalistLinkedBadge";
+import {
+  containsWebUrl,
+  LinkedTaskText,
+} from "../../presentation/LinkedTaskText";
 import type { TempalistEnvironment } from "../../application/tempalist-environment";
 import { TempalistHelp } from "../tempalist/TempalistHelp";
 import tempalistIcon from "../../assets/tempalist-icon.svg";
@@ -448,14 +452,28 @@ function TaskListView({
                     <span>選択</span>
                   </label>
                 )}
-                <Link
-                  aria-label={task.title}
-                  className="task-list__item-title"
-                  style={touchTarget}
-                  to={`/tasks/${task.id}`}
-                >
-                  {task.title}
-                </Link>
+                {containsWebUrl(task.title) ? (
+                  <div className="task-list__item-title task-list__item-title--linked">
+                    <LinkedTaskText text={task.title} />
+                    <Link
+                      aria-label={`${task.title}を修正`}
+                      className="task-list__item-edit"
+                      style={touchTarget}
+                      to={`/tasks/${task.id}`}
+                    >
+                      タスクを修正
+                    </Link>
+                  </div>
+                ) : (
+                  <Link
+                    aria-label={task.title}
+                    className="task-list__item-title"
+                    style={touchTarget}
+                    to={`/tasks/${task.id}`}
+                  >
+                    {task.title}
+                  </Link>
+                )}
                 <TempalistLinkedBadge
                   linked={snapshot.tempalist.markers.some(
                     (marker) => marker.taskId === task.id,

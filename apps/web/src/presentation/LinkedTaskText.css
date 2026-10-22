@@ -1,0 +1,22 @@
+.linked-task-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.linked-task-text a {
+  color: #1552a3;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.linked-task-text a:visited {
+  color: #66428b;
+}
+
+.linked-task-text a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}

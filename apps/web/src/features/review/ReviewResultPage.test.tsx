@@ -35,7 +35,7 @@ describe("ReviewResultPage", () => {
     expect(await screen.findByText("完了: 1件")).toBeTruthy();
     expect(screen.getByText("期限なし: 1件")).toBeTruthy();
     expect(screen.getByText("アーカイブ: 1件")).toBeTruthy();
-    expect(screen.getByText("タスク three — アーカイブ")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "タスク threeを修正" }).closest("li")?.textContent).toContain("タスク three — アーカイブ");
     expect(screen.getByRole("link", { name: "タスク oneを修正" }).getAttribute("href")).toBe("/tasks/one");
     expect(screen.getByRole("link", { name: "タスク twoを修正" }).getAttribute("href")).toBe("/tasks/two");
     expect(screen.getByRole("link", { name: "タスク一覧を見る" }).getAttribute("href")).toBe("/tasks");

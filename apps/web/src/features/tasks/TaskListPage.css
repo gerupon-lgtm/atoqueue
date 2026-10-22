@@ -37,6 +37,19 @@
   justify-self: end;
 }
 
+.task-list__item-title.task-list__item-title--linked {
+  display: block;
+}
+
+.task-list__item-edit {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+}
+
 .task-list[data-selecting="true"] .task-list__item-title {
   grid-column: 1 / -1;
   grid-row: 2;

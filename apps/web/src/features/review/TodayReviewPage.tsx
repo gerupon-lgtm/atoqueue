@@ -31,6 +31,7 @@ import {
   useTaskSnapshot,
 } from "../../presentation/use-task-snapshot";
 import { TempalistLinkedBadge } from "../../presentation/TempalistLinkedBadge";
+import { LinkedTaskText } from "../../presentation/LinkedTaskText";
 import "./TodayReviewPage.css";
 
 export interface TodayReviewPageProps {
@@ -363,7 +364,9 @@ export function TodayReviewPage({
           {session.orderedTaskIds.length}
         </p>
         <p>{stateMessage}</p>
-        <h2>{task.title}</h2>
+        <h2>
+          <LinkedTaskText text={task.title} />
+        </h2>
         {task.category ? (
           <p aria-label="現在のカテゴリ" className="reviewTaskCategory">
             カテゴリ: {taskCategoryDisplayLabel(snapshot, task.category)}
