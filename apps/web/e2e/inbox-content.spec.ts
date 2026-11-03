@@ -35,15 +35,23 @@ test("F-004/NF-008 inbox cards, tabs, editors and actions fit narrow screens and
       await page.evaluate(percent => { document.documentElement.style.fontSize = `${16 * percent / 100}px`; }, percent);
       for (const tab of ["未整理", "メモ", "不要"]) {
         await page.getByRole("tab", { name: new RegExp(tab) }).click();
-        const result = await page.evaluate(() => ({
+        const result = await page.evaluate(() => {
+          const link = document.querySelector('.inbox-page .linked-task-text a')!;
+          const range = document.createRange();
+          range.selectNodeContents(link);
+          const tops = [...new Set([...range.getClientRects()].map(rect => rect.top))].sort((a, b) => a - b);
+          return {
+          linePitch: tops[1] - tops[0],
+          fontSize: parseFloat(getComputedStyle(link).fontSize),
           document: document.documentElement.scrollWidth,
           boxes: [...document.querySelectorAll('[aria-labelledby="inbox-title"] .inbox-tabs, [aria-labelledby="inbox-title"] ul, [aria-labelledby="inbox-title"] li, [aria-labelledby="inbox-title"] textarea, [aria-labelledby="inbox-title"] button')].map(node => {
             const box = node.getBoundingClientRect();
             return { name: node.tagName + " " + node.textContent?.slice(0, 30), left: box.left, right: box.right, client: node.clientWidth, scroll: node.scrollWidth };
           }),
-        }));
+        }; });
         measurements.push({ width, percent, tab, ...result });
         expect(result.document, `${width}px ${percent}% ${tab}`).toBeLessThanOrEqual(width + 1);
+        expect(result.linePitch, `${width}px ${percent}% ${tab} line spacing`).toBeGreaterThanOrEqual(result.fontSize * 1.45);
         for (const box of result.boxes) {
           expect(box.left).toBeGreaterThanOrEqual(0);
           expect(box.right).toBeLessThanOrEqual(width + 1);

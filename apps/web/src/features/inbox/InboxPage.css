@@ -15,6 +15,10 @@
   overflow-wrap: anywhere;
 }
 
+.inbox-page .linked-task-text {
+  line-height: 1.6;
+}
+
 .app-shell__content section.inbox-page button {
   min-width: 0;
   max-width: 100%;
