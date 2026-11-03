@@ -1,3 +1,36 @@
+.inbox-page,
+.inbox-page > ul,
+.inbox-page > ul > li {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  overflow-wrap: anywhere;
+}
+
+.inbox-page :is(textarea, input, label, .inbox-item__actions) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.inbox-page textarea {
+  overflow-wrap: anywhere;
+}
+
+.app-shell__content section.inbox-page button {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.inbox-page .inbox-tabs__tab {
+  flex-wrap: wrap;
+}
+
+.inbox-page .inbox-tabs__count {
+  min-width: min(2.25rem, 100%);
+  max-width: 100%;
+}
+
 .inbox-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

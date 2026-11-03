@@ -17,6 +17,7 @@ import {
   type CaptureHistoryTab,
 } from "../../../../../packages/domain/src";
 import "./InboxPage.css";
+import { LinkedTaskText } from "../../presentation/LinkedTaskText";
 import { resolveReminderInboxTab } from "../../infrastructure/notifications/reminder-navigation";
 
 export interface InboxPageProps {
@@ -285,7 +286,7 @@ export function InboxPage({
   };
 
   return (
-    <section aria-labelledby="inbox-title">
+    <section className="inbox-page" aria-labelledby="inbox-title">
       <h1 id="inbox-title">受信箱</h1>
       <div className="inbox-tabs" role="tablist" aria-label="受信箱の表示">
         {(
@@ -380,7 +381,7 @@ export function InboxPage({
             const suggestion = suggestClassification(capture.body);
             return (
               <li key={capture.id}>
-                <p>{capture.body}</p>
+                <p><LinkedTaskText text={capture.body} /></p>
                 <time dateTime={capture.createdAt}>
                   登録: {formatCaptureCreatedAt(capture.createdAt, timeZone)}
                 </time>
