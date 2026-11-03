@@ -3,6 +3,14 @@ import { defineWorkspace } from "vitest/config";
 export default defineWorkspace([
   {
     test: {
+      name: "notification-client",
+      root: "./packages/notification-client",
+      environment: "node",
+      include: ["src/**/*.test.ts"],
+    },
+  },
+  {
+    test: {
       name: "contracts",
       root: "./packages/contracts",
       environment: "node",

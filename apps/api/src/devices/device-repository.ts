@@ -9,6 +9,8 @@ export interface SubscriptionRecord {
 }
 
 export interface DeviceRecord {
+  appId?: string;
+  protocolVersion?: 1 | 2;
   id: string;
   deviceId: string;
   endpoint: string;
@@ -143,19 +145,21 @@ export class PgDeviceRepository implements DeviceRepository {
   async create(input: DeviceRecord): Promise<void> {
     await this.pool.query(
       `INSERT INTO device_subscriptions
-       (id, device_id, endpoint, p256dh, auth, secret_hash, status, created_at, updated_at, last_error_code)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [input.id, input.deviceId, input.endpoint, input.p256dh, input.auth, input.secretHash, input.status, input.createdAt, input.updatedAt, input.lastErrorCode],
+       (id, device_id, endpoint, p256dh, auth, secret_hash, status, created_at, updated_at, last_error_code, app_id, protocol_version)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [input.id, input.deviceId, input.endpoint, input.p256dh, input.auth, input.secretHash, input.status, input.createdAt, input.updatedAt, input.lastErrorCode, input.appId ?? "atoqueue", input.protocolVersion ?? 1],
     );
   }
 
   async findByDeviceId(deviceId: string): Promise<DeviceRecord | undefined> {
     const result = await this.pool.query<{
+      app_id?: string; protocol_version?: 1 | 2;
       id: string; device_id: string; endpoint: string; p256dh: string; auth: string; secret_hash: string;
       status: DeviceStatus; created_at: string; updated_at: string; last_error_code: string | null;
     }>("SELECT * FROM device_subscriptions WHERE device_id = $1", [deviceId]);
     const row = result.rows[0];
     return row && {
+      appId: row.app_id ?? "atoqueue", protocolVersion: row.protocol_version ?? 1,
       id: row.id, deviceId: row.device_id, endpoint: row.endpoint, p256dh: row.p256dh, auth: row.auth,
       secretHash: row.secret_hash, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at,
       lastErrorCode: row.last_error_code,

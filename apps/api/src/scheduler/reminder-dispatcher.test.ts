@@ -7,10 +7,10 @@ import type { PushClient } from "../push/push-client.js";
 const now = new Date("2026-08-06T09:00:00.000Z");
 const pushSubscription = { endpoint: "https://push.example/subscription", p256dh: "private-p256dh", auth: "private-auth" };
 
-function seed(repository: InMemoryReminderRepository, input: Partial<{ id: string; scheduledAt: string; status: "pending" | "claimed" | "cancelled"; attemptCount: number; claimedAt: string | null }> = {}) {
+function seed(repository: InMemoryReminderRepository, input: Partial<{ id: string; scheduledAt: string; status: "pending" | "claimed" | "cancelled"; attemptCount: number; claimedAt: string | null; notificationType: "inbox_review" | "task_review" | "deadline_review" | "unset_due_review"; repeatCadence: "daily" | "weekly" | "monthly" | null }> = {}) {
   const id = input.id ?? randomUUID();
   repository.seedDevice({ deviceId: "device-1", status: "active", subscription: pushSubscription });
-  repository.seed({ id, deviceId: "device-1", scheduledAt: input.scheduledAt ?? "2026-08-06T08:59:00.000Z", notificationType: "task_review", status: input.status ?? "pending", attemptCount: input.attemptCount ?? 0, claimedAt: input.claimedAt ?? null });
+  repository.seed({ id, deviceId: "device-1", scheduledAt: input.scheduledAt ?? "2026-08-06T08:59:00.000Z", notificationType: input.notificationType ?? "task_review", repeatCadence: input.repeatCadence ?? null, status: input.status ?? "pending", attemptCount: input.attemptCount ?? 0, claimedAt: input.claimedAt ?? null });
   return id;
 }
 
@@ -48,8 +48,97 @@ describe("ReminderDispatcher", () => {
     const sends: Array<{ payload: Record<string, unknown> }> = [];
     await new ReminderDispatcher(repository, client(201, sends), () => now).dispatchDue();
     expect(repository.get(id)).toMatchObject({ status: "sent" });
-    expect(sends[0].payload).toEqual({ type: "review_due", reminderId: id, url: `/today?reminder=${id}` });
+    expect(sends[0].payload).toEqual({
+      type: "review_due",
+      reminderId: id,
+      url: `/today?reminder=${id}`,
+      groupId: "c9d920c997679cfa",
+    });
     expect(JSON.stringify(sends[0].payload)).not.toContain("SECRET_TASK_CANARY");
+  });
+
+  it("groups four deadline reminders at the same scheduled time without grouping a different time", async () => {
+    const repository = new InMemoryReminderRepository();
+    const sends: Array<{ payload: { groupId: string } }> = [];
+    const scenarioNow = new Date("2026-08-10T08:25:00.000Z");
+    for (let index = 0; index < 4; index += 1) {
+      seed(repository, {
+        scheduledAt: "2026-08-10T08:30:00.000Z",
+        notificationType: "deadline_review",
+      });
+    }
+    seed(repository, {
+      scheduledAt: "2026-08-10T08:25:00.000Z",
+      notificationType: "deadline_review",
+    });
+
+    await new ReminderDispatcher(
+      repository,
+      client(201, sends),
+      () => scenarioNow,
+      300,
+    ).dispatchDue();
+
+    expect(sends).toHaveLength(5);
+    const groups = sends.map(({ payload }) => payload.groupId);
+    expect(groups.filter((groupId) => groupId === "0240ed4ae646d5c0")).toHaveLength(4);
+    expect(new Set(groups)).toHaveLength(2);
+  });
+
+  it("sends an inbox reservation to the inbox without private capture data", async () => {
+    const repository = new InMemoryReminderRepository();
+    const id = seed(repository, { notificationType: "inbox_review" });
+    const sends: Array<{ payload: Record<string, unknown> }> = [];
+    await new ReminderDispatcher(repository, client(201, sends), () => now).dispatchDue();
+
+    expect(sends[0]?.payload).toEqual({
+      type: "review_due",
+      reminderId: id,
+      url: `/inbox?reminder=${id}`,
+      groupId: "663101bdce04596a",
+    });
+    expect(JSON.stringify(sends[0]?.payload)).not.toContain("SECRET_CAPTURE_CANARY");
+  });
+
+  it("reschedules a successful weekly reminder seven days later without exposing private data", async () => {
+    const repository = new InMemoryReminderRepository();
+    const id = seed(repository, { notificationType: "inbox_review", repeatCadence: "weekly" });
+    const sends: Array<{ payload: Record<string, unknown> }> = [];
+
+    await new ReminderDispatcher(repository, client(201, sends), () => now).dispatchDue();
+
+    expect(repository.get(id)).toMatchObject({ status: "pending", claimedAt: null, scheduledAt: "2026-08-13T08:59:00.000Z" });
+    expect(sends[0]?.payload).toEqual({
+      type: "review_due",
+      reminderId: id,
+      url: `/inbox?reminder=${id}`,
+      groupId: "663101bdce04596a",
+    });
+  });
+
+  it("reschedules a successful monthly reminder on the last valid UTC day of the next month", async () => {
+    const repository = new InMemoryReminderRepository();
+    const id = seed(repository, { scheduledAt: "2026-01-31T09:00:00.000Z", repeatCadence: "monthly" });
+    const januaryNow = new Date("2026-01-31T09:00:00.000Z");
+
+    await new ReminderDispatcher(repository, client(201), () => januaryNow).dispatchDue();
+
+    expect(repository.get(id)).toMatchObject({ status: "pending", claimedAt: null, scheduledAt: "2026-02-28T09:00:00.000Z" });
+  });
+
+  it("reschedules a successful daily reminder from its planned time instead of its delayed delivery time", async () => {
+    const repository = new InMemoryReminderRepository();
+    const id = seed(repository, {
+      scheduledAt: "2026-08-06T08:30:00.000Z",
+      repeatCadence: "daily",
+    });
+
+    await new ReminderDispatcher(repository, client(201), () => now).dispatchDue();
+
+    expect(repository.get(id)).toMatchObject({
+      status: "pending",
+      scheduledAt: "2026-08-07T08:30:00.000Z",
+    });
   });
 
   it.each([[0, 5], [1, 15], [2, 60]])("reschedules temporary failure %s after %s minutes", async (attemptCount, minutes) => {
@@ -72,6 +161,16 @@ describe("ReminderDispatcher", () => {
     await new ReminderDispatcher(repository, client(410), () => now).dispatchDue();
     expect(repository.device("device-1")?.status).toBe("disabled");
     expect(repository.get(id)?.status).toBe("failed");
+  });
+
+  it("does not reschedule a recurring reminder when its subscription has expired", async () => {
+    const repository = new InMemoryReminderRepository();
+    const id = seed(repository, { repeatCadence: "weekly" });
+
+    await new ReminderDispatcher(repository, client(410), () => now).dispatchDue();
+
+    expect(repository.get(id)).toMatchObject({ status: "failed", scheduledAt: "2026-08-06T08:59:00.000Z" });
+    expect(repository.device("device-1")?.status).toBe("disabled");
   });
 
   it("recovers claims older than fifteen minutes and never double-sends a concurrent claim", async () => {

@@ -1,4 +1,9 @@
 import type { AppSnapshot } from "./model";
+import {
+  rebuildInboxReminderNotifications,
+  rebuildMemoReviewNotifications,
+  type NotificationIdFactory,
+} from "./notification-queue";
 
 const MAX_CAPTURE_LENGTH = 280;
 
@@ -7,6 +12,7 @@ export function createCapture(
   rawBody: string,
   now: string,
   id: string,
+  idFactory?: NotificationIdFactory,
 ): AppSnapshot {
   const body = rawBody.trim();
 
@@ -14,18 +20,46 @@ export function createCapture(
     throw new Error("A capture must contain between 1 and 280 characters.");
   }
 
+  const capture = {
+    id,
+    body,
+    classification: "unclassified" as const,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const snapshotWithCapture = {
+    ...snapshot,
+    captures: [...snapshot.captures, capture],
+  };
+  const hasMemoCapture = snapshot.captures.some(
+    (candidate) => candidate.classification === "note",
+  );
+  const hasExistingMemoSeries = snapshot.reminderMap.some(
+    (entry) => entry.scope === "memo",
+  );
+  let scheduledSnapshot = snapshotWithCapture;
+
+  const inbox = rebuildInboxReminderNotifications({
+    snapshot: scheduledSnapshot,
+    now,
+    createId: idFactory,
+  });
+  scheduledSnapshot = { ...scheduledSnapshot, ...inbox };
+
+  if (hasMemoCapture && !hasExistingMemoSeries) {
+    const memo = rebuildMemoReviewNotifications({
+      snapshot: scheduledSnapshot,
+      now,
+      createId: idFactory,
+    });
+    scheduledSnapshot = { ...scheduledSnapshot, ...memo };
+  }
+
   return {
     ...snapshot,
-    captures: [
-      ...snapshot.captures,
-      {
-        id,
-        body,
-        classification: "unclassified",
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
+    captures: [...snapshot.captures, capture],
+    notificationOutbox: scheduledSnapshot.notificationOutbox,
+    reminderMap: scheduledSnapshot.reminderMap,
     actionHistory: [
       ...snapshot.actionHistory,
       {

@@ -10,10 +10,20 @@ OCI Object Storage 連携と定期通知 DB バックアップは MVP の対象�
 
 ```bash
 sudo install -d -o root -g root -m 0700 /var/backups/atoqueue
-sudo -u postgres pg_dump --format=custom --file /var/backups/atoqueue/atoqueue_notify-$(date +%F-%H%M%S).dump atoqueue_notify
-sudo chmod 0600 /var/backups/atoqueue/atoqueue_notify-*.dump
-sudo -u postgres pg_restore --list /var/backups/atoqueue/atoqueue_notify-YYYY-MM-DD-HHMMSS.dump
+sudo sh -c '
+  set -eu
+  cd /
+  umask 077
+  backup="/var/backups/atoqueue/atoqueue_notify-$(date -u +%Y%m%dT%H%M%SZ).dump"
+  test ! -e "$backup"
+  sudo -u postgres pg_dump --format=custom atoqueue_notify > "$backup"
+  test -s "$backup"
+  pg_restore --list "$backup" >/dev/null
+  stat -c "backup=%n bytes=%s mode=%a owner=%U" "$backup"
+'
 ```
+
+DB読取りはpostgres権限、出力ファイルの作成と目録検査はroot権限で行う。postgresユーザーはroot所有・0700の保管ディレクトリへ直接ファイルを作れないため、`pg_dump --file`で同ディレクトリを指定しない。バックアップの内容や目録をチャット・Actionsログへ出力しない。
 
 復元が必要なら、必ず API を止めた上で別名 DB への `pg_restore` 検証を先に行う。既存 DB を上書きする復元は、障害対応責任者の判断でのみ実行する。
 

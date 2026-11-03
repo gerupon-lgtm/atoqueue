@@ -1,6 +1,10 @@
 import { resolveDueChoice, type DueResolution } from "./due-date";
 import { calculateNextReview } from "./reminder-policy";
-import { findNextReviewIndex, type ReviewCalendar } from "./review-session";
+import {
+  currentReviewTask,
+  findNextUnansweredReviewIndex,
+  type ReviewCalendar,
+} from "./review-session";
 import type { ActionEvent, AppSnapshot, ReviewSession, Task } from "./model";
 import { queueTaskNotifications } from "./notification-queue";
 export { notificationTypeForTask } from "./notification-schedule";
@@ -87,10 +91,9 @@ export function answerReview(input: AnswerReviewInput): AppSnapshot {
   if (!session) throw new Error("Review session not found.");
   if (session.completedAt) throw new Error("Review session is already complete.");
 
-  const currentIndex = findNextReviewIndex(session, input.snapshot.tasks, session.currentIndex);
-  const taskId = session.orderedTaskIds[currentIndex];
-  const task = input.snapshot.tasks.find((candidate) => candidate.id === taskId);
-  if (!task || (task.status !== "active" && !session.answeredTaskIds.includes(task.id))) {
+  const currentIndex = session.currentIndex;
+  const task = currentReviewTask({ session, tasks: input.snapshot.tasks });
+  if (!task) {
     return completeStaleSession(input.snapshot, session, currentIndex, input.now);
   }
 
@@ -114,7 +117,11 @@ export function answerReview(input: AnswerReviewInput): AppSnapshot {
   });
   const answeredTaskIds = unique([...session.answeredTaskIds, task.id]);
   const visitedTaskIds = unique([...session.visitedTaskIds, task.id]);
-  const nextIndex = findNextReviewIndex({ ...session, answeredTaskIds }, tasks, currentIndex + 1);
+  const nextIndex = findNextUnansweredReviewIndex(
+    { ...session, answeredTaskIds },
+    tasks,
+    currentIndex + 1,
+  );
   const updatedSession: ReviewSession = {
     ...session,
     currentIndex: nextIndex,

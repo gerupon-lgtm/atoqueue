@@ -1,7 +1,18 @@
-import { createBrowserRouter, useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  createBrowserRouter,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import { LocalStorageRepository } from "../infrastructure/local-storage/local-storage-repository";
 import { createNotificationSyncService } from "../application/notification-sync-service";
+import { resetDeviceData } from "../application/device-data-reset-service";
 import { NotificationApi } from "../infrastructure/notifications/notification-api";
+import {
+  createBrowserPushAdapter,
+  enableNotifications,
+  unsubscribeBrowserPush,
+} from "../infrastructure/notifications/push-subscription";
 import { QuickCapturePage } from "../features/capture/QuickCapturePage";
 import { InboxPage } from "../features/inbox/InboxPage";
 import { TaskCandidatePage } from "../features/inbox/TaskCandidatePage";
@@ -9,8 +20,16 @@ import { TodayReviewPage } from "../features/review/TodayReviewPage";
 import { ReviewResultPage } from "../features/review/ReviewResultPage";
 import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
 import { TaskListPage } from "../features/tasks/TaskListPage";
+import { TempalistLinkProbe } from "../features/tempalist/TempalistLinkProbe";
+import { createTempalistTransferService } from "../application/tempalist-transfer-service";
+import { createBrowserTempalistLauncher } from "../infrastructure/tempalist/browser-tempalist-launcher";
 import { AppShell } from "./AppShell";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import {
+  createBrowserInstallExperience,
+  createInstallPromptPreference,
+  getBrowserTempalistEnvironment,
+} from "../infrastructure/install/browser-install-experience";
 
 type PageDefinition = {
   index?: true;
@@ -26,36 +45,94 @@ const pages: PageDefinition[] = [
   { path: "settings", label: "設定" },
 ];
 
+const developmentRoutes = import.meta.env.DEV
+  ? [{ path: "dev/tempalist-link", element: <TempalistLinkProbe /> }]
+  : [];
+
 const applicationRepository = new LocalStorageRepository(window.localStorage);
+const tempalistEnvironment = () => getBrowserTempalistEnvironment(window);
+const tempalistTransfer = createTempalistTransferService({
+  environment: tempalistEnvironment,
+  repository: applicationRepository,
+  launcher: createBrowserTempalistLauncher(),
+  now: () => new Date().toISOString(),
+  requestId: () => crypto.randomUUID(),
+});
+const installExperience = createBrowserInstallExperience(window);
+const installPromptPreference = createInstallPromptPreference(
+  window.localStorage,
+);
+const notificationApi = new NotificationApi(
+  "https://api.atoqueue.sikumilab.com",
+);
 const notificationSync = createNotificationSyncService({
   repository: applicationRepository,
-  api: new NotificationApi("https://api.atoqueue.sikumilab.com"),
+  api: notificationApi,
 });
+const setupNotifications = () =>
+  enableNotifications({
+    repository: applicationRepository,
+    api: notificationApi,
+    browser: createBrowserPushAdapter(),
+  });
 
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <AppShell />,
+    element: (
+      <AppShell
+        installExperience={installExperience}
+        installPromptPreference={installPromptPreference}
+        repository={applicationRepository}
+      />
+    ),
     children: [
       ...pages.map((page) => ({
         ...(page.index ? { index: true } : { path: page.path }),
         element: page.index ? (
-          <QuickCapturePage repository={applicationRepository} />
+          <QuickCapturePage
+            onNotificationChanged={() => notificationSync.flush()}
+            repository={applicationRepository}
+            setupNotifications={setupNotifications}
+            shouldAutofocusCapture={() =>
+              applicationRepository.isNotificationSetupHandledAtStartup()
+            }
+          />
         ) : page.path === "inbox" ? (
           <InboxRoute />
         ) : page.path === "today" ? (
           <TodayReviewRoute />
         ) : page.path === "tasks" ? (
-          <TaskListPage repository={applicationRepository} />
+          <TaskListPage
+            repository={applicationRepository}
+            tempalist={tempalistTransfer}
+            environment={tempalistEnvironment}
+          />
         ) : page.path === "settings" ? (
-          <SettingsPage flushNotifications={() => notificationSync.flush()} repository={applicationRepository} />
+          <SettingsPage
+            deleteDeviceData={async () => {
+              await resetDeviceData({
+                repository: applicationRepository,
+                api: notificationApi,
+                unsubscribeBrowserPush,
+              });
+              window.location.assign("/");
+            }}
+            flushNotifications={() => notificationSync.flush()}
+            repository={applicationRepository}
+            setupNotifications={setupNotifications}
+          />
         ) : (
           <Page title={page.label} />
         ),
       })),
       { path: "inbox/:captureId", element: <TaskCandidateRoute /> },
-      { path: "today/result", element: <ReviewResultPage repository={applicationRepository} /> },
+      {
+        path: "today/result",
+        element: <ReviewResultPage repository={applicationRepository} />,
+      },
       { path: "tasks/:taskId", element: <TaskCorrectionRoute /> },
+      ...developmentRoutes,
     ],
   },
 ]);
@@ -70,10 +147,14 @@ function Page({ title }: { title: string }) {
 
 function InboxRoute() {
   const navigate = useNavigate();
+  const location = useLocation();
   return (
     <InboxPage
+      preferredReminderId={new URLSearchParams(location.search).get("reminder") ?? undefined}
+      notificationNavigationKey={location.key}
       onTaskCandidate={(captureId) => navigate(`/inbox/${captureId}`)}
       repository={applicationRepository}
+      sync={() => notificationSync.flush()}
     />
   );
 }
@@ -96,11 +177,28 @@ function TaskCandidateRoute() {
 function TodayReviewRoute() {
   const navigate = useNavigate();
   const location = useLocation();
-  return <TodayReviewPage onFinished={() => navigate("/today/result")} preferredReminderId={new URLSearchParams(location.search).get("reminder") ?? undefined} repository={applicationRepository} sync={() => notificationSync.flush()} />;
+  return (
+    <TodayReviewPage
+      onFinished={() => navigate("/today/result")}
+      preferredReminderId={
+        new URLSearchParams(location.search).get("reminder") ?? undefined
+      }
+      repository={applicationRepository}
+      sync={() => notificationSync.flush()}
+    />
+  );
 }
 
 function TaskCorrectionRoute() {
+  const navigate = useNavigate();
   const { taskId } = useParams();
   if (!taskId) return <Page title="タスク" />;
-  return <TaskDetailPage repository={applicationRepository} sync={() => notificationSync.flush()} taskId={taskId} />;
+  return (
+    <TaskDetailPage
+      onReturn={() => navigate("/tasks")}
+      repository={applicationRepository}
+      sync={() => notificationSync.flush()}
+      taskId={taskId}
+    />
+  );
 }

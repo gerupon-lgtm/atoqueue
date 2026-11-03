@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { listTasks, type Capture, type Task } from "./index";
+import { isTaskOverdue, listTasks, type Capture, type Task } from "./index";
 
 const now = "2026-08-03T09:00:00.000Z";
 const calendar = { today: (instant: string) => instant.slice(0, 10) };
@@ -23,6 +23,19 @@ function task(id: string, changes: Partial<Task> = {}): Task {
 }
 
 describe("listTasks", () => {
+  it.each([
+    ["past active deadline", { dueMode: "scheduled", dueAt: "2026-08-03T08:59:59.999Z" }, true],
+    ["exact deadline", { dueMode: "scheduled", dueAt: now }, false],
+    ["future deadline", { dueMode: "scheduled", dueAt: "2026-08-03T09:00:00.001Z" }, false],
+    ["completed", { dueMode: "scheduled", dueAt: "2026-08-02T09:00:00.000Z", status: "completed" }, false],
+    ["archived", { dueMode: "scheduled", dueAt: "2026-08-02T09:00:00.000Z", status: "archived" }, false],
+    ["unset", { dueMode: "unset" }, false],
+    ["none", { dueMode: "none" }, false],
+    ["dismissed but overdue", { dueMode: "scheduled", dueAt: "2026-08-02T09:00:00.000Z", dismissCount: 1, nextReviewAt: "2026-09-01T09:00:00.000Z" }, true],
+  ] as const)("F-012 derives overdue emphasis for %s", (_name, changes, expected) => {
+    expect(isTaskOverdue(task("test", changes), now)).toBe(expected);
+  });
+
   it("keeps the selected active, completed, or archived tab separate", () => {
     const tasks = [
       task("active"),
@@ -33,6 +46,16 @@ describe("listTasks", () => {
     expect(listTasks(tasks, { tab: "active", now, calendar }).map(({ id }) => id)).toEqual(["active"]);
     expect(listTasks(tasks, { tab: "completed", now, calendar }).map(({ id }) => id)).toEqual(["completed"]);
     expect(listTasks(tasks, { tab: "archived", now, calendar }).map(({ id }) => id)).toEqual(["archived"]);
+  });
+
+  it("shows active, completed, and archived tasks together when every state is selected", () => {
+    const tasks = [
+      task("active"),
+      task("completed", { status: "completed", completedAt: now }),
+      task("archived", { status: "archived", archivedAt: now }),
+    ];
+
+    expect(listTasks(tasks, { tab: "all", now, calendar }).map(({ id }) => id)).toEqual(["active", "completed", "archived"]);
   });
 
   it("filters active tasks by overdue, today, unset, none, and category", () => {
@@ -49,6 +72,27 @@ describe("listTasks", () => {
     expect(listTasks(tasks, { ...input, due: "unset" }).map(({ id }) => id)).toEqual(["unset"]);
     expect(listTasks(tasks, { ...input, due: "none" }).map(({ id }) => id)).toEqual(["none"]);
     expect(listTasks(tasks, { ...input, category: "home" }).map(({ id }) => id)).toEqual(["none"]);
+  });
+
+  it("derives the overdue filter only for active tasks", () => {
+    const overdue = {
+      dueMode: "scheduled" as const,
+      dueAt: "2026-08-02T23:59:00.000Z",
+    };
+    const tasks = [
+      task("active", overdue),
+      task("completed", { ...overdue, status: "completed", completedAt: now }),
+      task("archived", { ...overdue, status: "archived", archivedAt: now }),
+    ];
+
+    expect(
+      listTasks(tasks, { tab: "all", due: "overdue", now, calendar }).map(
+        ({ id }) => id,
+      ),
+    ).toEqual(["active"]);
+    expect(
+      listTasks(tasks, { tab: "completed", due: "overdue", now, calendar }),
+    ).toEqual([]);
   });
 
   it("finds a Unicode substring without changing the selected task state", () => {

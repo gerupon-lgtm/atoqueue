@@ -38,7 +38,12 @@ describe("F-013 privacy regression", () => {
     await capture({ method: "DELETE", url: `/v1/devices/${deviceId}`, headers: { authorization: `Bearer ${deviceSecret}`, "idempotency-key": "delete" } });
     const serialized = [captures.join("\n"), JSON.stringify(reminders), JSON.stringify(devices), JSON.stringify(pushes), logs.join("\n")].join("\n");
     expect(serialized).not.toContain(canary);
-    expect(pushes).toEqual([expect.objectContaining({ payload: { type: "review_due", reminderId, url: `/today?reminder=${reminderId}` } })]);
+    expect(pushes).toEqual([expect.objectContaining({ payload: {
+      type: "review_due",
+      reminderId,
+      url: `/today?reminder=${reminderId}`,
+      groupId: expect.stringMatching(/^[0-9a-f]{16}$/),
+    } })]);
     await app.close();
   });
 
@@ -56,7 +61,12 @@ describe("F-013 privacy regression", () => {
     const restarted = buildApp({ version: "test", repository: devices, reminderRepository: reminders });
     const sends: unknown[] = [];
     await new ReminderDispatcher(reminders, { send: async (input) => { sends.push(input); return { statusCode: 201 }; } }, () => new Date("2026-08-04T09:05:00.000Z")).dispatchDue();
-    expect(sends).toEqual([expect.objectContaining({ payload: { type: "review_due", reminderId, url: `/today?reminder=${reminderId}` } })]);
+    expect(sends).toEqual([expect.objectContaining({ payload: {
+      type: "review_due",
+      reminderId,
+      url: `/today?reminder=${reminderId}`,
+      groupId: expect.stringMatching(/^[0-9a-f]{16}$/),
+    } })]);
     await restarted.close();
   });
 });

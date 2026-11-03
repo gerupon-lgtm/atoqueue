@@ -1,12 +1,21 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
+import { router } from "./app/router";
+import { installNotificationNavigation } from "./infrastructure/notifications/notification-navigation";
 import { NotificationApi } from "./infrastructure/notifications/notification-api";
-import { installOutboxFlush } from "./infrastructure/notifications/outbox-bootstrap";
+import {
+  reconcileMissingNotifications,
+  installOutboxFlush,
+} from "./infrastructure/notifications/outbox-bootstrap";
 import { flushOutbox } from "./infrastructure/notifications/outbox-sync";
 import { LocalStorageRepository } from "./infrastructure/local-storage/local-storage-repository";
 
 const rootElement = document.getElementById("root");
+
+if ("serviceWorker" in navigator) {
+  installNotificationNavigation(navigator.serviceWorker, url => router.navigate(url));
+}
 
 if (rootElement === null) {
   throw new Error("Root element was not found.");
@@ -19,4 +28,7 @@ createRoot(rootElement).render(
 );
 
 const notificationRepository = new LocalStorageRepository(window.localStorage);
-installOutboxFlush(window, () => flushOutbox({ repository: notificationRepository, api: new NotificationApi("https://api.atoqueue.sikumilab.com") }));
+installOutboxFlush(window, async () => {
+  await reconcileMissingNotifications({ repository: notificationRepository });
+  await flushOutbox({ repository: notificationRepository, api: new NotificationApi("https://api.atoqueue.sikumilab.com") });
+});

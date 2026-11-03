@@ -1,0 +1,28 @@
+:root {
+  --overdue-ink: #854619;
+  --overdue-paper: #fcf0db;
+  --overdue-border: #c89452;
+  --overdue-solid: #95521e;
+}
+
+.overdue-clock {
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.1em;
+}
+
+.overdue-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: fit-content;
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--overdue-border);
+  border-radius: 0.375rem;
+  background: var(--overdue-paper);
+  color: var(--overdue-ink);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.45;
+}

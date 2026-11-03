@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { LinkedTaskText } from "../../presentation/LinkedTaskText";
 import { summarizeReview, type AppRepository, type AppSnapshot, type ReviewSession } from "../../../../../packages/domain/src";
 
 export interface ReviewResultPageProps { repository: AppRepository; }
@@ -9,7 +10,7 @@ const actionLabels = {
   task_rescheduled: "期限変更",
   task_marked_no_due: "期限なし",
   task_dismissed: "見送り",
-  task_archived: "不要",
+  task_archived: "アーカイブ",
 } as const;
 
 export function ReviewResultPage({ repository }: ReviewResultPageProps) {
@@ -38,7 +39,7 @@ export function ReviewResultPage({ repository }: ReviewResultPageProps) {
         {Object.entries(actionLabels).map(([action, label]) => <li key={action}>{label}: {summary.actionCounts[action as keyof typeof summary.actionCounts] ?? 0}件</li>)}
       </ul>
       <ul aria-label="処理したタスク">
-        {processedTasks.map((task) => <li key={task.id}><span>{task.title} — {statusLabel(task.status)}</span> <Link aria-label={`${task.title}を修正`} to={`/tasks/${task.id}`}>修正</Link></li>)}
+        {processedTasks.map((task) => <li key={task.id}><span><LinkedTaskText text={task.title} /> — {statusLabel(task.status)}</span> <Link aria-label={`${task.title}を修正`} to={`/tasks/${task.id}`}>修正</Link></li>)}
       </ul>
       <p><Link to="/tasks">タスク一覧を見る</Link></p>
       <p><Link to="/">記録へ戻る</Link></p>
@@ -47,5 +48,9 @@ export function ReviewResultPage({ repository }: ReviewResultPageProps) {
 }
 
 function statusLabel(status: "active" | "completed" | "archived"): string {
-  return status === "completed" ? "完了" : status === "archived" ? "不要" : "対応中";
+  return status === "completed"
+    ? "完了"
+    : status === "archived"
+      ? "アーカイブ"
+      : "対応中";
 }

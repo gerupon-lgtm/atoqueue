@@ -1,4 +1,18 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import {
+  isTaskOverdue,
+  type AppRepository,
+} from "../../../../packages/domain/src";
+import type {
+  InstallExperience,
+  InstallPromptPreference,
+} from "../application/install-experience";
+import { InstallPrompt } from "../features/install/InstallPrompt";
+import {
+  currentTime,
+  useTaskSnapshot,
+} from "../presentation/use-task-snapshot";
+import { OverdueClockIcon } from "../presentation/OverdueIndicator";
 import "./AppShell.css";
 
 type NavigationItem = {
@@ -16,7 +30,30 @@ const navigation: NavigationItem[] = [
   { to: "/settings", label: "設定", icon: "settings" },
 ];
 
-export function AppShell() {
+export interface AppShellProps {
+  installExperience?: InstallExperience;
+  installPromptPreference?: InstallPromptPreference;
+  repository?: AppRepository;
+  now?: () => string;
+}
+
+export function AppShell({
+  installExperience,
+  installPromptPreference,
+  repository,
+  now = currentTime,
+}: AppShellProps) {
+  const location = useLocation();
+  const { snapshot, timestamp } = useTaskSnapshot(
+    repository,
+    now,
+    location.key,
+  );
+  const overdueCount =
+    snapshot && timestamp
+      ? snapshot.tasks.filter((task) => isTaskOverdue(task, timestamp)).length
+      : 0;
+
   return (
     <div className="app-shell">
       <nav className="app-shell__navigation" aria-label="主要ナビゲーション">
@@ -32,12 +69,40 @@ export function AppShell() {
               <NavigationIcon name={icon} />
             </span>
             <span className="app-shell__nav-label">{label}</span>
+            {to === "/tasks" && overdueCount > 0 ? (
+              <span
+                aria-label={`期限超過のタスク: ${overdueCount}件`}
+                className="app-shell__nav-badge"
+              >
+                {overdueCount > 99 ? "99+" : overdueCount}
+              </span>
+            ) : null}
           </NavLink>
         ))}
       </nav>
       <main className="app-shell__content">
+        <div className="app-shell__topline">
+          <p className="app-shell__wordmark">あとキュー</p>
+          {overdueCount > 0 ? (
+            <Link
+              className="app-shell__overdue-summary"
+              to="/tasks?due=overdue"
+              aria-label={`期限超過のタスク${overdueCount}件を確認する`}
+            >
+              <OverdueClockIcon />
+              <strong>期限超過 {overdueCount}件</strong>
+              <span className="app-shell__overdue-action">確認</span>
+            </Link>
+          ) : null}
+        </div>
         <Outlet />
       </main>
+      {installExperience && installPromptPreference ? (
+        <InstallPrompt
+          experience={installExperience}
+          preference={installPromptPreference}
+        />
+      ) : null}
     </div>
   );
 }

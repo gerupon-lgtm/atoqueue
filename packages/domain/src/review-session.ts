@@ -17,6 +17,10 @@ export interface CurrentReviewTaskInput {
   tasks: Task[];
 }
 
+export interface RefreshReviewInput extends Omit<StartReviewInput, "sessionId"> {
+  session: ReviewSession;
+}
+
 export interface ReviewSummary {
   processedTaskIds: string[];
   actionCounts: Partial<Record<ActionEvent["action"], number>>;
@@ -43,16 +47,27 @@ export function startReviewSession(input: StartReviewInput): ReviewSession {
   };
 }
 
-/**
- * Finds the current item without reviving stale, unvisited tasks. Answered
- * tasks remain visible when the user explicitly goes back to correct a choice.
- */
+/** Adds candidates that became eligible after an unfinished session started. */
+export function refreshReviewSession(input: RefreshReviewInput): ReviewSession {
+  const current = new Set(input.session.orderedTaskIds);
+  const additions = startReviewSession({
+    ...input,
+    sessionId: input.session.id,
+  }).orderedTaskIds.filter(
+    (taskId) => !current.has(taskId),
+  );
+  if (additions.length === 0) return input.session;
+  return {
+    ...input.session,
+    orderedTaskIds: [...input.session.orderedTaskIds, ...additions],
+    updatedAt: input.now,
+  };
+}
+
+/** Manual history selection must match the persisted page index exactly. */
 export function currentReviewTask(input: CurrentReviewTaskInput): Task | null {
-  for (let index = input.session.currentIndex; index < input.session.orderedTaskIds.length; index += 1) {
-    const task = input.tasks.find((candidate) => candidate.id === input.session.orderedTaskIds[index]);
-    if (task && (task.status === "active" || input.session.answeredTaskIds.includes(task.id))) return task;
-  }
-  return null;
+  const taskId = input.session.orderedTaskIds[input.session.currentIndex];
+  return input.tasks.find((task) => task.id === taskId) ?? null;
 }
 
 export function goToPreviousTask(session: ReviewSession, now: string): ReviewSession {
@@ -61,6 +76,25 @@ export function goToPreviousTask(session: ReviewSession, now: string): ReviewSes
     currentIndex: Math.max(0, session.currentIndex - 1),
     updatedAt: now,
   };
+}
+
+export function goToNextTask(
+  session: ReviewSession,
+  tasks: Task[],
+  now: string,
+): ReviewSession {
+  const length = session.orderedTaskIds.length;
+  if (length < 2) return session;
+  for (let offset = 1; offset <= length; offset += 1) {
+    const index = (session.currentIndex + offset) % length;
+    const task = tasks.find(
+      (candidate) => candidate.id === session.orderedTaskIds[index],
+    );
+    if (task) {
+      return { ...session, currentIndex: index, updatedAt: now };
+    }
+  }
+  return session;
 }
 
 export function summarizeReview(session: ReviewSession, events: ActionEvent[]): ReviewSummary {
@@ -78,12 +112,26 @@ export function summarizeReview(session: ReviewSession, events: ActionEvent[]): 
   return { processedTaskIds, actionCounts };
 }
 
-export function findNextReviewIndex(session: ReviewSession, tasks: Task[], from: number): number {
-  for (let index = from; index < session.orderedTaskIds.length; index += 1) {
-    const task = tasks.find((candidate) => candidate.id === session.orderedTaskIds[index]);
-    if (task?.status === "active" || (task && session.answeredTaskIds.includes(task.id))) return index;
+/** Automatic progression/resume prioritizes work, independently of manual history navigation. */
+export function findNextUnansweredReviewIndex(
+  session: ReviewSession,
+  tasks: Task[],
+  from: number,
+): number {
+  const length = session.orderedTaskIds.length;
+  for (let offset = 0; offset < length; offset += 1) {
+    const index = (from + offset) % length;
+    const task = tasks.find(
+      (candidate) => candidate.id === session.orderedTaskIds[index],
+    );
+    if (
+      task?.status === "active" &&
+      !session.answeredTaskIds.includes(task.id)
+    ) {
+      return index;
+    }
   }
-  return session.orderedTaskIds.length;
+  return length;
 }
 
 function compareReviewTasks(left: Task, right: Task, now: string, calendar: ReviewCalendar): number {

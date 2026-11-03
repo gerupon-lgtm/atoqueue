@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export const ErrorCodeSchema = z.enum([
+  "APP_NOT_FOUND",
+  "APP_ORIGIN_FORBIDDEN",
   "INVALID_REQUEST",
   "INVALID_SCHEDULE",
   "DEVICE_UNAUTHORIZED",

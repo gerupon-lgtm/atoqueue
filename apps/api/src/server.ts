@@ -14,8 +14,12 @@ import { registerReminderRoutes } from "./reminders/reminder-routes.js";
 import { ReminderService } from "./reminders/reminder-service.js";
 import { installRequestContext } from "./plugins/request-context.js";
 import { installSecurity } from "./plugins/security.js";
+import { ApplicationRegistry } from "./applications/registry.js";
+import { registerV2Routes } from "./v2/routes.js";
 
 export interface BuildAppOptions {
+  applications?: ApplicationRegistry;
+  v2Enabled?: boolean;
   version: string;
   publicPushKey?: string;
   repository?: DeviceRepository;
@@ -35,15 +39,16 @@ export interface ProductionApp {
   pool: Pool;
 }
 
-export function buildApp({ version, publicPushKey = "test-public-key", repository = new InMemoryDeviceRepository(), reminderRepository = new InMemoryReminderRepository(), logger, allowedOrigin = PWA_ORIGIN, health = { check: async () => undefined }, now = () => new Date().toISOString() }: BuildAppOptions) {
+export function buildApp({ version, publicPushKey = "test-public-key", repository = new InMemoryDeviceRepository(), reminderRepository = new InMemoryReminderRepository(), logger, allowedOrigin = PWA_ORIGIN, health = { check: async () => undefined }, now = () => new Date().toISOString(), applications = new ApplicationRegistry(), v2Enabled = false }: BuildAppOptions) {
   const app = Fastify({ bodyLimit: 16 * 1024, logger: false, trustProxy: ["127.0.0.1", "::1"] });
   installRequestContext(app);
-  const deviceRateLimiter = installSecurity(app, allowedOrigin);
+  const deviceRateLimiter = installSecurity(app, allowedOrigin, applications, v2Enabled);
 
   app.addHook("onResponse", async (request, reply) => {
     const durationMs = Number(process.hrtime.bigint() - request.requestStartedAt) / 1_000_000;
     logger?.write(JSON.stringify({
       requestId: request.requestId,
+      ...(/^\/v2\/apps\//.test(request.url) ? { appId: applications.get((/^\/v2\/apps\/([^/?]+)/.exec(request.url))?.[1] ?? "")?.appId } : {}),
       endpointHashPrefix: endpointHashPrefix(request.body),
       resultCode: reply.statusCode,
       durationMs,
@@ -75,6 +80,7 @@ export function buildApp({ version, publicPushKey = "test-public-key", repositor
 
   registerDeviceRoutes(app, { publicPushKey, deviceService: new DeviceService(repository, undefined, deviceRateLimiter) });
   registerReminderRoutes(app, new ReminderService(repository, reminderRepository, now, deviceRateLimiter));
+  if (v2Enabled) registerV2Routes(app, applications, repository, reminderRepository, now, deviceRateLimiter);
 
   return app;
 }
@@ -101,6 +107,8 @@ export async function buildProductionApp(input: { version: string; environment?:
       repository: new PgDeviceRepository(pool),
       reminderRepository: new PgReminderRepository(pool),
       allowedOrigin: config.allowedOrigin,
+      applications: config.applications,
+      v2Enabled: config.v2Enabled,
       logger: { write: (line) => productionLogger.info(JSON.parse(line)) },
       health: { check: async () => { await pool.query("SELECT 1"); } },
     }),

@@ -10,6 +10,15 @@ on:
         required: true
         default: main
         type: string
+      target:
+        description: Component to deploy (use api for the v2 rollout first)
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - api
+          - pwa
 
 permissions:
   contents: read
@@ -22,6 +31,20 @@ jobs:
   quality:
     name: Test and build
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: atoqueue_v2_test
+          POSTGRES_USER: atoqueue_test
+          POSTGRES_PASSWORD: local_ci_test_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,11 +64,14 @@ jobs:
       - run: pnpm test
       - run: pnpm --filter @atoqueue/web build
       - run: pnpm --filter @atoqueue/api build
+      - run: node deploy/scripts/verify-notification-platform-postgres.mjs
+        env:
+          ATOQUEUE_TEST_DATABASE_URL: postgresql://atoqueue_test:local_ci_test_only@127.0.0.1:5432/atoqueue_v2_test
       - run: node deploy/scripts/verify-deployment-artifacts.mjs
 
   deploy-pwa:
     name: Publish PWA to GitHub Pages
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'pwa')
     needs: quality
     runs-on: ubuntu-latest
     environment: production
@@ -76,7 +102,7 @@ jobs:
 
   deploy-api:
     name: Deploy notification API to OCI VPS
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'api')
     needs: quality
     runs-on: ubuntu-latest
     environment: production

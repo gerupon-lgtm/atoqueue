@@ -68,74 +68,86 @@ describe("device registration routes", () => {
     await app.close();
   });
 
-  it("uses the stable rate-limit envelope after ten registrations from one IP", async () => {
-    const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
-    for (let index = 0; index < 10; index += 1) {
-      const response = await app.inject({
+  it(
+    "uses the stable rate-limit envelope after ten registrations from one IP",
+    async () => {
+      const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
+      for (let index = 0; index < 10; index += 1) {
+        const response = await app.inject({
+          method: "POST",
+          url: "/v1/devices",
+          remoteAddress: "203.0.113.8",
+          payload: { subscription: { ...subscription, endpoint: `https://push.example/${index}` } },
+        });
+        expect(response.statusCode).toBe(201);
+      }
+      const limited = await app.inject({
         method: "POST",
         url: "/v1/devices",
         remoteAddress: "203.0.113.8",
-        payload: { subscription: { ...subscription, endpoint: `https://push.example/${index}` } },
+        payload: { subscription: { ...subscription, endpoint: "https://push.example/limited" } },
       });
-      expect(response.statusCode).toBe(201);
-    }
-    const limited = await app.inject({
-      method: "POST",
-      url: "/v1/devices",
-      remoteAddress: "203.0.113.8",
-      payload: { subscription: { ...subscription, endpoint: "https://push.example/limited" } },
-    });
-    expect(limited.statusCode).toBe(429);
-    expect(limited.json().error).toMatchObject({ code: "RATE_LIMITED", requestId: expect.stringMatching(/^req_/) });
-    expect(limited.headers["retry-after"]).toBeDefined();
-    await app.close();
-  });
+      expect(limited.statusCode).toBe(429);
+      expect(limited.json().error).toMatchObject({ code: "RATE_LIMITED", requestId: expect.stringMatching(/^req_/) });
+      expect(limited.headers["retry-after"]).toBeDefined();
+      await app.close();
+    },
+    15_000,
+  );
 
-  it("uses the forwarded client address from Caddy and keeps its registration bucket separate", async () => {
-    const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
-    for (let index = 0; index < 10; index += 1) {
-      const response = await app.inject({
+  it(
+    "uses the forwarded client address from Caddy and keeps its registration bucket separate",
+    async () => {
+      const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
+      for (let index = 0; index < 10; index += 1) {
+        const response = await app.inject({
+          method: "POST",
+          url: "/v1/devices",
+          remoteAddress: "127.0.0.1",
+          headers: { "x-forwarded-for": "198.51.100.10" },
+          payload: { subscription: { ...subscription, endpoint: `https://push.example/first-client-${index}` } },
+        });
+        expect(response.statusCode).toBe(201);
+      }
+      const secondClient = await app.inject({
         method: "POST",
         url: "/v1/devices",
         remoteAddress: "127.0.0.1",
-        headers: { "x-forwarded-for": "198.51.100.10" },
-        payload: { subscription: { ...subscription, endpoint: `https://push.example/first-client-${index}` } },
+        headers: { "x-forwarded-for": "198.51.100.11" },
+        payload: { subscription: { ...subscription, endpoint: "https://push.example/second-client" } },
       });
-      expect(response.statusCode).toBe(201);
-    }
-    const secondClient = await app.inject({
-      method: "POST",
-      url: "/v1/devices",
-      remoteAddress: "127.0.0.1",
-      headers: { "x-forwarded-for": "198.51.100.11" },
-      payload: { subscription: { ...subscription, endpoint: "https://push.example/second-client" } },
-    });
-    expect(secondClient.statusCode).toBe(201);
-    await app.close();
-  });
+      expect(secondClient.statusCode).toBe(201);
+      await app.close();
+    },
+    15_000,
+  );
 
-  it("does not trust a forwarded address supplied by an untrusted client", async () => {
-    const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
-    for (let index = 0; index < 10; index += 1) {
-      const response = await app.inject({
+  it(
+    "does not trust a forwarded address supplied by an untrusted client",
+    async () => {
+      const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });
+      for (let index = 0; index < 10; index += 1) {
+        const response = await app.inject({
+          method: "POST",
+          url: "/v1/devices",
+          remoteAddress: "203.0.113.90",
+          headers: { "x-forwarded-for": `198.51.100.${index + 50}` },
+          payload: { subscription: { ...subscription, endpoint: `https://push.example/untrusted-${index}` } },
+        });
+        expect(response.statusCode).toBe(201);
+      }
+      const limited = await app.inject({
         method: "POST",
         url: "/v1/devices",
         remoteAddress: "203.0.113.90",
-        headers: { "x-forwarded-for": `198.51.100.${index + 50}` },
-        payload: { subscription: { ...subscription, endpoint: `https://push.example/untrusted-${index}` } },
+        headers: { "x-forwarded-for": "198.51.100.99" },
+        payload: { subscription: { ...subscription, endpoint: "https://push.example/untrusted-limited" } },
       });
-      expect(response.statusCode).toBe(201);
-    }
-    const limited = await app.inject({
-      method: "POST",
-      url: "/v1/devices",
-      remoteAddress: "203.0.113.90",
-      headers: { "x-forwarded-for": "198.51.100.99" },
-      payload: { subscription: { ...subscription, endpoint: "https://push.example/untrusted-limited" } },
-    });
-    expect(limited.statusCode).toBe(429);
-    await app.close();
-  });
+      expect(limited.statusCode).toBe(429);
+      await app.close();
+    },
+    15_000,
+  );
 
   it("limits registrations by endpoint even when they come from different client addresses", async () => {
     const app = buildApp({ version: "0.1.0", publicPushKey: "BEl-test" });

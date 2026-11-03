@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 
 const now = "2026-08-03T09:00:00.000Z";
 
-test("lists a task, opens its history, and persists a completion locally", async ({ page }) => {
+test("lists a task, opens its history, and persists a completion locally", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 412, height: 760 });
   await page.addInitScript((snapshot) => window.localStorage.setItem("atoqueue:data:v1", JSON.stringify(snapshot)), {
     schemaVersion: 2,
     appVersion: "0.1.0",
@@ -18,7 +19,20 @@ test("lists a task, opens its history, and persists a completion locally", async
   await expect(page.getByLabel("牛乳を買うの期限状態")).toHaveText("期限超過");
   await page.getByRole("link", { name: "牛乳を買う" }).click();
   await expect(page.getByLabel("元の記録")).toHaveText("元の記録: 元の記録");
-  await page.getByRole("button", { name: "完了" }).click();
+  const state = page.getByRole("region", { name: "状態", exact: true });
+  const content = page.getByRole("region", { name: "内容", exact: true });
+  const stateBox = (await state.boundingBox())!;
+  const contentBox = (await content.boundingBox())!;
+  expect(stateBox.y + stateBox.height).toBeLessThanOrEqual(contentBox.y);
+  await page.getByRole("button", { name: "タスク一覧", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "完了", exact: true })).toBeFocused();
+  await page.screenshot({ path: testInfo.outputPath("task-status-before-content.png"), fullPage: true });
+  await page.keyboard.press("Enter");
   await expect(page.getByLabel("現在の状態")).toHaveText("状態: 完了");
+  const reopen = page.getByRole("button", { name: "再開", exact: true });
+  await expect(reopen).toBeVisible();
+  const reopenBox = (await reopen.boundingBox())!;
+  expect(reopenBox.y + reopenBox.height).toBeLessThanOrEqual((await content.boundingBox())!.y);
   await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("atoqueue:data:v1") ?? "{}").tasks[0]?.status)).toBe("completed");
 });

@@ -9,6 +9,8 @@ export class DeviceService {
     private readonly repository: DeviceRepository,
     private readonly now = () => new Date().toISOString(),
     private readonly rateLimiter?: DeviceRateLimiter,
+    private readonly appId = "atoqueue",
+    private readonly protocolVersion: 1 | 2 = 1,
   ) {}
 
   async register(subscription: SubscriptionRecord): Promise<{ deviceId: string; deviceSecret: string; createdAt: string }> {
@@ -16,6 +18,7 @@ export class DeviceService {
     const deviceSecret = randomBytes(32).toString("base64url");
     const createdAt = this.now();
     const record: DeviceRecord = {
+      appId: this.appId, protocolVersion: this.protocolVersion,
       id: randomUUID(), deviceId, endpoint: subscription.endpoint, p256dh: subscription.keys.p256dh, auth: subscription.keys.auth,
       secretHash: await argon2.hash(deviceSecret, { type: argon2.argon2id }), status: "active", createdAt, updatedAt: createdAt, lastErrorCode: null,
     };
@@ -44,7 +47,7 @@ export class DeviceService {
 
   private async authenticate(deviceId: string, bearer: string | undefined): Promise<DeviceRecord> {
     const record = await this.repository.findByDeviceId(deviceId);
-    if (!record) throw new ApiError(404, "DEVICE_NOT_FOUND", "Device not found.");
+    if (!record || (record.appId ?? "atoqueue") !== this.appId || (record.protocolVersion ?? 1) !== this.protocolVersion) throw new ApiError(404, "DEVICE_NOT_FOUND", "Device not found.");
     if (!bearer || !(await argon2.verify(record.secretHash, bearer))) {
       throw new ApiError(401, "DEVICE_UNAUTHORIZED", "Device authentication failed.");
     }

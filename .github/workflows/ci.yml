@@ -10,6 +10,20 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: atoqueue_v2_test
+          POSTGRES_USER: atoqueue_test
+          POSTGRES_PASSWORD: local_ci_test_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -26,3 +40,6 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: node deploy/scripts/verify-notification-platform-postgres.mjs
+        env:
+          ATOQUEUE_TEST_DATABASE_URL: postgresql://atoqueue_test:local_ci_test_only@127.0.0.1:5432/atoqueue_v2_test

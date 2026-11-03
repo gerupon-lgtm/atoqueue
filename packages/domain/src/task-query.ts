@@ -1,6 +1,6 @@
 import type { Capture, Task } from "./model";
 
-export type TaskTab = Task["status"];
+export type TaskTab = "all" | Task["status"];
 export type DueFilter = "overdue" | "today" | "unset" | "none";
 
 export interface TaskQuery {
@@ -13,6 +13,11 @@ export interface TaskQuery {
   search?: string;
 }
 
+/** A dismissed task stays overdue; completed/archived tasks never are. */
+export function isTaskOverdue(task: Pick<Task, "status" | "dueMode" | "dueAt">, now: string): boolean {
+  return task.status === "active" && task.dueMode === "scheduled" && task.dueAt !== undefined && task.dueAt < now;
+}
+
 /**
  * Returns tasks for the requested view without embedding device time-zone or
  * UI concerns in the domain. Array.sort is stable on supported runtimes, so
@@ -21,7 +26,7 @@ export interface TaskQuery {
 export function listTasks(tasks: readonly Task[], query: TaskQuery, captures: readonly Capture[] = []): Task[] {
   const search = query.search?.trim().toLocaleLowerCase("ja-JP");
   return tasks
-    .filter((task) => task.status === query.tab)
+    .filter((task) => query.tab === "all" || task.status === query.tab)
     .filter((task) => !query.category || task.category === query.category)
     .filter((task) => !search || matchesSearch(task, captures, search))
     .filter((task) => !query.due || matchesDueFilter(task, query))
@@ -32,7 +37,7 @@ export function listTasks(tasks: readonly Task[], query: TaskQuery, captures: re
 function matchesDueFilter(task: Task, query: TaskQuery): boolean {
   switch (query.due) {
     case "overdue":
-      return task.dueMode === "scheduled" && task.dueAt !== undefined && task.dueAt < query.now;
+      return isTaskOverdue(task, query.now);
     case "today":
       return task.dueMode === "scheduled" && task.dueAt !== undefined && query.calendar.today(task.dueAt) === query.calendar.today(query.now);
     case "unset": return task.dueMode === "unset";
