@@ -425,6 +425,7 @@ export interface BackupEnvelopeV1 {
 - Push購読情報、端末シークレット、通知送信待ちは出力しない。
 - テンパリスト連携はTaskごとの開く操作履歴（`markers`）だけを含める。直前payload・URLは出力せず、復元時は `lastRequest: null` へ戻す。schema 11の履歴領域欠落、不正日時、Task ID重複、存在しないTaskへのマーカーは拒否する。schema 10以前のバックアップだけは空履歴で移行する。明示復元は `save(restored, { replaceTempalist: true })` で連携履歴を置換する。
 - 復元前に形式、バージョン、チェックサム、各エンティティの制約を検証する。
+- 操作履歴のIDとそれを参照する `actionEventIds` は、空でない文字列として扱う。UUID形式の履歴IDと、アプリが作る `記録UUID:capture_created`、`記録UUID:capture_classified:日時` 等の複合IDをそのまま保持する。重複、存在しない履歴、他セッションの履歴の参照は拒否する。記録・タスク・セッション等のUUID検査は維持する（2026-11-03、F-017修正）。保存schemaVersion 11とバックアップversion 1は変えない。
 - 復元は既存データを置き換えるため、件数差分を表示して明示確認を取る。
 - 追加カテゴリを含む設定はバックアップ対象とする。
 - 復元先の端末固有情報を維持し、有効タスク、未整理の受信箱、メモ棚卸しの通知予約を再計算する。

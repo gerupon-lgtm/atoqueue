@@ -2,7 +2,10 @@ import { CorruptDataError } from "./errors";
 import { createLocalCalendar } from "./due-date";
 import { migrateSnapshot } from "./migrations";
 import type { TempalistMarker, TempalistState } from "./tempalist-transfer";
-import { emptyTempalistState, validateTempalistState } from "./tempalist-transfer";
+import {
+  emptyTempalistState,
+  validateTempalistState,
+} from "./tempalist-transfer";
 import { calculateNextReview } from "./reminder-policy";
 import {
   rebuildGlobalNotificationSchedules,
@@ -241,10 +244,19 @@ function snapshotFromData(
 
 function transferStateFromBackup(data: BackupData): TempalistState {
   if (data.schemaVersion !== 11) return emptyTempalistState();
-  if (!isRecord(data.tempalist) || Object.keys(data.tempalist).length !== 1 || !Object.hasOwn(data.tempalist, "markers")) {
-    throw new CorruptDataError("Backup transfer data must contain only markers.");
+  if (
+    !isRecord(data.tempalist) ||
+    Object.keys(data.tempalist).length !== 1 ||
+    !Object.hasOwn(data.tempalist, "markers")
+  ) {
+    throw new CorruptDataError(
+      "Backup transfer data must contain only markers.",
+    );
   }
-  return validateTempalistState({ lastRequest: null, markers: data.tempalist.markers });
+  return validateTempalistState({
+    lastRequest: null,
+    markers: data.tempalist.markers,
+  });
 }
 
 function validateReferences(snapshot: AppSnapshot): void {
@@ -256,7 +268,10 @@ function validateReferences(snapshot: AppSnapshot): void {
   const captureIds = new Set(snapshot.captures.map((capture) => capture.id));
   const taskIds = new Set(snapshot.tasks.map((task) => task.id));
   for (const marker of snapshot.tempalist.markers) {
-    if (!taskIds.has(marker.taskId)) throw new CorruptDataError("Backup transfer marker references an unknown task.");
+    if (!taskIds.has(marker.taskId))
+      throw new CorruptDataError(
+        "Backup transfer marker references an unknown task.",
+      );
   }
   const actionIds = new Set(snapshot.actionHistory.map((event) => event.id));
   snapshot.captures.forEach((capture) => assertUuid(capture.id, "Capture ID"));
@@ -264,9 +279,7 @@ function validateReferences(snapshot: AppSnapshot): void {
   snapshot.reviewSessions.forEach((session) =>
     assertUuid(session.id, "Review session ID"),
   );
-  snapshot.actionHistory.forEach((event) =>
-    assertUuid(event.id, "Action event ID"),
-  );
+  snapshot.actionHistory.forEach((event) => assertActionId(event.id));
   const taskSourceCaptureIds = new Set<string>();
   for (const task of snapshot.tasks) {
     assertUuid(task.id, "Task ID");
@@ -325,7 +338,9 @@ function validateReferences(snapshot: AppSnapshot): void {
     assertUuidList(session.orderedTaskIds, "Review ordered task ID");
     assertUuidList(session.visitedTaskIds, "Review visited task ID");
     assertUuidList(session.answeredTaskIds, "Review answered task ID");
-    assertUuidList(session.actionEventIds, "Review action event ID");
+    // Event IDs are opaque strings; app-generated IDs also contain action names.
+    // Ownership and existence are checked by migrateSnapshot and below.
+    session.actionEventIds.forEach(assertActionId);
     validateLocalDate(session.localDate, "Review date");
     validateUtcTimestamp(session.startedAt, "Review start time");
     validateUtcTimestamp(session.updatedAt, "Review update time");
@@ -343,7 +358,6 @@ function validateReferences(snapshot: AppSnapshot): void {
       );
   }
   for (const event of snapshot.actionHistory) {
-    assertUuid(event.id, "Action event ID");
     assertUuid(event.entityId, "Action entity ID");
     validateUtcTimestamp(event.occurredAt, "Action time");
     if (event.entityType === "capture" && !captureIds.has(event.entityId))
@@ -386,6 +400,11 @@ function assertUniqueIds(items: Array<{ id: string }>, label: string): void {
 function assertUuid(value: string, label: string): void {
   if (!UUID_PATTERN.test(value))
     throw new CorruptDataError(`${label} must be a UUID.`);
+}
+
+function assertActionId(value: string): void {
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new CorruptDataError("Action event ID must be a non-empty string.");
 }
 
 function assertUuidList(values: string[], label: string): void {

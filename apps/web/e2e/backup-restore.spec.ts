@@ -73,7 +73,30 @@ test("F-017/F-018 restores an exported backup into a clean browser context after
       },
     ],
     reviewSessions: [],
-    actionHistory: [],
+    actionHistory: [
+      {
+        id: "11111111-1111-4111-8111-111111111111:capture_created",
+        entityType: "capture",
+        entityId: "11111111-1111-4111-8111-111111111111",
+        action: "capture_created",
+        occurredAt: "2026-08-04T09:00:00.000Z",
+      },
+      {
+        id: "11111111-1111-4111-8111-111111111111:capture_classified:2026-08-04T09:00:00.000Z",
+        entityType: "capture",
+        entityId: "11111111-1111-4111-8111-111111111111",
+        action: "capture_classified",
+        after: { classification: "task" },
+        occurredAt: "2026-08-04T09:00:00.000Z",
+      },
+      {
+        id: "22222222-2222-4222-8222-222222222222:task_created",
+        entityType: "task",
+        entityId: "22222222-2222-4222-8222-222222222222",
+        action: "task_created",
+        occurredAt: "2026-08-04T09:00:00.000Z",
+      },
+    ],
     notificationOutbox: [],
     reminderMap: [],
     savedAt: "2026-08-04T09:00:00.000Z",
@@ -126,6 +149,7 @@ test("F-017/F-018 restores an exported backup into a clean browser context after
         }),
       ],
       settings: expect.objectContaining({ customTaskCategories: ["冷蔵庫"] }),
+      actionHistory: expect.arrayContaining(sourceSnapshot.actionHistory),
     });
   const restoredDevice = await page.evaluate(
     () =>
